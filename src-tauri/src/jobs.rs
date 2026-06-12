@@ -337,6 +337,7 @@ mod tests {
                         event.kind == JobEventKind::Exit || event.kind == JobEventKind::Error;
                     events.push(event);
                     if terminal {
+                        drain_job_events(receiver, job_id, &mut events);
                         return events;
                     }
                 }
@@ -347,6 +348,19 @@ mod tests {
         }
 
         panic!("timed out waiting for terminal event for job {job_id}");
+    }
+
+    fn drain_job_events(receiver: &Receiver<JobEvent>, job_id: &str, events: &mut Vec<JobEvent>) {
+        let deadline = Instant::now() + Duration::from_millis(750);
+        while Instant::now() < deadline {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            match receiver.recv_timeout(remaining.min(Duration::from_millis(50))) {
+                Ok(event) if event.job_id == job_id => events.push(event),
+                Ok(_) => {}
+                Err(mpsc::RecvTimeoutError::Timeout) => {}
+                Err(mpsc::RecvTimeoutError::Disconnected) => break,
+            }
+        }
     }
 
     #[test]
