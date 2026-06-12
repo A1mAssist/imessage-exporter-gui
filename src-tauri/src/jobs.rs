@@ -378,12 +378,7 @@ mod tests {
     fn streams_stdout_stderr_and_exit_code() {
         let registry = JobRegistry::default();
         let (sink, receiver) = test_sink();
-        let script = if cfg!(windows) {
-            "echo stdout-line && echo stderr-line 1>&2 && exit /B 7"
-        } else {
-            "echo stdout-line && echo stderr-line 1>&2 && exit 7"
-        };
-        let (executable, args) = shell_command(script);
+        let (executable, args) = stream_command();
 
         let job = registry.spawn_with_sink(sink, executable, args).unwrap();
         let events = collect_until_terminal(&receiver, &job.job_id);
@@ -468,6 +463,22 @@ mod tests {
             )
         } else {
             shell_command("sleep 5")
+        }
+    }
+
+    fn stream_command() -> (PathBuf, Vec<String>) {
+        if cfg!(windows) {
+            (
+                PathBuf::from("powershell.exe"),
+                vec![
+                    "-NoProfile".to_string(),
+                    "-Command".to_string(),
+                    "Write-Output 'stdout-line'; [Console]::Error.WriteLine('stderr-line'); exit 7"
+                        .to_string(),
+                ],
+            )
+        } else {
+            shell_command("echo stdout-line && echo stderr-line 1>&2 && exit 7")
         }
     }
 
