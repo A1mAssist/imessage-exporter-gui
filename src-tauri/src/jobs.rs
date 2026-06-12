@@ -115,26 +115,27 @@ impl JobRegistry {
         guard.insert(job_id.clone(), Arc::clone(&child));
         drop(guard);
 
+        let mut readers = Vec::new();
         if let Some(stdout) = stdout {
-            spawn_reader(
+            readers.push(spawn_reader(
                 sink.clone(),
                 redactor.clone(),
                 job_id.clone(),
                 JobEventKind::Stdout,
                 stdout,
-            );
+            ));
         }
         if let Some(stderr) = stderr {
-            spawn_reader(
+            readers.push(spawn_reader(
                 sink.clone(),
                 redactor.clone(),
                 job_id.clone(),
                 JobEventKind::Stderr,
                 stderr,
-            );
+            ));
         }
 
-        self.spawn_waiter(sink, redactor, job_id.clone(), child);
+        self.spawn_waiter(sink, redactor, job_id.clone(), child, readers);
 
         Ok(JobStarted { job_id, preview })
     }
@@ -172,10 +173,12 @@ impl JobRegistry {
         redactor: LogRedactor,
         job_id: String,
         child: Arc<Mutex<Child>>,
+        readers: Vec<thread::JoinHandle<()>>,
     ) {
         let registry = ArcJobRegistry {
             inner: Arc::clone(&self.inner),
         };
+        let mut readers = Some(readers);
         thread::spawn(move || loop {
             let status = {
                 let Ok(mut child) = child.lock() else {
@@ -199,6 +202,7 @@ impl JobRegistry {
 
             match status {
                 Some(Ok(code)) => {
+                    wait_for_readers(readers.take());
                     emit_event(
                         &sink,
                         &redactor,
@@ -211,6 +215,7 @@ impl JobRegistry {
                     return;
                 }
                 Some(Err(err)) => {
+                    wait_for_readers(readers.take());
                     emit_event(
                         &sink,
                         &redactor,
@@ -246,7 +251,7 @@ fn spawn_reader<S: JobEventSink, T: std::io::Read + Send + 'static>(
     job_id: String,
     kind: JobEventKind,
     stream: T,
-) {
+) -> thread::JoinHandle<()> {
     thread::spawn(move || {
         let reader = BufReader::new(stream);
         for line in reader.lines() {
@@ -265,7 +270,13 @@ fn spawn_reader<S: JobEventSink, T: std::io::Read + Send + 'static>(
                 }
             }
         }
-    });
+    })
+}
+
+fn wait_for_readers(readers: Option<Vec<thread::JoinHandle<()>>>) {
+    for reader in readers.unwrap_or_default() {
+        let _ = reader.join();
+    }
 }
 
 fn emit_event<S: JobEventSink>(
