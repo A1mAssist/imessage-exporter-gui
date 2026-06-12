@@ -2,7 +2,7 @@
 
 `iMessage Exporter GUI` 是 [`imessage-exporter`](https://github.com/ReagentX/imessage-exporter) 的桌面图形界面，用来把本机 iOS 备份里的短信/iMessage 导出为 HTML 或 TXT。
 
-当前 v1 目标是让普通用户不用手写命令：选择 iOS 备份、运行诊断、配置导出选项、查看日志、取消长任务，并打开导出结果目录。
+它把常用导出流程做成了图形界面：选择 iOS 备份、检查备份状态、设置导出选项，然后一键导出并打开结果目录。
 
 ## 下载安装
 
