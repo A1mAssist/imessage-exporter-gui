@@ -11,7 +11,7 @@ describe("recoveryHintForFailure", () => {
     expect(recoveryHintForFailure([line("Incorrect password while decrypting backup")]).category).toBe("password");
     expect(recoveryHintForFailure([line("Manifest.db was not found")]).category).toBe("backup");
     expect(recoveryHintForFailure([line("Access is denied while creating output")]).category).toBe("permission");
-    expect(recoveryHintForFailure([line("failed to spawn sidecar: ENOENT")]).category).toBe("sidecar");
+    expect(recoveryHintForFailure([line("failed to spawn exporter: ENOENT")]).category).toBe("exporter");
     expect(recoveryHintForFailure([line("ffmpeg missing for attachment conversion")]).category).toBe("converter");
   });
 

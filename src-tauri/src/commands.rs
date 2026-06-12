@@ -16,8 +16,8 @@ use crate::{
 };
 
 #[tauri::command]
-pub fn get_environment(app: AppHandle) -> EnvironmentStatus {
-    environment::get_environment(&app)
+pub fn get_environment(exporter_path: Option<String>) -> EnvironmentStatus {
+    environment::get_environment(exporter_path.as_deref())
 }
 
 #[tauri::command]
@@ -41,9 +41,9 @@ pub fn run_diagnostics(
     registry: State<'_, JobRegistry>,
     source: SourceConfig,
 ) -> Result<JobStarted, String> {
-    let sidecar = require_sidecar(&app)?;
+    let exporter = require_exporter(source.exporter_path.as_deref())?;
     let args = cli::diagnostics_args(&source)?;
-    registry.spawn(app, sidecar, args)
+    registry.spawn(app, exporter, args)
 }
 
 #[tauri::command]
@@ -52,9 +52,9 @@ pub fn start_export(
     registry: State<'_, JobRegistry>,
     config: ExportConfig,
 ) -> Result<JobStarted, String> {
-    let sidecar = require_sidecar(&app)?;
+    let exporter = require_exporter(config.exporter_path.as_deref())?;
     let args = cli::export_args(&config)?;
-    registry.spawn(app, sidecar, args)
+    registry.spawn(app, exporter, args)
 }
 
 #[tauri::command]
@@ -65,6 +65,14 @@ pub fn cancel_job(registry: State<'_, JobRegistry>, job_id: String) -> Result<()
 #[tauri::command]
 pub fn open_path(path: String) -> Result<(), String> {
     open_path_native(PathBuf::from(path)).map_err(|err| format!("Failed to open path: {err}"))
+}
+
+#[tauri::command]
+pub fn open_url(url: String) -> Result<(), String> {
+    if !(url.starts_with("https://") || url.starts_with("http://")) {
+        return Err("Only http and https URLs can be opened.".to_string());
+    }
+    open_url_native(&url).map_err(|err| format!("Failed to open URL: {err}"))
 }
 
 #[tauri::command]
@@ -117,25 +125,14 @@ fn resolve_resource_file(app: &AppHandle, file_name: &str) -> Result<PathBuf, St
 }
 
 #[tauri::command]
-pub fn preview_export_command(
-    app: AppHandle,
-    config: ExportConfig,
-) -> Result<CommandPreview, String> {
-    let sidecar = cli::sidecar_path(&app)?;
+pub fn preview_export_command(config: ExportConfig) -> Result<CommandPreview, String> {
+    let exporter = cli::resolve_exporter_path(config.exporter_path.as_deref())?;
     let args = cli::export_args(&config)?;
-    Ok(cli::preview(sidecar.display().to_string(), &args))
+    Ok(cli::preview(exporter.display().to_string(), &args))
 }
 
-fn require_sidecar(app: &AppHandle) -> Result<std::path::PathBuf, String> {
-    let sidecar = cli::sidecar_path(app)?;
-    if sidecar.is_file() {
-        Ok(sidecar)
-    } else {
-        Err(format!(
-            "Bundled imessage-exporter sidecar was not found at {}. Run scripts/build-sidecar.ps1 first.",
-            sidecar.display()
-        ))
-    }
+fn require_exporter(configured_path: Option<&str>) -> Result<std::path::PathBuf, String> {
+    cli::resolve_exporter_path(configured_path)
 }
 
 fn open_path_native(path: PathBuf) -> std::io::Result<()> {
@@ -150,6 +147,22 @@ fn open_path_native(path: PathBuf) -> std::io::Result<()> {
     #[cfg(all(unix, not(target_os = "macos")))]
     {
         Command::new("xdg-open").arg(path).spawn()?.wait()?;
+    }
+    Ok(())
+}
+
+fn open_url_native(url: &str) -> std::io::Result<()> {
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("explorer").arg(url).spawn()?.wait()?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open").arg(url).spawn()?.wait()?;
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        Command::new("xdg-open").arg(url).spawn()?.wait()?;
     }
     Ok(())
 }

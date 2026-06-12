@@ -8,8 +8,9 @@ describe("diagnostic reports", () => {
     const report = buildDiagnosticReport({
       generatedAt: new Date("2026-06-12T01:30:00.000Z"),
       environment: {
-        sidecarAvailable: true,
-        sidecarVersion: "imessage-exporter 4.1.0",
+        exporterAvailable: true,
+        exporterVersion: "imessage-exporter 4.1.0",
+        exporterPath: "C:\\Tools\\imessage-exporter.exe",
         ffmpegAvailable: false,
         imagemagickAvailable: false,
         defaultBackupRoots: [],

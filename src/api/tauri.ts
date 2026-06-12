@@ -25,9 +25,9 @@ function usingMockApi() {
   return params.has("mock") || !("__TAURI_INTERNALS__" in window);
 }
 
-export function getEnvironment() {
-  if (usingMockApi()) return Promise.resolve(mockEnvironment());
-  return invoke<EnvironmentStatus>("get_environment");
+export function getEnvironment(exporterPath?: string) {
+  if (usingMockApi()) return Promise.resolve(mockEnvironment(exporterPath));
+  return invoke<EnvironmentStatus>("get_environment", { exporterPath });
 }
 
 export function scanIosBackups() {
@@ -76,6 +76,14 @@ export function openPath(path: string) {
   return invoke<void>("open_path", { path });
 }
 
+export function openUrl(url: string) {
+  if (usingMockApi()) {
+    console.info("[mock] open url", url);
+    return Promise.resolve();
+  }
+  return invoke<void>("open_url", { url });
+}
+
 export function openFirstResult(exportPath: string, format: ExportFormat) {
   if (usingMockApi()) {
     console.info("[mock] open first result", format, exportPath);
@@ -84,7 +92,7 @@ export function openFirstResult(exportPath: string, format: ExportFormat) {
   return invoke<void>("open_first_result", { exportPath, format });
 }
 
-export type ResourceFile = "license" | "thirdPartyNotices" | "sidecarNotes";
+export type ResourceFile = "license" | "thirdPartyNotices";
 
 export function openResourceFile(file: ResourceFile) {
   if (usingMockApi()) {
@@ -128,6 +136,19 @@ export async function pickDirectory(defaultPath?: string, purpose: "backup" | "e
   return typeof selected === "string" ? selected : undefined;
 }
 
+export async function pickExporterFile(defaultPath?: string): Promise<string | undefined> {
+  if (usingMockApi()) {
+    return defaultPath || "C:\\Users\\A1mAssist\\Tools\\imessage-exporter.exe";
+  }
+
+  const selected = await open({
+    directory: false,
+    multiple: false,
+    defaultPath,
+  });
+  return typeof selected === "string" ? selected : undefined;
+}
+
 function mockExportPathStatus(path: string): ExportPathStatus {
   const params = new URLSearchParams(window.location.search);
   const normalized = path.replace(/\\/g, "/").toLowerCase();
@@ -152,12 +173,14 @@ function mockExportPathStatus(path: string): ExportPathStatus {
   };
 }
 
-function mockEnvironment(): EnvironmentStatus {
+function mockEnvironment(exporterPath?: string): EnvironmentStatus {
   const params = new URLSearchParams(window.location.search);
-  const missingSidecar = params.has("missingSidecar");
+  const missingExporter = params.has("missingExporter");
+  const resolvedExporterPath = exporterPath?.trim() || "C:\\Users\\A1mAssist\\Tools\\imessage-exporter.exe";
   return {
-    sidecarAvailable: !missingSidecar,
-    sidecarVersion: missingSidecar ? undefined : "imessage-exporter 4.1.0",
+    exporterAvailable: !missingExporter,
+    exporterVersion: missingExporter ? undefined : "imessage-exporter 4.1.0",
+    exporterPath: missingExporter ? undefined : resolvedExporterPath,
     ffmpegAvailable: false,
     imagemagickAvailable: false,
     defaultBackupRoots: [
@@ -165,7 +188,7 @@ function mockEnvironment(): EnvironmentStatus {
       "C:\\Users\\A1mAssist\\AppData\\Roaming\\Apple Computer\\MobileSync\\Backup",
     ],
     warnings: [
-      missingSidecar ? "Mock 模式：模拟 sidecar 缺失，诊断和导出会被禁用。" : "Mock 模式：未调用真实 sidecar。basic/full 附件转换仍会显示依赖提示。",
+      missingExporter ? "Mock 模式：模拟导出引擎缺失，诊断和导出会被禁用。" : "Mock 模式：未调用真实导出引擎。basic/full 附件转换仍会显示依赖提示。",
     ],
   };
 }
@@ -270,10 +293,10 @@ function mockFailureScenario(): { code: number; lines: MockLine[] } | undefined 
       lines: [{ kind: "stderr", text: "Access is denied while creating the output directory." }],
     };
   }
-  if (fail === "sidecar") {
+  if (fail === "exporter") {
     return {
       code: 127,
-      lines: [{ kind: "stderr", text: "failed to spawn sidecar: imessage-exporter not found (ENOENT)." }],
+      lines: [{ kind: "stderr", text: "failed to spawn exporter: imessage-exporter not found (ENOENT)." }],
     };
   }
   if (fail === "converter") {

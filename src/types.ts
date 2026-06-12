@@ -4,6 +4,7 @@ export type CopyMethod = "disabled" | "clone" | "basic" | "full";
 export type SourceConfig = {
   kind: "iosBackup";
   backupPath: string;
+  exporterPath?: string;
   encrypted: boolean;
   cleartextPassword?: string;
 };
@@ -23,8 +24,9 @@ export type ExportConfig = SourceConfig & {
 };
 
 export type EnvironmentStatus = {
-  sidecarAvailable: boolean;
-  sidecarVersion?: string;
+  exporterAvailable: boolean;
+  exporterVersion?: string;
+  exporterPath?: string;
   ffmpegAvailable: boolean;
   imagemagickAvailable: boolean;
   defaultBackupRoots: string[];

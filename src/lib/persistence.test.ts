@@ -38,6 +38,7 @@ describe("export settings persistence", () => {
       {
         ...defaultExportConfig,
         backupPath: "C:/Users/me/Apple/MobileSync/Backup/device",
+        exporterPath: "C:/Tools/imessage-exporter.exe",
         encrypted: true,
         cleartextPassword: "do-not-store",
         exportPath: "D:/Messages Export",
@@ -59,6 +60,7 @@ describe("export settings persistence", () => {
 
     expect(saved).toBe(true);
     expect(parsed.backupPath).toBe("C:/Users/me/Apple/MobileSync/Backup/device");
+    expect(parsed.exporterPath).toBe("C:/Tools/imessage-exporter.exe");
     expect(parsed.exportPath).toBe("D:/Messages Export");
     expect(parsed.format).toBe("txt");
     expect(parsed.copyMethod).toBe("full");

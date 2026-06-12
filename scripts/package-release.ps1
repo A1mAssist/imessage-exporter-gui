@@ -1,7 +1,6 @@
 param(
     [string]$OutputDir = "dist-release",
     [string]$BundleTarget = "",
-    [string]$SidecarTarget = "",
     [switch]$SkipAudit
 )
 
@@ -107,13 +106,6 @@ try {
     Invoke-Checked "Rust format" {
         Invoke-InDirectory (Join-Path $Root "src-tauri") { cargo fmt --check }
     }
-
-    $SidecarScript = Join-Path $Root "scripts/build-sidecar.ps1"
-    $SidecarArgs = @()
-    if ($SidecarTarget) {
-        $SidecarArgs += @("-Target", $SidecarTarget)
-    }
-    Invoke-Checked "Build sidecar" { & $SidecarScript @SidecarArgs }
 
     Invoke-Checked "Rust tests" {
         Invoke-InDirectory (Join-Path $Root "src-tauri") { cargo test }

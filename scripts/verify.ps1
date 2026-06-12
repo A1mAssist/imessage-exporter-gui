@@ -152,7 +152,6 @@ try {
     }
 
     if ($Native) {
-        Invoke-Step "Build sidecar" { & powershell -ExecutionPolicy Bypass -File (Join-Path $Root "scripts\build-sidecar.ps1") }
         Invoke-Step "Rust tests" {
             Push-Location (Join-Path $Root "src-tauri")
             try {
@@ -176,7 +175,7 @@ try {
     else {
         Invoke-Step "Native environment doctor" { & powershell -ExecutionPolicy Bypass -File (Join-Path $Root "scripts\doctor.ps1") }
         Write-Host ""
-        Write-Host "Native build was skipped. Re-run with -Native after MSVC Build Tools, Windows SDK libs, and the sidecar are ready."
+        Write-Host "Native build was skipped. Re-run with -Native after MSVC Build Tools and Windows SDK libs are ready."
     }
 
     Write-Host ""

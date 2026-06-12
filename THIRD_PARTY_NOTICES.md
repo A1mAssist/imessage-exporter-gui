@@ -3,11 +3,10 @@
 ## imessage-exporter
 
 - Project: https://github.com/ReagentX/imessage-exporter
-- Version: 4.1.0
 - License: GPL-3.0-only
-- Purpose: bundled command-line exporter sidecar
+- Purpose: external command-line export engine
 
-This GUI invokes the bundled `imessage-exporter` executable as a sidecar process. Source code for the upstream project is available at the project URL above.
+This GUI does not redistribute the `imessage-exporter` executable. It detects `imessage-exporter` on `PATH` or invokes an executable selected by the user. Source code and releases for the upstream project are available at the project URL above.
 
 ## Converter Tools
 

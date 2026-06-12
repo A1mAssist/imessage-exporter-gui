@@ -4,7 +4,7 @@
 
 `iMessage Exporter GUI` 是 [`imessage-exporter`](https://github.com/ReagentX/imessage-exporter) 的桌面图形界面，用来把本机 iOS 备份里的短信/iMessage 导出为 HTML 或 TXT。
 
-它把常用导出流程做成了图形界面：选择 iOS 备份、检查备份状态、设置导出选项，然后一键导出并打开结果目录。
+它把常用导出流程做成了图形界面：选择 iOS 备份、配置导出引擎、检查备份状态、设置导出选项，然后一键导出并打开结果目录。
 
 ## 界面示例
 
@@ -32,13 +32,15 @@
 
 ## 基本使用
 
-1. 用 Apple Devices 或 iTunes 在本机创建 iPhone/iPad 备份。
-2. 打开 iMessage Exporter GUI。
-3. 在“数据源”步骤选择或扫描本机 iOS 备份目录。
-4. 如果备份已加密，输入备份密码。
-5. 运行诊断，确认数据库、附件和可选转换工具状态。
-6. 选择导出格式、附件策略、日期范围和输出目录。
-7. 开始导出，等待完成后打开输出目录或第一个结果文件。
+1. 下载或安装 [`imessage-exporter`](https://github.com/ReagentX/imessage-exporter/releases/latest)。
+2. 用 Apple Devices 或 iTunes 在本机创建 iPhone/iPad 备份。
+3. 打开 iMessage Exporter GUI。
+4. 如果系统没有在 `PATH` 里检测到 `imessage-exporter`，在“运行环境”面板选择它的可执行文件。
+5. 在“数据源”步骤选择或扫描本机 iOS 备份目录。
+6. 如果备份已加密，输入备份密码。
+7. 运行诊断，确认数据库、附件和可选转换工具状态。
+8. 选择导出格式、附件策略、日期范围和输出目录。
+9. 开始导出，等待完成后打开输出目录或第一个结果文件。
 
 常见备份位置：
 
@@ -53,9 +55,10 @@ macOS: ~/Library/Application Support/MobileSync/Backup
 
 - 中英文向导式界面：数据源、诊断、导出选项、结果。
 - 根据设备语言自动选择中文或英文；如果设备语言不是中文或英文，则默认英文。
+- 支持浅色、深色和跟随系统主题。
 - 自动扫描本机 iOS 备份，也支持手动选择备份目录。
 - 检查 `Manifest.db`、`Info.plist` 等备份关键文件。
-- 内置调用 `imessage-exporter` 导出引擎，不需要手动安装命令行工具。
+- 从 `PATH` 检测外部 `imessage-exporter` 导出引擎，也支持在界面里选择可执行文件。
 - HTML/TXT 导出，支持附件复制策略、日期范围、会话筛选和显示名选项。
 - 输出目录检查，避免误写入备份目录或旧导出目录。
 - 一键生成带时间戳的导出目录，例如 `Messages Export 2026-06-12 0130`。
@@ -69,6 +72,7 @@ macOS: ~/Library/Application Support/MobileSync/Backup
 
 - v1 只面向本机 iOS 备份导出。
 - 暂不支持直接读取 macOS `chat.db`、越狱设备 `sms.db` 或独立附件目录。
+- GUI 安装包不内置 `imessage-exporter`；请单独安装，或在界面里选择它的可执行文件。
 - 暂不内置 `ffmpeg` 和 ImageMagick。
 - 暂无原生 PDF 导出；可以先导出 HTML，再用浏览器打印为 PDF。
 - 当前未做 Windows/macOS 代码签名，因此安装时可能有系统安全提示。

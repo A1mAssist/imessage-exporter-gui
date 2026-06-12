@@ -20,6 +20,7 @@ pub fn run() {
             commands::start_export,
             commands::cancel_job,
             commands::open_path,
+            commands::open_url,
             commands::open_first_html,
             commands::open_first_result,
             commands::open_resource_file,

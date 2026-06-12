@@ -104,7 +104,9 @@ describe("export config helpers", () => {
   it("warns about missing converter tools", () => {
     expect(
       converterWarnings("full", {
-        sidecarAvailable: true,
+        exporterAvailable: true,
+        exporterVersion: "imessage-exporter 4.1.0",
+        exporterPath: "C:\\Tools\\imessage-exporter.exe",
         ffmpegAvailable: false,
         imagemagickAvailable: false,
         defaultBackupRoots: [],
