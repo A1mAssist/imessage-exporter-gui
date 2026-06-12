@@ -82,14 +82,15 @@ fn sidecar_packaged_name() -> String {
 
 fn sidecar_source_name() -> String {
     let extension = if cfg!(windows) { ".exe" } else { "" };
-    format!(
-        "{SIDECAR_BASENAME}-{}{extension}",
-        sidecar_target_triple()
-    )
+    format!("{SIDECAR_BASENAME}-{}{extension}", sidecar_target_triple())
 }
 
 fn sidecar_target_triple() -> &'static str {
-    if cfg!(all(target_os = "windows", target_arch = "x86_64", target_env = "msvc")) {
+    if cfg!(all(
+        target_os = "windows",
+        target_arch = "x86_64",
+        target_env = "msvc"
+    )) {
         "x86_64-pc-windows-msvc"
     } else if cfg!(all(target_os = "macos", target_arch = "x86_64")) {
         "x86_64-apple-darwin"
