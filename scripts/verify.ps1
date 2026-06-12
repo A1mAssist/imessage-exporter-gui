@@ -152,6 +152,7 @@ try {
     }
 
     if ($Native) {
+        Invoke-Step "Build sidecar" { & powershell -ExecutionPolicy Bypass -File (Join-Path $Root "scripts\build-sidecar.ps1") }
         Invoke-Step "Rust tests" {
             Push-Location (Join-Path $Root "src-tauri")
             try {
@@ -170,7 +171,6 @@ try {
                 Pop-Location
             }
         }
-        Invoke-Step "Build sidecar" { & powershell -ExecutionPolicy Bypass -File (Join-Path $Root "scripts\build-sidecar.ps1") }
         Invoke-Step "Tauri bundle" { & $Npm run tauri build }
     }
     else {
