@@ -1,0 +1,42 @@
+{
+  "name": "imessage-exporter-gui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "GPL-3.0-only",
+  "scripts": {
+    "dev": "vite --configLoader runner --host 127.0.0.1 --port 1420",
+    "dev:mock": "vite --configLoader runner --host 127.0.0.1 --port 1421 --open /?mock=1",
+    "build": "tsc && vite build --configLoader runner",
+    "preview": "vite preview --configLoader runner --host 127.0.0.1 --port 4173",
+    "serve:mock": "node scripts/serve-dist.mjs",
+    "preview:screenshots": "node scripts/render-preview.mjs",
+    "check:static": "node scripts/sanity-check.mjs",
+    "doctor": "powershell -ExecutionPolicy Bypass -File scripts/doctor.ps1",
+    "icons": "node scripts/generate-icons.mjs",
+    "package:windows": "powershell -ExecutionPolicy Bypass -File scripts/package-windows.ps1",
+    "smoke:mock-ui": "node scripts/smoke-mock-ui.mjs",
+    "test": "vitest run --configLoader runner",
+    "tauri": "tauri",
+    "verify": "powershell -ExecutionPolicy Bypass -File scripts/verify.ps1",
+    "verify:offline": "powershell -ExecutionPolicy Bypass -File scripts/verify.ps1 -SkipAudit"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "2.11.0",
+    "@tauri-apps/plugin-dialog": "2.7.1",
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.11.2",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "playwright-core": "^1.60.0",
+    "pngjs": "^7.0.0",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.1",
+    "vitest": "^4.1.8"
+  }
+}

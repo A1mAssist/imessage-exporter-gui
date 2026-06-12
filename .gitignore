@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.vite/
+.tools/
+.sidecar/
+
+src-tauri/target/
+src-tauri/gen/schemas/
+src-tauri/binaries/imessage-exporter-*.exe
+
+*.log
+*.tmp

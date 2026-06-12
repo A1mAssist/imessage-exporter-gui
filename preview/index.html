@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>iMessage Exporter GUI Preview</title>
+    <link rel="stylesheet" href="../src/styles.css" />
+    <style>
+      .preview-icon {
+        display: grid;
+        place-items: center;
+        width: 18px;
+        height: 18px;
+        border: 1.8px solid currentColor;
+        border-radius: 5px;
+        font-size: 10px;
+        font-weight: 900;
+        line-height: 1;
+      }
+
+      .preview-note {
+        max-width: 980px;
+        margin-bottom: 16px;
+      }
+
+      .preview-note strong {
+        color: var(--accent-ink);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="preview-icon">M</span>
+          <div>
+            <h1>iMessage Exporter</h1>
+            <p>Windows iOS 备份导出向导</p>
+          </div>
+        </div>
+
+        <nav class="step-list" aria-label="导出步骤">
+          <button class="step-button active" type="button"><span class="step-icon"><span class="preview-icon">D</span></span><span>数据源</span></button>
+          <button class="step-button" type="button"><span class="step-icon"><span class="preview-icon">S</span></span><span>诊断</span></button>
+          <button class="step-button" type="button"><span class="step-icon"><span class="preview-icon">O</span></span><span>选项</span></button>
+          <button class="step-button" type="button"><span class="step-icon"><span class="preview-icon">R</span></span><span>导出</span></button>
+        </nav>
+
+        <div class="env-panel">
+          <div class="panel-title"><span>运行环境</span><button class="icon-button" type="button">↻</button></div>
+          <div class="status-line"><span class="preview-icon">!</span><span>imessage-exporter</span><strong>待构建</strong></div>
+          <div class="status-line"><span class="preview-icon">!</span><span>ffmpeg</span><strong>未检测到</strong></div>
+          <div class="status-line"><span class="preview-icon">!</span><span>ImageMagick</span><strong>未检测到</strong></div>
+          <p class="mini-warning">正式运行前请先构建 sidecar；未安装转换器时建议使用 clone 附件策略。</p>
+        </div>
+      </aside>
+
+      <section class="workspace">
+        <header class="topbar">
+          <div>
+            <span class="workspace-kicker">Export Workspace</span>
+            <h2>数据源</h2>
+          </div>
+          <div class="quick-stats" aria-label="当前导出状态">
+            <div class="quick-stat ok"><span class="quick-stat-icon"><span class="preview-icon">D</span></span><span><small>备份</small><strong>Yancy 的 iPhone</strong></span></div>
+            <div class="quick-stat ok"><span class="quick-stat-icon"><span class="preview-icon">O</span></span><span><small>输出</small><strong>C:/.../Messages Export</strong></span></div>
+            <div class="quick-stat warn"><span class="quick-stat-icon"><span class="preview-icon">T</span></span><span><small>Sidecar</small><strong>待构建</strong></span></div>
+            <div class="quick-stat neutral"><span class="quick-stat-icon"><span class="preview-icon">I</span></span><span><small>任务</small><strong>空闲</strong></span></div>
+          </div>
+        </header>
+
+        <div class="notice warn preview-note"><span class="preview-icon">!</span><span><strong>静态预览：</strong>这个页面只用于视觉检查，正式功能在 Tauri App 中。</span></div>
+
+        <div class="page">
+          <header class="page-header">
+            <span>Step 1</span>
+            <h2>选择 iOS 备份</h2>
+            <p>从 Apple Devices 或 iTunes 的本地备份导出 Messages 数据，不修改原始备份。</p>
+          </header>
+
+          <div class="toolbar">
+            <label class="path-field">
+              <span>备份根目录</span>
+              <div>
+                <input value="C:\Users\yancy\Apple\MobileSync\Backup\00008110-demo" readonly />
+                <button type="button"><span class="preview-icon">F</span></button>
+              </div>
+            </label>
+          </div>
+
+          <section class="content-band">
+            <div class="section-heading">
+              <h2>自动发现</h2>
+              <p>常见 MobileSync Backup 目录中的候选备份。</p>
+            </div>
+            <div class="backup-grid">
+              <button class="backup-card selected" type="button">
+                <span class="preview-icon">H</span>
+                <span><strong>Yancy 的 iPhone</strong><small>C:\Users\yancy\Apple\MobileSync\Backup\00008110-demo</small></span>
+                <span class="badge ok">有效</span>
+              </button>
+              <button class="backup-card" type="button">
+                <span class="preview-icon">H</span>
+                <span><strong>iPhone 旧备份</strong><small>C:\Users\yancy\AppData\Roaming\Apple Computer\MobileSync\Backup\legacy</small></span>
+                <span class="badge warn">不完整</span>
+              </button>
+            </div>
+          </section>
+
+          <section class="content-band two-columns">
+            <div>
+              <div class="section-heading"><h2>备份状态</h2></div>
+              <div class="fact-list">
+                <div class="fact"><span>Manifest.db</span><strong>存在</strong></div>
+                <div class="fact"><span>Info.plist</span><strong>存在</strong></div>
+                <div class="fact"><span>加密</span><strong>是</strong></div>
+              </div>
+            </div>
+            <div>
+              <label class="checkbox-row"><input type="checkbox" checked readonly /><span>这是加密 iOS 备份</span></label>
+              <div class="password-block">
+                <label><span>备份密码</span><input type="password" value="preview-password" readonly /></label>
+                <p class="warning-text"><span class="preview-icon">!</span>密码会临时传给 CLI，命令预览和日志会脱敏。</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="content-band">
+            <div class="section-heading"><h2>导出选项预览</h2><p>正式 App 中位于第三步。</p></div>
+            <div class="segment-grid">
+              <button class="selected" type="button"><strong>HTML</strong><small>保留更多富文本和附件引用。</small></button>
+              <button type="button"><strong>TXT</strong><small>纯文本输出，适合长期保存。</small></button>
+              <button class="selected" type="button"><strong>clone</strong><small>复制原始附件，Windows 第一版推荐。</small></button>
+              <button type="button"><strong>full</strong><small>需要 ffmpeg/ImageMagick。</small></button>
+            </div>
+          </section>
+
+          <section class="command-box">
+            <div class="section-heading"><h2>命令预览</h2><p>密码和敏感值已脱敏。</p></div>
+            <code>imessage-exporter -p C:\...\Backup -a iOS -o C:\...\MessagesExport -f html -c clone --no-progress --cleartext-password [redacted]</code>
+          </section>
+
+          <footer class="footer-actions">
+            <span></span>
+            <button class="primary-button" type="button"><span class="preview-icon">S</span>运行诊断</button>
+          </footer>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
