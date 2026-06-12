@@ -1,7 +1,7 @@
 [package]
 name = "imessage-exporter-gui"
 version = "0.1.0"
-description = "Windows-first GUI for imessage-exporter"
+description = "Desktop GUI for imessage-exporter"
 authors = ["iMessage Exporter GUI contributors"]
 edition = "2021"
 license = "GPL-3.0-only"

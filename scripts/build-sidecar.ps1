@@ -1,19 +1,18 @@
 param(
     [string]$Version = "4.1.0",
-    [string]$Target = "x86_64-pc-windows-msvc"
+    [string]$Target = ""
 )
 
 $ErrorActionPreference = "Stop"
 
-$root = Resolve-Path (Join-Path $PSScriptRoot "..")
-$binDir = Join-Path $root "src-tauri\binaries"
+$root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$binDir = Join-Path (Join-Path $root "src-tauri") "binaries"
 $installRoot = Join-Path $root ".sidecar"
 $cargoHome = Join-Path $installRoot "cargo"
-$sourceExe = Join-Path $cargoHome "bin\imessage-exporter.exe"
-$targetExe = Join-Path $binDir "imessage-exporter-$Target.exe"
 
 function Resolve-Cargo {
-    $LocalCargo = Join-Path $root ".tools\cargo\bin\cargo.exe"
+    $CargoFile = if ($IsWindows -or $env:OS -eq "Windows_NT") { "cargo.exe" } else { "cargo" }
+    $LocalCargo = Join-Path (Join-Path (Join-Path $root ".tools") "cargo") (Join-Path "bin" $CargoFile)
     if (Test-Path $LocalCargo) {
         return $LocalCargo
     }
@@ -24,6 +23,45 @@ function Resolve-Cargo {
     }
 
     throw "Cargo is required to build the imessage-exporter sidecar. Run scripts\setup-windows.ps1 -Install or install Rust stable first."
+}
+
+function Resolve-RustTarget {
+    param(
+        [Parameter(Mandatory = $true)][string]$Cargo
+    )
+
+    if ($Target) {
+        return $Target
+    }
+
+    $VersionOutput = & $Cargo -vV
+    foreach ($Line in $VersionOutput) {
+        if ($Line -match "^host:\s+(.+)$") {
+            return $Matches[1]
+        }
+    }
+
+    throw "Could not determine the Rust host target from cargo -vV. Pass -Target explicitly."
+}
+
+function Get-CargoBinaryName {
+    param(
+        [Parameter(Mandatory = $true)][string]$ResolvedTarget
+    )
+
+    if ($ResolvedTarget -like "*windows*") {
+        return "imessage-exporter.exe"
+    }
+    return "imessage-exporter"
+}
+
+function Get-SidecarFileName {
+    param(
+        [Parameter(Mandatory = $true)][string]$ResolvedTarget
+    )
+
+    $Extension = if ($ResolvedTarget -like "*windows*") { ".exe" } else { "" }
+    return "imessage-exporter-$ResolvedTarget$Extension"
 }
 
 function Test-WindowsSdkLibs {
@@ -41,7 +79,12 @@ function Test-WindowsSdkLibs {
     return $false
 }
 
-if ($Target -like "*windows-msvc") {
+$cargo = Resolve-Cargo
+$ResolvedTarget = Resolve-RustTarget -Cargo $cargo
+$sourceExe = Join-Path (Join-Path $cargoHome "bin") (Get-CargoBinaryName -ResolvedTarget $ResolvedTarget)
+$targetExe = Join-Path $binDir (Get-SidecarFileName -ResolvedTarget $ResolvedTarget)
+
+if ($ResolvedTarget -like "*windows-msvc") {
     if (-not (Get-Command link -ErrorAction SilentlyContinue)) {
         throw "MSVC link.exe was not found. Install Visual Studio Build Tools 2022 with the C++ workload, restart PowerShell, then re-run this script."
     }
@@ -50,17 +93,15 @@ if ($Target -like "*windows-msvc") {
     }
 }
 
-$cargo = Resolve-Cargo
-
 New-Item -ItemType Directory -Force -Path $binDir, $cargoHome | Out-Null
 
-Write-Host "Installing imessage-exporter $Version from crates.io..."
+Write-Host "Installing imessage-exporter $Version for $ResolvedTarget from crates.io..."
 $env:CARGO_HOME = $cargoHome
-$LocalRustup = Join-Path $root ".tools\rustup"
+$LocalRustup = Join-Path (Join-Path $root ".tools") "rustup"
 if (Test-Path $LocalRustup) {
     $env:RUSTUP_HOME = $LocalRustup
 }
-& $cargo install imessage-exporter --version $Version --locked --force --target $Target
+& $cargo install imessage-exporter --version $Version --locked --force --target $ResolvedTarget
 
 if (-not (Test-Path $sourceExe)) {
     throw "cargo install completed but $sourceExe was not found."

@@ -1,6 +1,6 @@
 # iMessage Exporter GUI
 
-Windows-first desktop GUI for [`imessage-exporter`](https://github.com/ReagentX/imessage-exporter), built with Tauri v2, React, and TypeScript.
+Desktop GUI for [`imessage-exporter`](https://github.com/ReagentX/imessage-exporter), built with Tauri v2, React, and TypeScript.
 
 The v1 product is a guided exporter for local iOS backups: select a backup, run diagnostics, configure export options, stream logs, cancel long jobs, and open the output directory.
 
@@ -8,13 +8,13 @@ The v1 product is a guided exporter for local iOS backups: select a backup, run 
 
 Implemented:
 
-- Tauri v2 desktop scaffold with Windows NSIS/MSI bundle targets.
+- Tauri v2 desktop app with release packaging for Windows, macOS, and Linux through GitHub Actions.
 - React Chinese wizard UI for source selection, diagnostics, export options, and results.
-- Browser mock mode for reviewing real React interactions without Tauri.
+- Browser mock mode for reviewing React interactions without Tauri.
 - Rust backend commands for environment checks, iOS backup scanning, diagnostics/export jobs, cancellation, command previews, and native path opening.
 - Startup readiness checks for the sidecar, selected backup, encrypted-backup password, and optional converters.
 - Source-step blocking for incomplete backups that are missing `Manifest.db` or `Info.plist`.
-- Wizard step gating with accessible disabled states, diagnostics-success gating for “continue”, and a resilient empty state for the results page before any export has started.
+- Wizard step gating with accessible disabled states, diagnostics-success gating for continue, and a resilient empty state for the results page before any export has started.
 - Diagnostics cards parse scoped log lines for database, attachments, contacts, and converters so converter warnings do not contaminate healthy backup checks; message and attachment counts are surfaced when present.
 - Export-step blocking when the sidecar is unavailable, with the same in-app remediation path shown in the environment panel.
 - In-app remediation commands for missing sidecar and optional attachment converters.
@@ -30,7 +30,7 @@ Implemented:
 - Failure notices classify common recovery paths such as wrong backup password, incomplete backup, output permission issues, missing sidecar, and missing converters.
 - Log search plus stdout/stderr/error filters; copying logs still uses the full redacted log stream.
 - Diagnostic reports can be copied or downloaded as `.txt` and include environment, backup state, diagnostic summary, redacted command, and redacted logs.
-- Backup, output, and result paths have copy actions and full-path tooltips for long Windows paths.
+- Backup, output, and result paths have copy actions and full-path tooltips for long paths.
 - First-use empty state gives concrete Apple Devices and iTunes backup locations when no local backup is auto-discovered.
 - Local persistence for non-sensitive wizard settings such as paths and export options; encrypted-backup passwords are explicitly excluded, can be cleared manually, and can be auto-cleared when a job ends.
 - Converter detection for `ffmpeg` and ImageMagick.
@@ -42,16 +42,16 @@ Implemented:
 Still required on a build machine:
 
 - Install Node.js/npm and Rust/Cargo.
-- Install Visual Studio Build Tools 2022 with the Desktop development with C++ workload so `link.exe` is available.
-- Build the pinned `imessage-exporter` Windows sidecar.
+- Install the native toolchain for the target OS.
+- Build the pinned `imessage-exporter` sidecar for the target OS.
 - Run full `npm install`, tests, Tauri dev, and Tauri bundle.
 
 Verified in this workspace:
 
-- `npm run verify:offline` passes: static checks, TypeScript production build, unit tests, production mock UI smoke, Rust formatting, and Rust metadata.
-- `npm audit --audit-level=moderate` passes with 0 vulnerabilities when npm registry access is allowed.
+- GitHub Actions CI passes on Windows: static checks, dependency audit, frontend tests, production build, mock UI smoke, Rust format, sidecar build, Rust tests, and Tauri app build.
+- `npm run check:static` passes locally in this workspace.
 - `npm run smoke:mock-ui` walks the production-built React wizard and verifies compact responsive layout, step navigation gating, password redaction and clearing, scoped diagnostic details, incomplete-backup blocking, saved manual backup revalidation, generated archive directories, export presets, failure recovery hints, log search/filtering, diagnostic report redaction, path copy actions, first-use empty state guidance, format-specific controls, result summaries, result-file actions for HTML/TXT, missing-sidecar export blocking, cancellation, and successful mock diagnostics/export.
-- Native Tauri build and Rust tests are intentionally not marked complete on this machine because `link.exe`, Windows SDK libraries, and the sidecar binary are missing.
+- Native packaging is delegated to GitHub Actions when the local machine does not have the platform toolchain or sidecar binary.
 
 ## Preview UI
 
@@ -77,23 +77,28 @@ Regenerate preview screenshots with Chrome or Edge:
 
 - Node.js 20+ with npm
 - Rust stable with Cargo
-- Visual Studio Build Tools 2022 with the Desktop development with C++ workload (`link.exe` and Windows SDK libraries such as `kernel32.lib` must be available)
-- Microsoft WebView2 Runtime
+- Native desktop build dependencies for the target OS
 - Optional: `ffmpeg` and ImageMagick `magick` on `PATH` for `basic`/`full` attachment conversion
 
-Check the local machine:
+Windows local native builds need Visual Studio Build Tools 2022 with the Desktop development with C++ workload, Windows SDK libraries such as `kernel32.lib`, and Microsoft WebView2 Runtime.
+
+Linux local native builds need the WebKitGTK and AppIndicator development packages used by Tauri. The release workflow installs these on Ubuntu.
+
+macOS local native builds need Xcode command line tools.
+
+Check the local Windows development machine:
 
 ```powershell
 .\scripts\doctor.ps1
 ```
 
-Optional dry-run setup helper:
+Optional Windows dry-run setup helper:
 
 ```powershell
 .\scripts\setup-windows.ps1
 ```
 
-To install missing Node.js LTS and Rustup with `winget`, run:
+To install missing Node.js LTS and Rustup on Windows with `winget`, run:
 
 ```powershell
 .\scripts\setup-windows.ps1 -Install
@@ -105,15 +110,11 @@ The same setup helper also installs Visual Studio Build Tools 2022 with the C++ 
 .\scripts\setup-windows.ps1 -Install -InstallOptionalTools
 ```
 
-Manual Build Tools command, useful for CI images or locked-down machines:
-
-```powershell
-winget install --id Microsoft.VisualStudio.2022.BuildTools --exact --silent --override "--quiet --wait --norestart --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
-```
-
-After installing Build Tools, restart PowerShell so `link.exe` and the Windows SDK library paths are visible.
+After installing Windows Build Tools, restart PowerShell so `link.exe` and Windows SDK library paths are visible.
 
 ## Development
+
+This repository keeps Windows as the primary local development baseline because local iOS backups and the current helper scripts are most complete there. Cross-platform release builds are handled by GitHub Actions.
 
 Install dependencies:
 
@@ -190,26 +191,31 @@ The GUI bundles `imessage-exporter` as a Tauri sidecar. Build it after Rust is i
 .\scripts\build-sidecar.ps1
 ```
 
-Expected output:
+Expected output examples:
 
 ```txt
 src-tauri\binaries\imessage-exporter-x86_64-pc-windows-msvc.exe
+src-tauri/binaries/imessage-exporter-aarch64-apple-darwin
+src-tauri/binaries/imessage-exporter-x86_64-unknown-linux-gnu
 ```
 
 The sidecar is pinned to `4.1.0`. See [SIDE_CAR.md](./SIDE_CAR.md).
 
-At source time the sidecar file includes the Windows target triple. During Tauri build it is copied into the runtime resources as `imessage-exporter.exe`; the backend checks both names so local development and installed bundles use the same code path.
+At source time the sidecar file includes the Rust target triple. During Tauri build it is copied into runtime resources as `imessage-exporter.exe` on Windows and `imessage-exporter` on macOS/Linux; the backend checks both names so local development and installed bundles use the same code path.
 
 ## Packaging
 
-Recommended path: build the native Windows installers in GitHub Actions so local machines do not need Visual Studio Build Tools, Windows SDK libraries, or the sidecar binary.
+Recommended path: build native release artifacts in GitHub Actions so local machines do not need every platform toolchain or sidecar binary.
 
 Manual Actions build:
 
 1. Open the GitHub repository's **Actions** tab.
-2. Select **Release Windows Installers**.
+2. Select **Release Installers**.
 3. Click **Run workflow** on the target branch.
-4. Download the `imessage-exporter-gui-windows` artifact after the workflow finishes.
+4. Download the platform artifacts after the workflow finishes:
+   - `imessage-exporter-gui-windows`
+   - `imessage-exporter-gui-macos`
+   - `imessage-exporter-gui-linux`
 
 Tagged release build:
 
@@ -218,30 +224,27 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-The tag workflow uploads `dist-installers/*` as an artifact and attaches the NSIS/MSI installers plus `SHA256SUMS.txt` to the GitHub Release.
+The tag workflow uploads platform artifacts and attaches them plus `SHA256SUMS.txt` files to the GitHub Release.
 
 Local native packaging is still supported after dependencies and sidecar are ready:
 
 ```powershell
-.\scripts\verify.ps1 -Native
-npm run tauri build
-```
-
-The Tauri config targets Windows NSIS and MSI installers.
-
-To run the full local Windows packaging path and collect the installer files with checksums:
-
-```powershell
-npm run package:windows
+npm run package:release
 ```
 
 Artifacts are copied to:
 
 ```txt
-dist-installers\
+dist-release\
 ```
 
-The release workflow `.github/workflows/release.yml` runs the same packaging script on `windows-latest` after activating an MSVC developer shell. It builds the pinned sidecar, runs native verification, bundles Tauri, uploads `dist-installers/*`, and when pushed from a `v*` tag attaches the installers and `SHA256SUMS.txt` to a GitHub Release.
+The legacy Windows-only packaging shortcut remains available:
+
+```powershell
+npm run package:windows
+```
+
+The release workflow `.github/workflows/release.yml` builds on Windows, macOS, and Linux. It builds the pinned sidecar for each runner, runs native checks, bundles Tauri, uploads platform artifacts, and when pushed from a `v*` tag attaches the artifacts to a GitHub Release.
 
 ## Scope Notes
 

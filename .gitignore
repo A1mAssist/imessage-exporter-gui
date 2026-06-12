@@ -6,7 +6,7 @@ dist/
 
 src-tauri/target/
 src-tauri/gen/schemas/
-src-tauri/binaries/imessage-exporter-*.exe
+src-tauri/binaries/imessage-exporter-*
 
 *.log
 *.tmp

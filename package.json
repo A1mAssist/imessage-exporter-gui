@@ -14,6 +14,7 @@
     "check:static": "node scripts/sanity-check.mjs",
     "doctor": "powershell -ExecutionPolicy Bypass -File scripts/doctor.ps1",
     "icons": "node scripts/generate-icons.mjs",
+    "package:release": "powershell -ExecutionPolicy Bypass -File scripts/package-release.ps1",
     "package:windows": "powershell -ExecutionPolicy Bypass -File scripts/package-windows.ps1",
     "smoke:mock-ui": "node scripts/smoke-mock-ui.mjs",
     "test": "vitest run --configLoader runner",

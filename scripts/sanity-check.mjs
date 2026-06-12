@@ -62,6 +62,7 @@ for (const path of [
   "scripts/build-sidecar.ps1",
   "scripts/doctor.ps1",
   "scripts/setup-windows.ps1",
+  "scripts/package-release.ps1",
   "scripts/package-windows.ps1",
   "scripts/generate-icons.mjs",
   "scripts/render-preview.mjs",
@@ -71,8 +72,11 @@ for (const path of [
   "scripts/verify.ps1",
   "preview/index.html",
   "src-tauri/icons/32x32.png",
+  "src-tauri/icons/64x64.png",
   "src-tauri/icons/128x128.png",
   "src-tauri/icons/128x128@2x.png",
+  "src-tauri/icons/icon.png",
+  "src-tauri/icons/icon.icns",
   "src-tauri/icons/icon.ico",
   ".github/workflows/ci.yml",
   ".github/workflows/release.yml",
@@ -151,6 +155,7 @@ check("package exposes mock dev script", Boolean(pkg.scripts?.["dev:mock"]));
 check("package exposes mock UI smoke script", Boolean(pkg.scripts?.["smoke:mock-ui"]));
 check("package exposes preview screenshot script", Boolean(pkg.scripts?.["preview:screenshots"]));
 check("package exposes static mock preview server", Boolean(pkg.scripts?.["serve:mock"]));
+check("package exposes cross-platform release packaging script", Boolean(pkg.scripts?.["package:release"]));
 check("package exposes Windows packaging script", Boolean(pkg.scripts?.["package:windows"]));
 check("package exposes one-command verify script", Boolean(pkg.scripts?.verify));
 check("package exposes offline verify script", Boolean(pkg.scripts?.["verify:offline"]));
@@ -189,6 +194,7 @@ check("CLI rejects export inside backup", cli.includes("Export path cannot be in
 check("CLI rejects reversed date ranges", cli.includes("validate_date_range") && cli.includes("End date cannot be earlier than start date"));
 check("CLI rejects impossible dates", cli.includes("valid_calendar_date") && cli.includes("Start date must use a real YYYY-MM-DD date"));
 check("CLI resolves packaged Tauri sidecar name", cli.includes("sidecar_packaged_name") && cli.includes('format!("{SIDECAR_BASENAME}.exe")'));
+check("CLI resolves source sidecar target triples", cli.includes("sidecar_target_triple") && cli.includes("x86_64-pc-windows-msvc") && cli.includes("aarch64-apple-darwin") && cli.includes("x86_64-unknown-linux-gnu"));
 check("CLI resolves source and bundled sidecar paths", cli.includes('format!("binaries/{packaged_name}")') && cli.includes('format!("binaries/{source_name}")'));
 
 const commands = read("src-tauri/src/commands.rs");
@@ -202,10 +208,15 @@ const jobs = read("src-tauri/src/jobs.rs");
 check("backend redacts job log secrets", jobs.includes("struct LogRedactor") && jobs.includes("redact(&self") && jobs.includes("redacts_cleartext_password_from_output_events"));
 
 const buildSidecar = read("scripts/build-sidecar.ps1");
-check("sidecar build uses local cargo when available", buildSidecar.includes("Resolve-Cargo") && buildSidecar.includes(".tools\\cargo\\bin\\cargo.exe"));
+check("sidecar build uses local cargo when available", buildSidecar.includes("Resolve-Cargo") && buildSidecar.includes(".tools") && buildSidecar.includes("cargo"));
+check("sidecar build infers host target", buildSidecar.includes("Resolve-RustTarget") && buildSidecar.includes("cargo -vV") && buildSidecar.includes("host:"));
 check("sidecar build checks native Windows toolchain", buildSidecar.includes("link.exe") && buildSidecar.includes("kernel32.lib"));
 const doctor = read("scripts/doctor.ps1");
 check("doctor summarizes native packaging blockers", doctor.includes("Missing required item(s)") && doctor.includes(".\\scripts\\verify.ps1 -Native"));
+const packageRelease = read("scripts/package-release.ps1");
+check("release packaging script collects platform artifacts", packageRelease.includes("dist-release") && packageRelease.includes("SHA256SUMS") && packageRelease.includes("*.dmg") && packageRelease.includes("*.deb") && packageRelease.includes("*.AppImage"));
+check("release packaging script writes platform checksums", packageRelease.includes("Get-ChecksumFileName") && packageRelease.includes("SHA256SUMS-") && packageRelease.includes('$_.Name -notlike "SHA256SUMS*.txt"'));
+check("release packaging script builds sidecar and Tauri bundles", packageRelease.includes("scripts/build-sidecar.ps1") && packageRelease.includes("npm run tauri build -- --bundles"));
 const packageWindows = read("scripts/package-windows.ps1");
 check("Windows packaging script collects installers", packageWindows.includes("dist-installers") && packageWindows.includes("SHA256SUMS.txt"));
 check("Windows packaging script runs native verification", packageWindows.includes("scripts\\verify.ps1") && packageWindows.includes("-Native"));
@@ -215,7 +226,8 @@ check("native verification runs Rust tests", verifyScript.includes('Invoke-Step 
 const tauriConfig = read("src-tauri/tauri.conf.json");
 const tauriConfigJson = JSON.parse(tauriConfig);
 check("Tauri bundles imessage-exporter sidecar", tauriConfig.includes('"externalBin"') && tauriConfig.includes('"binaries/imessage-exporter"'));
-check("Tauri targets Windows installers", tauriConfig.includes('"nsis"') && tauriConfig.includes('"msi"'));
+check("Tauri keeps Windows local bundle defaults", tauriConfig.includes('"nsis"') && tauriConfig.includes('"msi"'));
+check("Tauri has desktop platform icons", tauriConfig.includes('"icons/icon.ico"') && tauriConfig.includes('"icons/icon.icns"') && tauriConfig.includes('"icons/icon.png"'));
 check("Tauri bundles license resources", tauriConfig.includes('"../LICENSE"') && tauriConfig.includes('"../THIRD_PARTY_NOTICES.md"') && tauriConfig.includes('"../SIDE_CAR.md"'));
 check(
   "Tauri maps bundled resources to root names",
@@ -276,10 +288,13 @@ check("CI runs frontend production build", ci.includes("npm run build"));
 check("CI runs Rust format", ci.includes("cargo fmt --check"));
 check("CI activates MSVC shell for native Windows builds", ci.includes("ilammy/msvc-dev-cmd@v1") && ci.includes("arch: x64"));
 const release = read(".github/workflows/release.yml");
-check("release workflow packages Windows installers", release.includes("Package Windows installers") && release.includes("dist-installers/*"));
+check("release workflow packages platform installers", release.includes("Release Installers") && release.includes("windows-latest") && release.includes("macos-latest") && release.includes("ubuntu-22.04") && release.includes("scripts/package-release.ps1"));
+check("release workflow requests platform bundle targets", release.includes("bundles: nsis,msi") && release.includes("bundles: dmg") && release.includes("bundles: deb,appimage"));
+check("release workflow uploads platform artifacts", release.includes("imessage-exporter-gui-windows") && release.includes("imessage-exporter-gui-macos") && release.includes("imessage-exporter-gui-linux"));
 check("release workflow publishes tagged releases", release.includes("softprops/action-gh-release") && release.includes("refs/tags/"));
 check("release workflow can publish with GitHub token", release.includes("permissions:") && release.includes("contents: write"));
 check("release workflow activates MSVC shell", release.includes("ilammy/msvc-dev-cmd@v1") && release.includes("arch: x64"));
+check("release workflow installs Linux Tauri dependencies", release.includes("libwebkit2gtk-4.1-dev") && release.includes("libayatana-appindicator3-dev") && release.includes("patchelf"));
 
 if (failures.length) {
   console.error("\nSanity check failed:");
