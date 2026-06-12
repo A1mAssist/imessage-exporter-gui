@@ -54,9 +54,13 @@ function Resolve-BundleTarget {
 
 function Add-ArtifactsFromPattern {
     param(
-        [Parameter(Mandatory = $true)][System.Collections.Generic.List[object]]$Artifacts,
+        [System.Collections.Generic.List[object]]$Artifacts,
         [Parameter(Mandatory = $true)][string]$Pattern
     )
+
+    if ($null -eq $Artifacts) {
+        throw "Artifact collection target cannot be null."
+    }
 
     Get-ChildItem -Path $Pattern -File -ErrorAction SilentlyContinue | ForEach-Object {
         [void]$Artifacts.Add($_)
