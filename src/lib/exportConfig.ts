@@ -3,6 +3,7 @@ import type { CopyMethod, EnvironmentStatus, ExportConfig, ExportFormat } from "
 export const defaultExportConfig: ExportConfig = {
   kind: "iosBackup",
   backupPath: "",
+  exporterPath: "",
   encrypted: false,
   cleartextPassword: "",
   exportPath: "",
@@ -33,6 +34,7 @@ export const copyMethods: Array<{ value: CopyMethod; label: string; description:
 export function normalizeConfig(config: ExportConfig): ExportConfig {
   return {
     ...config,
+    exporterPath: trimOrUndefined(config.exporterPath),
     cleartextPassword: trimOrUndefined(config.cleartextPassword),
     startDate: trimOrUndefined(config.startDate),
     endDate: trimOrUndefined(config.endDate),

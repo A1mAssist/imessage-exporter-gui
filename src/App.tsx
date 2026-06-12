@@ -18,11 +18,14 @@ import {
   Loader2,
   MessageSquareText,
   MessagesSquare,
+  Monitor,
+  Moon,
   Play,
   RefreshCcw,
   Search,
   Settings2,
   ShieldAlert,
+  Sun,
   TerminalSquare,
   UserRound,
 } from "lucide-react";
@@ -35,7 +38,9 @@ import {
   openFirstResult,
   openPath,
   openResourceFile,
+  openUrl,
   pickDirectory,
+  pickExporterFile,
   previewExportCommand,
   runDiagnostics,
   scanIosBackups,
@@ -43,6 +48,7 @@ import {
   validateBackupPath,
 } from "./api/tauri";
 import { localizeMultiline, tx, useAppLanguage, useDocumentLocalization } from "./i18n";
+import { useAppTheme } from "./theme";
 import { timestampedArchiveSequence } from "./lib/archivePath";
 import { buildDiagnosticReport } from "./lib/diagnosticReport";
 import { copyMethods, converterWarnings, defaultExportConfig, exportFormats, normalizeConfig, validateExportConfig } from "./lib/exportConfig";
@@ -75,6 +81,7 @@ const steps: Array<{ id: WizardStep; label: string; icon: typeof Database }> = [
 ];
 
 const maxArchivePathAttempts = 50;
+const exporterDownloadUrl = "https://github.com/ReagentX/imessage-exporter/releases/latest";
 
 type SettingsSaveState = "saved" | "saving" | "failed" | "cleared";
 type JobOutcome = { kind: "idle" | "running" | "succeeded" | "failed" | "cancelled"; code?: number; message?: string };
@@ -82,6 +89,7 @@ type StepAccess = { disabled: boolean; reason?: string };
 
 export default function App() {
   const { language, setLanguage } = useAppLanguage();
+  const { theme, setTheme } = useAppTheme();
   useDocumentLocalization(language);
   const [step, setStep] = useState<WizardStep>("source");
   const [environment, setEnvironment] = useState<EnvironmentStatus>();
@@ -204,10 +212,11 @@ export default function App() {
     () => ({
       kind: "iosBackup",
       backupPath: config.backupPath,
+      exporterPath: config.exporterPath,
       encrypted: config.encrypted,
       cleartextPassword: config.cleartextPassword,
     }),
-    [config.backupPath, config.encrypted, config.cleartextPassword],
+    [config.backupPath, config.exporterPath, config.encrypted, config.cleartextPassword],
   );
 
   const validationErrors = useMemo(() => validateExportConfig(config), [config]);
@@ -244,11 +253,12 @@ export default function App() {
     }
   }, [step, sourceSelectionErrors.length, exportJob]);
 
-  async function refreshEnvironment() {
+  async function refreshEnvironment(exporterPathOverride?: unknown) {
+    const nextExporterPath = typeof exporterPathOverride === "string" ? exporterPathOverride : config.exporterPath;
     setLoading(true);
     setError(undefined);
     try {
-      const [env, candidates] = await Promise.all([getEnvironment(), scanIosBackups()]);
+      const [env, candidates] = await Promise.all([getEnvironment(nextExporterPath), scanIosBackups()]);
       setEnvironment(env);
       setBackups(candidates);
       const savedBackup = candidates.find((candidate) => sameConfigPath(candidate.path, config.backupPath));
@@ -274,6 +284,27 @@ export default function App() {
       setError(String(err));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function chooseExporterPath() {
+    const selected = await pickExporterFile(config.exporterPath || environment?.exporterPath);
+    if (!selected) return;
+    updateConfig({ exporterPath: selected });
+    await refreshEnvironment(selected);
+  }
+
+  async function clearExporterPath() {
+    updateConfig({ exporterPath: "" });
+    await refreshEnvironment("");
+  }
+
+  async function openExporterDownload() {
+    setError(undefined);
+    try {
+      await openUrl(exporterDownloadUrl);
+    } catch (err) {
+      setError(String(err));
     }
   }
 
@@ -454,7 +485,10 @@ export default function App() {
             <p>Windows iOS 备份导出向导</p>
           </div>
         </div>
-        <LanguageToggle language={language} onChange={setLanguage} />
+        <div className="preference-controls">
+          <LanguageToggle language={language} onChange={setLanguage} />
+          <ThemeToggle theme={theme} onChange={setTheme} />
+        </div>
 
         <nav className="step-list" aria-label="导出步骤">
           {steps.map((candidate) => {
@@ -490,7 +524,11 @@ export default function App() {
           environment={environment}
           loading={loading}
           settingsSaveState={settingsSaveState}
-          onRefresh={refreshEnvironment}
+          exporterPath={config.exporterPath}
+          onChooseExporter={chooseExporterPath}
+          onClearExporter={clearExporterPath}
+          onOpenExporterDownload={openExporterDownload}
+          onRefresh={() => refreshEnvironment()}
           onClearSettings={clearSavedSettings}
           onOpenResource={(file) => openResourceFile(file).catch((err) => setError(String(err)))}
         />
@@ -610,8 +648,8 @@ async function nextAvailableArchivePath(stem: string, startSuffix: number, gener
 }
 
 function environmentExportBlockers(environment?: EnvironmentStatus): string[] {
-  if (!environment || environment.sidecarAvailable) return [];
-  return ["缺少 imessage-exporter sidecar，暂时不能开始导出。"];
+  if (!environment || environment.exporterAvailable) return [];
+  return ["缺少 imessage-exporter 导出引擎，暂时不能开始导出。"];
 }
 
 function sourceSelectionBlockers(config: ExportConfig, backup?: BackupCandidate): string[] {
@@ -730,7 +768,7 @@ function TopBar({
       <div className="quick-stats" aria-label="当前导出状态">
         <QuickStat icon={<Database size={16} />} label="备份" value={backup?.displayName ?? "未选择"} tone={backup?.valid ? "ok" : "neutral"} />
         <QuickStat icon={<Archive size={16} />} label="输出" value={exportPath ? compactPath(exportPath) : "未设置"} tone={exportPath ? "ok" : "neutral"} />
-        <QuickStat icon={<TerminalSquare size={16} />} label="Sidecar" value={environment?.sidecarAvailable ? "就绪" : "缺失"} tone={environment?.sidecarAvailable ? "ok" : "warn"} />
+        <QuickStat icon={<TerminalSquare size={16} />} label="导出引擎" value={environment?.exporterAvailable ? "就绪" : "缺失"} tone={environment?.exporterAvailable ? "ok" : "warn"} />
         <QuickStat icon={running ? <Loader2 className="spin" size={16} /> : <CheckCircle2 size={16} />} label="任务" value={running ? "运行中" : "空闲"} tone={running ? "accent" : "neutral"} />
       </div>
     </header>
@@ -772,10 +810,33 @@ function LanguageToggle({ language, onChange }: { language: "en" | "zh-CN"; onCh
   );
 }
 
+function ThemeToggle({ theme, onChange }: { theme: "system" | "light" | "dark"; onChange: (theme: "system" | "light" | "dark") => void }) {
+  const options: Array<{ value: "system" | "light" | "dark"; label: string; icon: ReactNode }> = [
+    { value: "system", label: "系统", icon: <Monitor size={15} /> },
+    { value: "light", label: "浅色", icon: <Sun size={15} /> },
+    { value: "dark", label: "深色", icon: <Moon size={15} /> },
+  ];
+
+  return (
+    <div className="theme-toggle" aria-label="主题">
+      {options.map((option) => (
+        <button className={theme === option.value ? "selected" : ""} key={option.value} type="button" onClick={() => onChange(option.value)} aria-pressed={theme === option.value} title={option.label}>
+          {option.icon}
+          <span>{option.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function EnvironmentPanel({
   environment,
   loading,
   settingsSaveState,
+  exporterPath,
+  onChooseExporter,
+  onClearExporter,
+  onOpenExporterDownload,
   onRefresh,
   onClearSettings,
   onOpenResource,
@@ -783,10 +844,15 @@ function EnvironmentPanel({
   environment?: EnvironmentStatus;
   loading: boolean;
   settingsSaveState: SettingsSaveState;
+  exporterPath?: string;
+  onChooseExporter: () => void;
+  onClearExporter: () => void;
+  onOpenExporterDownload: () => void;
   onRefresh: () => void;
   onClearSettings: () => void;
-  onOpenResource: (file: "license" | "thirdPartyNotices" | "sidecarNotes") => void;
+  onOpenResource: (file: "license" | "thirdPartyNotices") => void;
 }) {
+  const effectiveExporterPath = exporterPath?.trim() || environment?.exporterPath;
   return (
     <div className="env-panel">
       <div className="panel-title">
@@ -795,7 +861,25 @@ function EnvironmentPanel({
           {loading ? <Loader2 className="spin" size={16} /> : <RefreshCcw size={16} />}
         </button>
       </div>
-      <StatusLine ok={environment?.sidecarAvailable} label="imessage-exporter" value={environment?.sidecarVersion ?? "未找到"} />
+      <StatusLine ok={environment?.exporterAvailable} label="导出引擎" value={environment?.exporterVersion ?? (environment?.exporterAvailable ? "可用" : "未找到")} />
+      <div className="engine-config">
+        <small title={effectiveExporterPath || "未选择；会尝试从 PATH 检测"}>{effectiveExporterPath ? compactPath(effectiveExporterPath) : "未选择；会尝试从 PATH 检测"}</small>
+        <div className="engine-actions">
+          <button className="ghost-button" type="button" onClick={onChooseExporter}>
+            <FolderOpen size={15} />
+            选择导出引擎
+          </button>
+          <button className="ghost-button" type="button" onClick={onOpenExporterDownload}>
+            <ExternalLink size={15} />
+            下载
+          </button>
+          {exporterPath?.trim() ? (
+            <button className="ghost-button" type="button" onClick={onClearExporter}>
+              清除
+            </button>
+          ) : null}
+        </div>
+      </div>
       <StatusLine ok={environment?.ffmpegAvailable} label="ffmpeg" value={environment?.ffmpegAvailable ? "可用" : "未检测到"} />
       <StatusLine ok={environment?.imagemagickAvailable} label="ImageMagick" value={environment?.imagemagickAvailable ? "可用" : "未检测到"} />
       {environment?.warnings.map((warning) => (
@@ -822,7 +906,7 @@ function EnvironmentPanel({
 function ResourceLinks({
   onOpenResource,
 }: {
-  onOpenResource: (file: "license" | "thirdPartyNotices" | "sidecarNotes") => void;
+  onOpenResource: (file: "license" | "thirdPartyNotices") => void;
 }) {
   return (
     <div className="resource-links" aria-label="开源与版本资料">
@@ -831,9 +915,6 @@ function ResourceLinks({
       </button>
       <button type="button" onClick={() => onOpenResource("thirdPartyNotices")}>
         第三方声明
-      </button>
-      <button type="button" onClick={() => onOpenResource("sidecarNotes")}>
-        Sidecar 版本
       </button>
     </div>
   );
@@ -863,10 +944,10 @@ function environmentFixes(environment?: EnvironmentStatus): Array<{ label: strin
   if (!environment) return [];
   const fixes: Array<{ label: string; command: string }> = [];
 
-  if (!environment.sidecarAvailable) {
+  if (!environment.exporterAvailable) {
     fixes.push({
-      label: "构建内置导出引擎",
-      command: ".\\scripts\\build-sidecar.ps1",
+      label: "下载 imessage-exporter 后选择可执行文件",
+      command: exporterDownloadUrl,
     });
   }
   if (!environment.ffmpegAvailable || !environment.imagemagickAvailable) {
@@ -1068,7 +1149,7 @@ function SourceStep({
 function sourceDiagnosticsBlockers(config: ExportConfig, backup?: BackupCandidate, environment?: EnvironmentStatus): string[] {
   const blockers: string[] = [];
 
-  if (!environment?.sidecarAvailable) blockers.push("缺少 imessage-exporter sidecar，暂时不能运行诊断。");
+  if (!environment?.exporterAvailable) blockers.push("缺少 imessage-exporter 导出引擎，暂时不能运行诊断。");
   blockers.push(...sourceSelectionBlockers(config, backup));
   if (config.encrypted && !config.cleartextPassword?.trim()) blockers.push("加密备份需要输入密码。");
 
@@ -1096,15 +1177,15 @@ function ReadinessBand({
     icon: ReactNode;
   }> = [
     {
-      key: "sidecar",
+      key: "exporter",
       label: "导出引擎",
       detail: loading
         ? "正在检查"
-        : environment?.sidecarAvailable
-          ? environment.sidecarVersion ?? "已就绪"
-          : "缺少 sidecar，开发环境运行 scripts/build-sidecar.ps1",
-      tone: loading ? "neutral" : environment?.sidecarAvailable ? "ok" : "error",
-      icon: loading ? <Loader2 className="spin" size={17} /> : environment?.sidecarAvailable ? <CheckCircle2 size={17} /> : <AlertCircle size={17} />,
+        : environment?.exporterAvailable
+          ? environment.exporterVersion ?? environment.exporterPath ?? "已就绪"
+          : "未找到导出引擎，请下载或选择 imessage-exporter",
+      tone: loading ? "neutral" : environment?.exporterAvailable ? "ok" : "error",
+      icon: loading ? <Loader2 className="spin" size={17} /> : environment?.exporterAvailable ? <CheckCircle2 size={17} /> : <AlertCircle size={17} />,
     },
     {
       key: "backup",

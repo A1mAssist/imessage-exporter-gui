@@ -1,6 +1,6 @@
 import type { LogLine } from "../types";
 
-export type RecoveryCategory = "password" | "backup" | "permission" | "sidecar" | "converter" | "generic";
+export type RecoveryCategory = "password" | "backup" | "permission" | "exporter" | "converter" | "generic";
 
 export type RecoveryHint = {
   category: RecoveryCategory;
@@ -40,12 +40,12 @@ export function recoveryHintForFailure(logs: LogLine[], outcomeMessage?: string)
     };
   }
 
-  if (matches(lower, ["sidecar", "imessage-exporter not found", "program not found", "spawn", "enoent", "找不到 imessage-exporter"])) {
+  if (matches(lower, ["exporter", "sidecar", "imessage-exporter not found", "program not found", "spawn", "enoent", "找不到 imessage-exporter"])) {
     return {
-      category: "sidecar",
+      category: "exporter",
       title: "缺少导出引擎",
-      detail: "GUI 没能启动内置的 imessage-exporter sidecar。",
-      action: "在 GitHub Actions 里重新打包，或在本机完成 sidecar 构建后再运行桌面版。",
+      detail: "GUI 没能启动 imessage-exporter。",
+      action: "下载 imessage-exporter，或在运行环境面板里选择本机已有的 imessage-exporter 可执行文件。",
     };
   }
 

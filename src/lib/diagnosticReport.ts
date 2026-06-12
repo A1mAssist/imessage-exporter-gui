@@ -23,7 +23,7 @@ export function buildDiagnosticReport(input: DiagnosticReportInput): string {
     `生成时间: ${generatedAt}`,
     "",
     "环境",
-    `- sidecar: ${environment?.sidecarAvailable ? environment.sidecarVersion ?? "可用" : "缺失"}`,
+    `- 导出引擎: ${environment?.exporterAvailable ? environment.exporterVersion ?? environment.exporterPath ?? "可用" : "缺失"}`,
     `- ffmpeg: ${environment?.ffmpegAvailable ? "可用" : "缺失"}`,
     `- ImageMagick: ${environment?.imagemagickAvailable ? "可用" : "缺失"}`,
     ...(environment?.warnings.length ? environment.warnings.map((warning) => `- warning: ${warning}`) : ["- warning: 无"]),

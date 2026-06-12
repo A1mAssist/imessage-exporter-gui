@@ -51,9 +51,6 @@ jobs:
         working-directory: src-tauri
         run: cargo fmt --check
 
-      - name: Build sidecar
-        run: .\scripts\build-sidecar.ps1
-
       - name: Rust tests
         working-directory: src-tauri
         run: cargo test

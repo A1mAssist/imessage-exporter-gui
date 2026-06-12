@@ -9,6 +9,7 @@ type PersistedExportSettings = Omit<ExportConfig, "cleartextPassword"> & {
 const persistedKeys: Array<keyof Omit<ExportConfig, "cleartextPassword">> = [
   "kind",
   "backupPath",
+  "exporterPath",
   "encrypted",
   "exportPath",
   "format",

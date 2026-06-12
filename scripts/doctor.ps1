@@ -1,7 +1,6 @@
 $ErrorActionPreference = "Continue"
 
 $Root = Resolve-Path (Join-Path $PSScriptRoot "..")
-$Sidecar = Join-Path $Root "src-tauri\binaries\imessage-exporter-x86_64-pc-windows-msvc.exe"
 $MissingRequired = New-Object System.Collections.Generic.List[string]
 $MissingOptional = New-Object System.Collections.Generic.List[string]
 
@@ -119,24 +118,9 @@ Test-Tool -Name "cargo" -Required
 Test-Tool -Name "rustc" -Required
 Test-Tool -Name "link" -Args @("/?") -Required
 Test-WindowsSdkLibs
+Test-Tool -Name "imessage-exporter"
 Test-Tool -Name "ffmpeg"
 Test-Tool -Name "magick"
-
-Write-Host ""
-if (Test-Path $Sidecar) {
-    Write-Host ("[ok] sidecar: {0}" -f $Sidecar)
-    try {
-        & $Sidecar --version
-    }
-    catch {
-        Write-Host ("[warn] sidecar exists but failed to run: {0}" -f $_.Exception.Message)
-    }
-}
-else {
-    Write-Host ("[MISSING] sidecar: {0}" -f $Sidecar)
-    Write-Host "          Run .\scripts\build-sidecar.ps1 after installing Rust."
-    $MissingRequired.Add("imessage-exporter sidecar")
-}
 
 Write-Host ""
 Write-Host "Static checks:"
@@ -152,9 +136,8 @@ Write-Host ""
 Write-Host "Next steps:"
 if ($MissingRequired.Count -eq 0) {
     Write-Host "  Native prerequisites look ready."
-    Write-Host "  1. .\scripts\build-sidecar.ps1"
-    Write-Host "  2. .\scripts\verify.ps1 -Native"
-    Write-Host "  3. npm run tauri build"
+    Write-Host "  1. .\scripts\verify.ps1 -Native"
+    Write-Host "  2. npm run tauri build"
 }
 else {
     $UniqueMissing = $MissingRequired | Select-Object -Unique
@@ -164,10 +147,6 @@ else {
         Write-Host "    .\scripts\setup-windows.ps1 -Install"
         Write-Host "  Then restart PowerShell so link.exe and kernel32.lib are visible."
     }
-    if ($UniqueMissing -contains "imessage-exporter sidecar") {
-        Write-Host "  After the native toolchain is ready, build the pinned sidecar:"
-        Write-Host "    .\scripts\build-sidecar.ps1"
-    }
     Write-Host "  Re-check and package:"
     Write-Host "    .\scripts\doctor.ps1"
     Write-Host "    .\scripts\verify.ps1 -Native"
@@ -176,7 +155,8 @@ else {
 
 if ($MissingOptional.Count -gt 0) {
     $UniqueOptional = $MissingOptional | Select-Object -Unique
-    Write-Host ("  Optional converter(s) missing: {0}" -f ($UniqueOptional -join ", "))
-    Write-Host "  Install them only if you need basic/full attachment conversion:"
+    Write-Host ("  Optional tool(s) missing: {0}" -f ($UniqueOptional -join ", "))
+    Write-Host "  Install imessage-exporter or choose its executable in the GUI before running exports."
+    Write-Host "  Install ffmpeg/ImageMagick only if you need basic/full attachment conversion:"
     Write-Host "    .\scripts\setup-windows.ps1 -Install -InstallOptionalTools"
 }

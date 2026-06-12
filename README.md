@@ -4,7 +4,7 @@
 
 `iMessage Exporter GUI` is a desktop interface for [`imessage-exporter`](https://github.com/ReagentX/imessage-exporter). It exports SMS and iMessage data from local iOS backups to HTML or TXT.
 
-It turns the common export flow into a guided app: choose an iOS backup, check backup health, set export options, run the export, and open the result folder.
+It turns the common export flow into a guided app: choose an iOS backup, configure the export engine, check backup health, set export options, run the export, and open the result folder.
 
 ## Screenshots
 
@@ -32,13 +32,15 @@ The installers are not code-signed yet, so your system may show a safety warning
 
 ## Basic Use
 
-1. Create a local iPhone or iPad backup with Apple Devices or iTunes.
-2. Open iMessage Exporter GUI.
-3. In Data Source, choose or scan your local iOS backup folder.
-4. If the backup is encrypted, enter the backup password.
-5. Run diagnostics to check the database, attachments, and optional converters.
-6. Choose the export format, attachment strategy, date range, and output folder.
-7. Start the export, then open the output folder or the first result file when it completes.
+1. Download or install [`imessage-exporter`](https://github.com/ReagentX/imessage-exporter/releases/latest).
+2. Create a local iPhone or iPad backup with Apple Devices or iTunes.
+3. Open iMessage Exporter GUI.
+4. In the Environment panel, choose the `imessage-exporter` executable if it is not already available on `PATH`.
+5. In Data Source, choose or scan your local iOS backup folder.
+6. If the backup is encrypted, enter the backup password.
+7. Run diagnostics to check the database, attachments, and optional converters.
+8. Choose the export format, attachment strategy, date range, and output folder.
+9. Start the export, then open the output folder or the first result file when it completes.
 
 Common backup locations:
 
@@ -53,9 +55,10 @@ Implemented:
 
 - Guided desktop interface in English and Chinese.
 - Automatic UI language detection from the device language.
+- Light, dark, and system theme modes.
 - Local iOS backup scanning, plus manual backup folder selection.
 - Checks for key backup files such as `Manifest.db` and `Info.plist`.
-- Bundled `imessage-exporter` engine, so users do not need to install the command-line tool separately.
+- External `imessage-exporter` engine detection from `PATH`, plus a GUI picker for the executable.
 - HTML/TXT export with attachment strategy, date range, conversation filter, and display-name options.
 - Output folder checks to avoid writing into the backup folder or mixing with old exports.
 - One-click timestamped export folders, for example `Messages Export 2026-06-12 0130`.
@@ -69,6 +72,7 @@ Current limits:
 
 - v1 only exports from local iOS backups.
 - macOS `chat.db`, jailbroken-device `sms.db`, and standalone attachment folders are not supported yet.
+- `imessage-exporter` is not bundled in the GUI installer; install it separately or choose its executable in the app.
 - `ffmpeg` and ImageMagick are not bundled.
 - Native PDF export is not available yet; export HTML first, then print to PDF from a browser.
 - Windows and macOS builds are not code-signed yet, so installation may show system safety prompts.

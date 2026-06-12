@@ -3,8 +3,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EnvironmentStatus {
-    pub sidecar_available: bool,
-    pub sidecar_version: Option<String>,
+    pub exporter_available: bool,
+    pub exporter_version: Option<String>,
+    pub exporter_path: Option<String>,
     pub ffmpeg_available: bool,
     pub imagemagick_available: bool,
     pub default_backup_roots: Vec<String>,
@@ -16,7 +17,6 @@ pub struct EnvironmentStatus {
 pub enum ResourceFile {
     License,
     ThirdPartyNotices,
-    SidecarNotes,
 }
 
 impl ResourceFile {
@@ -24,7 +24,6 @@ impl ResourceFile {
         match self {
             ResourceFile::License => "LICENSE",
             ResourceFile::ThirdPartyNotices => "THIRD_PARTY_NOTICES.md",
-            ResourceFile::SidecarNotes => "SIDE_CAR.md",
         }
     }
 }
@@ -62,6 +61,7 @@ pub struct ExportPathStatus {
 pub struct SourceConfig {
     pub kind: SourceKind,
     pub backup_path: String,
+    pub exporter_path: Option<String>,
     pub encrypted: bool,
     pub cleartext_password: Option<String>,
 }
@@ -77,6 +77,7 @@ pub enum SourceKind {
 pub struct ExportConfig {
     pub kind: SourceKind,
     pub backup_path: String,
+    pub exporter_path: Option<String>,
     pub encrypted: bool,
     pub cleartext_password: Option<String>,
     pub export_path: String,

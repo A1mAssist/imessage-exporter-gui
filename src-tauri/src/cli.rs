@@ -1,108 +1,57 @@
-use std::path::PathBuf;
-
-use tauri::Manager;
+use std::{
+    env,
+    path::{Path, PathBuf},
+};
 
 use crate::models::{CommandPreview, ExportConfig, SourceConfig};
 
-pub const SIDECAR_BASENAME: &str = "imessage-exporter";
-pub const SIDECAR_VERSION: &str = "4.1.0";
+pub const EXPORTER_BASENAME: &str = "imessage-exporter";
 
-pub fn sidecar_path<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf, String> {
-    let packaged_name = sidecar_packaged_name();
-    let source_name = sidecar_source_name();
-    let resource_candidates = [
-        packaged_name.clone(),
-        format!("binaries/{packaged_name}"),
-        source_name.clone(),
-        format!("binaries/{source_name}"),
-    ];
-    let mut first_resolved_path = None;
-
-    for resource in resource_candidates {
-        let resource_path = app
-            .path()
-            .resolve(resource, tauri::path::BaseDirectory::Resource)
-            .map_err(|err| format!("Failed to resolve bundled imessage-exporter: {err}"))?;
-        first_resolved_path.get_or_insert_with(|| resource_path.clone());
-        if resource_path.is_file() {
-            return Ok(resource_path);
+pub fn resolve_exporter_path(configured_path: Option<&str>) -> Result<PathBuf, String> {
+    if let Some(path) = clean(configured_path) {
+        let selected = PathBuf::from(&path);
+        if selected.is_file() {
+            return Ok(selected);
         }
+        if is_command_name(&path) {
+            if let Some(found) = find_on_path(&path) {
+                return Ok(found);
+            }
+        }
+        return Err(format!(
+            "imessage-exporter was not found at {path}. Choose a valid exporter executable."
+        ));
     }
 
-    if let Ok(current_exe) = std::env::current_exe() {
-        if let Some(exe_dir) = current_exe.parent() {
-            for dev_path in [exe_dir.join(&packaged_name), exe_dir.join(&source_name)] {
-                if dev_path.is_file() {
-                    return Ok(dev_path);
-                }
+    find_on_path(EXPORTER_BASENAME).ok_or_else(|| {
+        "imessage-exporter was not found on PATH. Install it or choose the exporter executable."
+            .to_string()
+    })
+}
+
+fn find_on_path(name: &str) -> Option<PathBuf> {
+    let path = env::var_os("PATH")?;
+    for directory in env::split_paths(&path) {
+        for candidate in executable_candidates(name) {
+            let path = directory.join(candidate);
+            if path.is_file() {
+                return Some(path);
             }
         }
     }
-
-    let current_dir = std::env::current_dir()
-        .map_err(|err| format!("Failed to inspect current directory: {err}"))?;
-
-    for dev_path in [
-        current_dir
-            .join("src-tauri")
-            .join("binaries")
-            .join(&source_name),
-        current_dir.join("binaries").join(&source_name),
-        current_dir
-            .join("src-tauri")
-            .join("target")
-            .join("debug")
-            .join(&packaged_name),
-        current_dir
-            .join("src-tauri")
-            .join("target")
-            .join("release")
-            .join(&packaged_name),
-    ] {
-        if dev_path.is_file() {
-            return Ok(dev_path);
-        }
-    }
-
-    Ok(first_resolved_path.unwrap_or_else(|| {
-        current_dir
-            .join("src-tauri")
-            .join("binaries")
-            .join(source_name)
-    }))
+    None
 }
 
-fn sidecar_packaged_name() -> String {
-    if cfg!(windows) {
-        format!("{SIDECAR_BASENAME}.exe")
+fn executable_candidates(name: &str) -> Vec<String> {
+    if cfg!(windows) && Path::new(name).extension().is_none() {
+        vec![format!("{name}.exe"), name.to_string()]
     } else {
-        SIDECAR_BASENAME.to_string()
+        vec![name.to_string()]
     }
 }
 
-fn sidecar_source_name() -> String {
-    let extension = if cfg!(windows) { ".exe" } else { "" };
-    format!("{SIDECAR_BASENAME}-{}{extension}", sidecar_target_triple())
-}
-
-fn sidecar_target_triple() -> &'static str {
-    if cfg!(all(
-        target_os = "windows",
-        target_arch = "x86_64",
-        target_env = "msvc"
-    )) {
-        "x86_64-pc-windows-msvc"
-    } else if cfg!(all(target_os = "macos", target_arch = "x86_64")) {
-        "x86_64-apple-darwin"
-    } else if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
-        "aarch64-apple-darwin"
-    } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
-        "x86_64-unknown-linux-gnu"
-    } else if cfg!(all(target_os = "linux", target_arch = "aarch64")) {
-        "aarch64-unknown-linux-gnu"
-    } else {
-        "unknown-target"
-    }
+fn is_command_name(value: &str) -> bool {
+    !value.contains('/') && !value.contains('\\')
 }
 
 pub fn diagnostics_args(config: &SourceConfig) -> Result<Vec<String>, String> {
@@ -349,6 +298,7 @@ mod tests {
         ExportConfig {
             kind: SourceKind::IosBackup,
             backup_path: "C:\\Backups\\device".to_string(),
+            exporter_path: None,
             encrypted: false,
             cleartext_password: None,
             export_path: "C:\\Exports".to_string(),
@@ -465,6 +415,7 @@ mod tests {
         let source = SourceConfig {
             kind: SourceKind::IosBackup,
             backup_path: "C:\\Backups\\device".to_string(),
+            exporter_path: None,
             encrypted: true,
             cleartext_password: Some("secret".to_string()),
         };
@@ -557,5 +508,11 @@ mod tests {
             export_args(&config).unwrap_err(),
             "End date cannot be earlier than start date"
         );
+    }
+
+    #[test]
+    fn rejects_missing_configured_exporter_path() {
+        let error = resolve_exporter_path(Some("C:\\missing\\imessage-exporter.exe")).unwrap_err();
+        assert!(error.contains("imessage-exporter was not found"));
     }
 }

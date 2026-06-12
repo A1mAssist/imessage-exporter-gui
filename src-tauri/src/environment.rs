@@ -5,26 +5,22 @@ use std::{
     time::UNIX_EPOCH,
 };
 
-use tauri::AppHandle;
-
 use crate::{
     app::{plist_bool_value, plist_string_value},
-    cli::{self, SIDECAR_VERSION},
+    cli,
     models::{BackupCandidate, EnvironmentStatus},
 };
 
-pub fn get_environment(app: &AppHandle) -> EnvironmentStatus {
-    let sidecar_path = cli::sidecar_path(app).ok();
-    let sidecar_available = sidecar_path
-        .as_ref()
-        .map(|path| path.is_file())
-        .unwrap_or(false);
-    let sidecar_version = if sidecar_available {
-        read_sidecar_version(sidecar_path.as_ref().expect("checked sidecar path"))
-            .or_else(|| Some(format!("pinned {SIDECAR_VERSION}")))
-    } else {
-        None
+pub fn get_environment(configured_exporter_path: Option<&str>) -> EnvironmentStatus {
+    let (exporter_path, exporter_error) = match cli::resolve_exporter_path(configured_exporter_path)
+    {
+        Ok(path) => (Some(path), None),
+        Err(err) => (None, Some(err)),
     };
+    let exporter_available = exporter_path.is_some();
+    let exporter_version = exporter_path
+        .as_ref()
+        .and_then(|path| read_exporter_version(path));
     let ffmpeg_available = command_available("ffmpeg");
     let imagemagick_available = command_available("magick");
     let default_backup_roots = default_backup_roots()
@@ -33,11 +29,14 @@ pub fn get_environment(app: &AppHandle) -> EnvironmentStatus {
         .collect::<Vec<_>>();
 
     let mut warnings = Vec::new();
-    if !sidecar_available {
+    if !exporter_available {
         warnings.push(
-            "未找到内置 imessage-exporter sidecar，请先运行 scripts/build-sidecar.ps1。"
+            "未找到 imessage-exporter。请安装命令行工具，或在界面中选择 imessage-exporter 可执行文件。"
                 .to_string(),
         );
+        if let Some(err) = exporter_error {
+            warnings.push(err);
+        }
     }
     if !ffmpeg_available {
         warnings.push("未检测到 ffmpeg，basic/full 附件转换可能不可用。".to_string());
@@ -47,8 +46,9 @@ pub fn get_environment(app: &AppHandle) -> EnvironmentStatus {
     }
 
     EnvironmentStatus {
-        sidecar_available,
-        sidecar_version,
+        exporter_available,
+        exporter_version,
+        exporter_path: exporter_path.map(|path| path.display().to_string()),
         ffmpeg_available,
         imagemagick_available,
         default_backup_roots,
@@ -141,7 +141,7 @@ fn command_available(name: &str) -> bool {
         .unwrap_or(false)
 }
 
-fn read_sidecar_version(path: &Path) -> Option<String> {
+fn read_exporter_version(path: &Path) -> Option<String> {
     Command::new(path)
         .arg("--version")
         .output()

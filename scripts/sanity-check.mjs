@@ -44,6 +44,7 @@ for (const path of [
   "src/App.tsx",
   "src/styles.css",
   "src/api/tauri.ts",
+  "src/theme.ts",
   "src/lib/exportConfig.ts",
   "src/lib/archivePath.ts",
   "src/lib/archivePath.test.ts",
@@ -59,7 +60,6 @@ for (const path of [
   "src-tauri/src/jobs.rs",
   "src-tauri/src/commands.rs",
   "src-tauri/src/models.rs",
-  "scripts/build-sidecar.ps1",
   "scripts/doctor.ps1",
   "scripts/setup-windows.ps1",
   "scripts/package-release.ps1",
@@ -112,14 +112,14 @@ check("app persists only non-sensitive settings", app.includes("loadPersistedExp
 check("app exposes password clearing controls", app.includes("清除密码") && app.includes("任务结束后自动清除密码") && app.includes("autoClearPasswordRef"));
 check("app validates saved manual backup path on startup", app.includes("validateBackupPath(config.backupPath)") && app.includes("candidate.encrypted ?? current.encrypted"));
 check("app disables HTML-only print mode for TXT", app.includes('format === "txt" ? { format, noLazy: false }') && app.includes('disabled={config.format !== "html"}'));
-check("app blocks export when sidecar is missing", app.includes("environmentExportBlockers") && app.includes("暂时不能开始导出"));
+check("app blocks export when exporter is missing", app.includes("environmentExportBlockers") && app.includes("缺少 imessage-exporter 导出引擎"));
 check("app reports open result failures", app.includes("function openOutputPath") && app.includes("function openFirstResultFile") && app.includes("setError(String(err))"));
 check("app shows environment fix commands", app.includes("function EnvironmentFixList") && app.includes("setup-windows.ps1 -Install -InstallOptionalTools"));
 check("app links bundled license resources", app.includes("function ResourceLinks") && app.includes("GPL 许可证") && app.includes("openResourceFile"));
 
 const api = read("src/api/tauri.ts");
 check("API has browser mock runtime", api.includes("usingMockApi") && api.includes("startMockExport") && api.includes("startMockDiagnostics"));
-check("mock API can simulate missing sidecar", api.includes("missingSidecar") && api.includes("模拟 sidecar 缺失"));
+check("mock API can simulate missing exporter", api.includes("missingExporter") && api.includes("模拟导出引擎缺失"));
 check("mock export directory is outside backup", api.includes("Messages Export") && api.includes('purpose === "export"'));
 check("API exposes export path inspection", api.includes("inspectExportPath") && api.includes("mockExportPathStatus"));
 check("API opens bundled resource files", api.includes("openResourceFile") && api.includes("thirdPartyNotices"));
@@ -133,6 +133,7 @@ const persistedKeyEntries = persistence.match(/const persistedKeys[\s\S]*?=\s*\[
 check("persistence storage key is versioned", persistence.includes("imessage-exporter-gui.exportSettings.v1"));
 check("persistence clears password on load", persistence.includes('cleartextPassword: ""'));
 check("persistence can save auto-clear password preference", persistence.includes('"autoClearPassword"') && read("src/lib/persistence.test.ts").includes("autoClearPassword"));
+check("persistence can save exporter path", persistence.includes('"exporterPath"'));
 check("persistence clears no-lazy for TXT", persistence.includes('noLazy: config.format === "html" ? config.noLazy : false'));
 check("persistence omits password from saved key list", !persistedKeyEntries.includes('"cleartextPassword"'));
 const persistenceTests = read("src/lib/persistence.test.ts");
@@ -166,6 +167,7 @@ check("package pins @tauri-apps/cli", isExactVersion(pkg.devDependencies?.["@tau
 
 const styles = read("src/styles.css");
 check("styles define design tokens", styles.includes("--accent") && styles.includes("--shadow"));
+check("app supports theme switching", app.includes("function ThemeToggle") && read("src/theme.ts").includes("prefers-color-scheme") && styles.includes('[data-theme="dark"]'));
 check("styles avoid nested cards pattern", !styles.includes(".content-band .content-band"));
 check("styles include keyboard focus states", styles.includes(":focus-visible") && styles.includes("outline-offset"));
 check("styles respect reduced motion", styles.includes("prefers-reduced-motion") && styles.includes(".spin"));
@@ -193,9 +195,9 @@ check("CLI never exposes attachment root for iOS v1", !cli.includes("attachment-
 check("CLI rejects export inside backup", cli.includes("Export path cannot be inside the iOS backup directory"));
 check("CLI rejects reversed date ranges", cli.includes("validate_date_range") && cli.includes("End date cannot be earlier than start date"));
 check("CLI rejects impossible dates", cli.includes("valid_calendar_date") && cli.includes("Start date must use a real YYYY-MM-DD date"));
-check("CLI resolves packaged Tauri sidecar name", cli.includes("sidecar_packaged_name") && cli.includes('format!("{SIDECAR_BASENAME}.exe")'));
-check("CLI resolves source sidecar target triples", cli.includes("sidecar_target_triple") && cli.includes("x86_64-pc-windows-msvc") && cli.includes("aarch64-apple-darwin") && cli.includes("x86_64-unknown-linux-gnu"));
-check("CLI resolves source and bundled sidecar paths", cli.includes('format!("binaries/{packaged_name}")') && cli.includes('format!("binaries/{source_name}")'));
+check("CLI resolves configured or PATH exporter", cli.includes("resolve_exporter_path") && cli.includes("find_on_path") && cli.includes("EXPORTER_BASENAME"));
+check("CLI checks Windows executable candidates", cli.includes('format!("{name}.exe")') && cli.includes("executable_candidates"));
+check("CLI no longer resolves bundled sidecar paths", !cli.includes("sidecar_path") && !cli.includes("sidecar_target_triple"));
 
 const commands = read("src-tauri/src/commands.rs");
 const models = read("src-tauri/src/models.rs");
@@ -207,16 +209,12 @@ check("backend has dev fallback for bundled resources", commands.includes("resol
 const jobs = read("src-tauri/src/jobs.rs");
 check("backend redacts job log secrets", jobs.includes("struct LogRedactor") && jobs.includes("redact(&self") && jobs.includes("redacts_cleartext_password_from_output_events"));
 
-const buildSidecar = read("scripts/build-sidecar.ps1");
-check("sidecar build uses local cargo when available", buildSidecar.includes("Resolve-Cargo") && buildSidecar.includes(".tools") && buildSidecar.includes("cargo"));
-check("sidecar build infers host target", buildSidecar.includes("Resolve-RustTarget") && buildSidecar.includes("cargo -vV") && buildSidecar.includes("host:"));
-check("sidecar build checks native Windows toolchain", buildSidecar.includes("link.exe") && buildSidecar.includes("kernel32.lib"));
 const doctor = read("scripts/doctor.ps1");
 check("doctor summarizes native packaging blockers", doctor.includes("Missing required item(s)") && doctor.includes(".\\scripts\\verify.ps1 -Native"));
 const packageRelease = read("scripts/package-release.ps1");
 check("release packaging script collects platform artifacts", packageRelease.includes("dist-release") && packageRelease.includes("SHA256SUMS") && packageRelease.includes("*.dmg") && packageRelease.includes("*.deb") && packageRelease.includes("*.AppImage"));
 check("release packaging script writes platform checksums", packageRelease.includes("Get-ChecksumFileName") && packageRelease.includes("SHA256SUMS-") && packageRelease.includes('$_.Name -notlike "SHA256SUMS*.txt"'));
-check("release packaging script builds sidecar and Tauri bundles", packageRelease.includes("scripts/build-sidecar.ps1") && packageRelease.includes("npm run tauri build -- --bundles"));
+check("release packaging script builds Tauri bundles without sidecar", !packageRelease.includes("build-sidecar") && packageRelease.includes("npm run tauri build -- --bundles"));
 const packageWindows = read("scripts/package-windows.ps1");
 check("Windows packaging script collects installers", packageWindows.includes("dist-installers") && packageWindows.includes("SHA256SUMS.txt"));
 check("Windows packaging script runs native verification", packageWindows.includes("scripts\\verify.ps1") && packageWindows.includes("-Native"));
@@ -225,19 +223,19 @@ check("native verification runs Rust tests", verifyScript.includes('Invoke-Step 
 
 const tauriConfig = read("src-tauri/tauri.conf.json");
 const tauriConfigJson = JSON.parse(tauriConfig);
-check("Tauri bundles imessage-exporter sidecar", tauriConfig.includes('"externalBin"') && tauriConfig.includes('"binaries/imessage-exporter"'));
+check("Tauri does not bundle imessage-exporter", !tauriConfig.includes('"externalBin"') && !tauriConfig.includes('"binaries/imessage-exporter"'));
 check("Tauri keeps Windows local bundle defaults", tauriConfig.includes('"nsis"') && tauriConfig.includes('"msi"'));
 check("Tauri has desktop platform icons", tauriConfig.includes('"icons/icon.ico"') && tauriConfig.includes('"icons/icon.icns"') && tauriConfig.includes('"icons/icon.png"'));
-check("Tauri bundles license resources", tauriConfig.includes('"../LICENSE"') && tauriConfig.includes('"../THIRD_PARTY_NOTICES.md"') && tauriConfig.includes('"../SIDE_CAR.md"'));
+check("Tauri bundles license resources", tauriConfig.includes('"../LICENSE"') && tauriConfig.includes('"../THIRD_PARTY_NOTICES.md"') && !tauriConfig.includes('"../SIDE_CAR.md"'));
 check(
   "Tauri maps bundled resources to root names",
   tauriConfigJson.bundle?.resources?.["../LICENSE"] === "LICENSE" &&
     tauriConfigJson.bundle?.resources?.["../THIRD_PARTY_NOTICES.md"] === "THIRD_PARTY_NOTICES.md" &&
-    tauriConfigJson.bundle?.resources?.["../SIDE_CAR.md"] === "SIDE_CAR.md",
+    !tauriConfigJson.bundle?.resources?.["../SIDE_CAR.md"],
 );
 check(
   "resource file names match bundled targets",
-  ["LICENSE", "THIRD_PARTY_NOTICES.md", "SIDE_CAR.md"].every((name) => models.includes(`=> "${name}"`)),
+  ["LICENSE", "THIRD_PARTY_NOTICES.md"].every((name) => models.includes(`=> "${name}"`)) && !models.includes("SIDE_CAR.md"),
 );
 
 const cargoToml = read("src-tauri/Cargo.toml");
@@ -265,7 +263,8 @@ check("smoke verifies password clearing controls", read("scripts/smoke-mock-ui.m
 check("smoke verifies diagnostic details", read("scripts/smoke-mock-ui.mjs").includes("assertDiagnosticDetails") && read("scripts/smoke-mock-ui.mjs").includes("128482 条消息"));
 check("smoke verifies format-specific controls", read("scripts/smoke-mock-ui.mjs").includes("assertFormatSpecificControls"));
 check("smoke verifies TXT result file action", read("scripts/smoke-mock-ui.mjs").includes("assertTxtResultsExposeTxtAction") && read("scripts/smoke-mock-ui.mjs").includes("打开首个 TXT"));
-check("smoke verifies missing sidecar export blocking", read("scripts/smoke-mock-ui.mjs").includes("assertMissingSidecarBlocksExport"));
+check("smoke verifies missing exporter export blocking", read("scripts/smoke-mock-ui.mjs").includes("assertMissingExporterBlocksExport"));
+check("smoke verifies theme switching", read("scripts/smoke-mock-ui.mjs").includes("assertThemeToggle"));
 check("smoke verifies export cancellation", read("scripts/smoke-mock-ui.mjs").includes("assertCancelledOutcome") && read("scripts/smoke-mock-ui.mjs").includes(".result-strip.cancelled"));
 check("smoke verifies export summary panel", read("scripts/smoke-mock-ui.mjs").includes("assertExportSummary") && read("scripts/smoke-mock-ui.mjs").includes("导出摘要"));
 check(

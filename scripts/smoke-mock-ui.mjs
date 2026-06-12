@@ -54,6 +54,7 @@ try {
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   await assertHealthyApp(page, "source desktop");
   await assertReadinessBand(page);
+  await assertThemeToggle(page);
   await assertEnvironmentFixList(page);
   await assertResourceLinks(page);
   await assertSettingsPersistenceStatus(page);
@@ -124,8 +125,8 @@ try {
 
   await assertSavedManualBackupIsValidated(browser);
   console.log("smoke: saved manual backup passed");
-  await assertMissingSidecarBlocksExport(browser);
-  console.log("smoke: missing sidecar passed");
+  await assertMissingExporterBlocksExport(browser);
+  console.log("smoke: missing exporter passed");
   await assertTxtResultsExposeTxtAction(browser);
   console.log("smoke: txt result passed");
   await assertGeneratedArchiveDirectory(browser);
@@ -222,7 +223,14 @@ async function assertOutputDirectoryWarning(page) {
 async function assertReadinessBand(page) {
   const text = await page.locator(".readiness-band").textContent();
   if (!text?.includes("就绪检查")) throw new Error("Readiness band was not rendered");
-  if (!text.includes("导出引擎")) throw new Error("Readiness band did not show sidecar status");
+  if (!text.includes("导出引擎")) throw new Error("Readiness band did not show exporter status");
+}
+
+async function assertThemeToggle(page) {
+  await page.getByRole("button", { name: /深色/ }).click();
+  const darkTheme = await page.evaluate(() => document.documentElement.dataset.theme);
+  if (darkTheme !== "dark") throw new Error(`Theme toggle did not switch to dark mode: ${darkTheme}`);
+  await page.getByRole("button", { name: /系统/ }).click();
 }
 
 async function assertEnvironmentFixList(page) {
@@ -235,7 +243,6 @@ async function assertResourceLinks(page) {
   const text = await page.locator(".resource-links").textContent();
   if (!text?.includes("GPL")) throw new Error("Resource links did not include the GPL license");
   if (!text.includes("第三方声明")) throw new Error("Resource links did not include third-party notices");
-  if (!text.includes("Sidecar")) throw new Error("Resource links did not include sidecar notes");
 }
 
 async function assertSettingsPersistenceStatus(page) {
@@ -380,18 +387,18 @@ async function assertSavedManualBackupIsValidated(browser) {
   await page.close();
 }
 
-async function assertMissingSidecarBlocksExport(browser) {
+async function assertMissingExporterBlocksExport(browser) {
   const page = await browser.newPage({ viewport: { width: 1120, height: 900 }, deviceScaleFactor: 1 });
-  await page.goto(`${baseUrl}&missingSidecar=1`, { waitUntil: "networkidle" });
+  await page.goto(`${baseUrl}&missingExporter=1`, { waitUntil: "networkidle" });
   await page.getByRole("button", { name: /^选项$/ }).click();
 
   const text = await page.locator(".app-shell").textContent();
-  if (!text?.includes("缺少 imessage-exporter sidecar")) {
-    throw new Error("Missing sidecar export blocker was not shown");
+  if (!text?.includes("缺少 imessage-exporter 导出引擎")) {
+    throw new Error("Missing exporter export blocker was not shown");
   }
   const startButton = page.getByRole("button", { name: /^开始导出$/ });
   if (!(await startButton.isDisabled())) {
-    throw new Error("Export should be disabled when the sidecar is missing");
+    throw new Error("Export should be disabled when the exporter is missing");
   }
   await page.close();
 }
