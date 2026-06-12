@@ -7,7 +7,7 @@ import { chromium } from "playwright-core";
 const root = fileURLToPath(new URL("..", import.meta.url));
 const previewDir = join(root, "preview");
 const port = Number(process.env.MOCK_UI_PORT || 1421);
-const baseUrl = `http://127.0.0.1:${port}/?mock=1`;
+const baseUrl = `http://127.0.0.1:${port}/?mock=1&lang=zh-CN`;
 
 mkdirSync(previewDir, { recursive: true });
 
@@ -493,6 +493,11 @@ async function assertGeneratedArchiveDirectory(browser) {
   if ((await page.locator(".path-inspection.warn").count()) !== 0) {
     throw new Error("Generated archive directory should not keep the old-output warning");
   }
+  await page.waitForFunction(
+    (path) => document.querySelector(".command-box code")?.textContent?.includes(path),
+    regeneratedPath,
+    { timeout: 5000 },
+  );
   const commandText = await page.locator(".command-box code").textContent();
   if (!commandText?.includes(regeneratedPath)) {
     throw new Error("Command preview did not use the generated archive directory");

@@ -42,6 +42,7 @@ import {
   startExport,
   validateBackupPath,
 } from "./api/tauri";
+import { localizeMultiline, tx, useAppLanguage, useDocumentLocalization } from "./i18n";
 import { timestampedArchiveSequence } from "./lib/archivePath";
 import { buildDiagnosticReport } from "./lib/diagnosticReport";
 import { copyMethods, converterWarnings, defaultExportConfig, exportFormats, normalizeConfig, validateExportConfig } from "./lib/exportConfig";
@@ -80,6 +81,8 @@ type JobOutcome = { kind: "idle" | "running" | "succeeded" | "failed" | "cancell
 type StepAccess = { disabled: boolean; reason?: string };
 
 export default function App() {
+  const { language, setLanguage } = useAppLanguage();
+  useDocumentLocalization(language);
   const [step, setStep] = useState<WizardStep>("source");
   const [environment, setEnvironment] = useState<EnvironmentStatus>();
   const [backups, setBackups] = useState<BackupCandidate[]>([]);
@@ -393,7 +396,7 @@ export default function App() {
       return;
     }
     if (needsExportPathConfirmation(exportPathStatus)) {
-      const ok = window.confirm("输出目录已有内容或疑似旧导出文件。继续导出会把新结果写入同一个目录，是否继续？");
+      const ok = window.confirm(tx("输出目录已有内容或疑似旧导出文件。继续导出会把新结果写入同一个目录，是否继续？"));
       if (!ok) return;
     }
 
@@ -451,6 +454,7 @@ export default function App() {
             <p>Windows iOS 备份导出向导</p>
           </div>
         </div>
+        <LanguageToggle language={language} onChange={setLanguage} />
 
         <nav className="step-list" aria-label="导出步骤">
           {steps.map((candidate) => {
@@ -530,6 +534,7 @@ export default function App() {
             diagnostics={diagnostics}
             job={diagnosticJob}
             config={config}
+            language={language}
             backup={selectedBackup}
             environment={environment}
             running={Boolean(runningJobId)}
@@ -750,6 +755,19 @@ function QuickStat({
         <small>{label}</small>
         <strong>{value}</strong>
       </span>
+    </div>
+  );
+}
+
+function LanguageToggle({ language, onChange }: { language: "en" | "zh-CN"; onChange: (language: "en" | "zh-CN") => void }) {
+  return (
+    <div className="language-toggle" aria-label="Language">
+      <button className={language === "en" ? "selected" : ""} type="button" onClick={() => onChange("en")} aria-pressed={language === "en"}>
+        English
+      </button>
+      <button className={language === "zh-CN" ? "selected" : ""} type="button" onClick={() => onChange("zh-CN")} aria-pressed={language === "zh-CN"}>
+        中文
+      </button>
     </div>
   );
 }
@@ -1153,6 +1171,7 @@ function DiagnosticsStep({
   diagnostics,
   job,
   config,
+  language,
   backup,
   environment,
   running,
@@ -1167,6 +1186,7 @@ function DiagnosticsStep({
   diagnostics: ReturnType<typeof summarizeDiagnostics>;
   job?: JobStarted;
   config: ExportConfig;
+  language: "en" | "zh-CN";
   backup?: BackupCandidate;
   environment?: EnvironmentStatus;
   running: boolean;
@@ -1179,16 +1199,19 @@ function DiagnosticsStep({
 }) {
   const report = useMemo(
     () =>
-      buildDiagnosticReport({
-        environment,
-        backup,
-        config,
-        diagnostics,
-        preview: job?.preview,
-        logs,
-        secrets: [config.cleartextPassword],
-      }),
-    [backup, config, diagnostics, environment, job?.preview, logs],
+      localizeMultiline(
+        language,
+        buildDiagnosticReport({
+          environment,
+          backup,
+          config,
+          diagnostics,
+          preview: job?.preview,
+          logs,
+          secrets: [config.cleartextPassword],
+        }),
+      ),
+    [backup, config, diagnostics, environment, job?.preview, language, logs],
   );
 
   return (
