@@ -4,6 +4,12 @@
 
 它把常用导出流程做成了图形界面：选择 iOS 备份、检查备份状态、设置导出选项，然后一键导出并打开结果目录。
 
+## 界面示例
+
+![选择 iOS 备份](./preview/example-source.png)
+
+![导出完成](./preview/example-results.png)
+
 ## 下载安装
 
 普通用户不需要拉取源码，也不需要安装 Node.js、Rust 或 Visual Studio Build Tools。直接从 GitHub Releases 下载安装包即可：

@@ -207,7 +207,7 @@ async function assertCommandIsRedacted(page) {
 async function assertOutputDirectoryIsSafe(page) {
   const commandText = await page.locator(".command-box code").textContent();
   if (!commandText?.includes("Messages Export")) throw new Error("Mock output directory was not selected");
-  if (commandText.includes("-o C:\\Users\\yancy\\Apple\\MobileSync\\Backup\\00008110-demo")) {
+  if (commandText.includes("-o C:\\Users\\A1mAssist\\Apple\\MobileSync\\Backup\\00008110-demo")) {
     throw new Error("Mock output directory points at the backup directory");
   }
 }
@@ -334,7 +334,7 @@ async function assertIncompleteBackupBlocksDiagnostics(page) {
   if (!(await nav.getByRole("button", { name: /导出/ }).isDisabled())) {
     throw new Error("Run step should be disabled for incomplete backups");
   }
-  await page.getByRole("button", { name: /Yancy 的 iPhone/ }).click();
+  await page.getByRole("button", { name: /A1mAssist 的 iPhone/ }).click();
 }
 
 async function assertPersistedSettingsDoNotLeak(page, secret) {

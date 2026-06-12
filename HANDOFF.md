@@ -1,7 +1,7 @@
 # iMessage Exporter GUI Handoff
 
 交接日期: 2026-06-12  
-项目路径: `C:\Users\yancy\Documents\imessage-exporter-gui`  
+项目路径: `C:\Users\A1mAssist\Documents\imessage-exporter-gui`
 产品方向: Windows-first Tauri v2 + React + TypeScript 桌面 GUI，用向导方式调用 `imessage-exporter` 导出本机 iOS 备份。
 
 ## 一句话状态

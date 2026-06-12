@@ -17,7 +17,7 @@ describe("diagnostic reports", () => {
       },
       backup: {
         path: "C:\\Backup",
-        displayName: "Yancy 的 iPhone",
+        displayName: "A1mAssist 的 iPhone",
         hasManifestDb: true,
         hasInfoPlist: true,
         encrypted: true,
@@ -40,7 +40,7 @@ describe("diagnostic reports", () => {
 
     expect(report).toContain("iMessage Exporter GUI 诊断报告");
     expect(report).toContain("imessage-exporter 4.1.0");
-    expect(report).toContain("Yancy 的 iPhone");
+    expect(report).toContain("A1mAssist 的 iPhone");
     expect(report).toContain("12 条消息");
     expect(report).toContain("[redacted]");
     expect(report).not.toContain("super-secret");

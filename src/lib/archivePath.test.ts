@@ -17,10 +17,10 @@ describe("timestampedArchivePath", () => {
   it("falls back to the Windows user Documents folder derived from the backup path", () => {
     expect(
       timestampedArchivePath({
-        backupPath: "C:/Users/yancy/Apple/MobileSync/Backup/00008110-demo",
+        backupPath: "C:/Users/A1mAssist/Apple/MobileSync/Backup/00008110-demo",
         now,
       }),
-    ).toBe("C:\\Users\\yancy\\Documents\\Messages Export 2026-06-12 0130");
+    ).toBe("C:\\Users\\A1mAssist\\Documents\\Messages Export 2026-06-12 0130");
   });
 
   it("formats timestamps without path-hostile characters", () => {

@@ -116,8 +116,8 @@ export function onJobEvent(handler: (event: JobEvent) => void) {
 
 export async function pickDirectory(defaultPath?: string, purpose: "backup" | "export" = "backup"): Promise<string | undefined> {
   if (usingMockApi()) {
-    if (purpose === "export") return "C:\\Users\\yancy\\Documents\\Messages Export";
-    return defaultPath || "C:\\Users\\yancy\\Apple\\MobileSync\\Backup\\00008110-demo";
+    if (purpose === "export") return "C:\\Users\\A1mAssist\\Documents\\Messages Export";
+    return defaultPath || "C:\\Users\\A1mAssist\\Apple\\MobileSync\\Backup\\00008110-demo";
   }
 
   const selected = await open({
@@ -161,8 +161,8 @@ function mockEnvironment(): EnvironmentStatus {
     ffmpegAvailable: false,
     imagemagickAvailable: false,
     defaultBackupRoots: [
-      "C:\\Users\\yancy\\Apple\\MobileSync\\Backup",
-      "C:\\Users\\yancy\\AppData\\Roaming\\Apple Computer\\MobileSync\\Backup",
+      "C:\\Users\\A1mAssist\\Apple\\MobileSync\\Backup",
+      "C:\\Users\\A1mAssist\\AppData\\Roaming\\Apple Computer\\MobileSync\\Backup",
     ],
     warnings: [
       missingSidecar ? "Mock 模式：模拟 sidecar 缺失，诊断和导出会被禁用。" : "Mock 模式：未调用真实 sidecar。basic/full 附件转换仍会显示依赖提示。",
@@ -176,9 +176,9 @@ function mockBackups(): BackupCandidate[] {
 
   return [
     {
-      path: "C:\\Users\\yancy\\Apple\\MobileSync\\Backup\\00008110-demo",
-      displayName: "Yancy 的 iPhone",
-      deviceName: "Yancy 的 iPhone",
+      path: "C:\\Users\\A1mAssist\\Apple\\MobileSync\\Backup\\00008110-demo",
+      displayName: "A1mAssist 的 iPhone",
+      deviceName: "A1mAssist 的 iPhone",
       lastModified: "1781136000",
       hasManifestDb: true,
       hasInfoPlist: true,
@@ -186,7 +186,7 @@ function mockBackups(): BackupCandidate[] {
       valid: true,
     },
     {
-      path: "C:\\Users\\yancy\\AppData\\Roaming\\Apple Computer\\MobileSync\\Backup\\legacy",
+      path: "C:\\Users\\A1mAssist\\AppData\\Roaming\\Apple Computer\\MobileSync\\Backup\\legacy",
       displayName: "iPhone 旧备份",
       deviceName: "iPhone 旧备份",
       lastModified: "1781049600",
