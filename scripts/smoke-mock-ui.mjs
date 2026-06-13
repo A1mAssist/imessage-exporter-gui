@@ -34,9 +34,10 @@ vite.stderr.on("data", (chunk) => {
   serverOutput += chunk.toString();
 });
 
+let browser;
 try {
   await waitForServer(baseUrl);
-  const browser = await chromium.launch({
+  browser = await chromium.launch({
     headless: true,
     executablePath: findBrowser(),
   });
@@ -54,6 +55,7 @@ try {
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   await assertHealthyApp(page, "source desktop");
   await assertReadinessBand(page);
+  await assertFirstRunGuide(page);
   await assertThemeToggle(page);
   await assertEnvironmentFixList(page);
   await assertResourceLinks(page);
@@ -73,11 +75,12 @@ try {
   await page.getByLabel("备份密码").fill("mock-password");
   await assertReadyStepNavigation(page);
   await assertPersistedSettingsDoNotLeak(page, "mock-password");
-  await page.getByRole("button", { name: /运行诊断/ }).click();
+  await sourceDiagnosticsButton(page).click();
   await waitForExitZero(page);
   await assertHealthyApp(page, "diagnostics");
   await assertNoVisibleTextLeak(page, "mock-password");
   await assertCommandIsRedacted(page);
+  await assertDiagnosticSummaryPanel(page);
   await assertDiagnosticDetails(page);
   await assertCopyActions(page);
   await page.screenshot({ path: join(previewDir, "react-mock-diagnostics.png"), fullPage: true });
@@ -146,12 +149,16 @@ try {
   await assertAutoClearPasswordAfterDiagnostics(browser);
   console.log("smoke: auto-clear passed");
   await browser.close();
+  browser = undefined;
   console.log("Mock UI smoke passed.");
 } catch (error) {
   console.error(serverOutput);
   console.error(error);
   process.exitCode = 1;
 } finally {
+  if (browser) {
+    await browser.close().catch(() => {});
+  }
   await stopProcessTree(vite);
 }
 
@@ -226,6 +233,14 @@ async function assertReadinessBand(page) {
   if (!text.includes("导出引擎")) throw new Error("Readiness band did not show exporter status");
 }
 
+async function assertFirstRunGuide(page) {
+  const text = await page.locator(".first-run-guide").textContent();
+  if (!text?.includes("首次导出清单")) throw new Error("First-run checklist was not rendered");
+  for (const expected of ["准备导出引擎", "选择 iOS 备份", "运行诊断"]) {
+    if (!text.includes(expected)) throw new Error(`First-run checklist did not include ${expected}`);
+  }
+}
+
 async function assertThemeToggle(page) {
   await page.getByRole("button", { name: /深色/ }).click();
   const darkTheme = await page.evaluate(() => document.documentElement.dataset.theme);
@@ -275,7 +290,7 @@ async function assertPasswordClearControls(page) {
   if (!(await clearButton.isDisabled())) {
     throw new Error("Clear password action should be disabled after clearing the password");
   }
-  const diagnosticsButton = page.getByRole("button", { name: /运行诊断/ });
+  const diagnosticsButton = sourceDiagnosticsButton(page);
   if (!(await diagnosticsButton.isDisabled())) {
     throw new Error("Diagnostics should be disabled after clearing the encrypted backup password");
   }
@@ -330,7 +345,7 @@ async function assertIncompleteBackupBlocksDiagnostics(page) {
   if (!blockers?.includes("Manifest.db") || !blockers.includes("Info.plist")) {
     throw new Error("Incomplete backup blocker was not shown");
   }
-  const diagnosticsButton = page.getByRole("button", { name: /运行诊断/ });
+  const diagnosticsButton = sourceDiagnosticsButton(page);
   if (!(await diagnosticsButton.isDisabled())) {
     throw new Error("Diagnostics should be disabled for incomplete backups");
   }
@@ -439,6 +454,14 @@ async function assertDiagnosticDetails(page) {
   }
 }
 
+async function assertDiagnosticSummaryPanel(page) {
+  const text = await page.locator(".diagnostic-summary-panel").textContent();
+  if (!text?.includes("诊断摘要")) throw new Error("Diagnostic summary panel was not rendered");
+  for (const expected of ["备份目录", "导出引擎", "诊断结果", "附件转换"]) {
+    if (!text.includes(expected)) throw new Error(`Diagnostic summary panel did not include ${expected}`);
+  }
+}
+
 async function assertCancelledOutcome(page) {
   const text = await page.locator(".job-outcome-notice").textContent();
   if (!text?.includes("导出已取消")) throw new Error("Cancelled export outcome was not rendered");
@@ -459,7 +482,7 @@ async function assertTxtResultsExposeTxtAction(browser) {
 
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   await page.getByLabel("备份密码").fill("txt-password");
-  await page.getByRole("button", { name: /运行诊断/ }).click();
+  await sourceDiagnosticsButton(page).click();
   await waitForExitZero(page);
   await page.getByRole("button", { name: /继续设置/ }).click();
   await page.getByRole("button", { name: /选择输出目录/ }).click();
@@ -591,7 +614,7 @@ async function assertDiagnosticReportDoesNotLeak(browser) {
   const page = await browser.newPage({ viewport: { width: 1120, height: 900 }, deviceScaleFactor: 1 });
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   await page.getByLabel("备份密码").fill(secret);
-  await page.getByRole("button", { name: /运行诊断/ }).click();
+  await sourceDiagnosticsButton(page).click();
   await waitForExitZero(page);
 
   if ((await page.getByRole("button", { name: "复制诊断报告" }).count()) !== 1) {
@@ -651,6 +674,9 @@ async function assertFirstUseEmptyState(browser) {
 async function assertExportSummary(page, expectedTexts) {
   const text = await page.locator(".export-summary-panel").textContent();
   if (!text?.includes("导出摘要")) throw new Error("Export summary panel was not rendered");
+  for (const expected of ["项目", "耗时", "下一步"]) {
+    if (!text.includes(expected)) throw new Error(`Export summary did not include ${expected}`);
+  }
   for (const expected of expectedTexts) {
     if (!text.includes(expected)) throw new Error(`Export summary did not include ${expected}`);
   }
@@ -663,7 +689,7 @@ async function assertAutoClearPasswordAfterDiagnostics(browser) {
   await page.getByLabel("备份密码").fill(secret);
   await page.getByLabel("任务结束后自动清除密码").check();
   await assertPersistedSettingsDoNotLeak(page, secret);
-  await page.getByRole("button", { name: /运行诊断/ }).click();
+  await sourceDiagnosticsButton(page).click();
   await waitForExitZero(page);
   await page.getByRole("button", { name: /^数据源/ }).click();
 
@@ -687,13 +713,17 @@ async function openOptionsPage(browser, url, secret) {
   const page = await browser.newPage({ viewport: { width: 1120, height: 900 }, deviceScaleFactor: 1 });
   await page.goto(url, { waitUntil: "networkidle" });
   await page.getByLabel("备份密码").fill(secret);
-  await page.getByRole("button", { name: /运行诊断/ }).click();
+  await sourceDiagnosticsButton(page).click();
   await waitForExitZero(page);
   await page.getByRole("button", { name: /继续设置/ }).click();
   await page.getByRole("button", { name: /选择输出目录/ }).click();
   await assertCommandIsRedacted(page);
   await assertPersistedSettingsDoNotLeak(page, secret);
   return page;
+}
+
+function sourceDiagnosticsButton(page) {
+  return page.locator(".footer-actions").getByRole("button", { name: /^运行诊断$/ });
 }
 
 async function waitForExitZero(page) {

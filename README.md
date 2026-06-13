@@ -14,21 +14,19 @@ It turns the common export flow into a guided app: choose an iOS backup, configu
 
 ## Download
 
-You do not need to clone the source code or install Node.js, Rust, or Visual Studio Build Tools. Download an installer from GitHub Releases:
+You do not need to clone the source code or install Node.js, Rust, or Visual Studio Build Tools. Download the current beta installer from GitHub Releases:
 
-[Download the latest release](https://github.com/A1mAssist/imessage-exporter-gui/releases/latest)
+[Download the current beta release](https://github.com/A1mAssist/imessage-exporter-gui/releases)
 
 Choose the file for your system:
 
 - Windows: download the `.exe` or `.msi` installer.
 - macOS: download the `.dmg`.
-- Linux: download the `.AppImage` or `.deb`.
 
 The installers are not code-signed yet, so your system may show a safety warning:
 
 - Windows SmartScreen: click "More info", then "Run anyway".
 - macOS Gatekeeper: right-click the app and choose "Open", or allow it in System Settings -> Privacy & Security.
-- Linux: if the `.AppImage` does not start, make it executable first, for example `chmod +x iMessage*.AppImage`.
 
 ## Basic Use
 
@@ -71,6 +69,7 @@ Implemented:
 Current limits:
 
 - v1 only exports from local iOS backups.
+- Windows and macOS are the supported installer targets.
 - macOS `chat.db`, jailbroken-device `sms.db`, and standalone attachment folders are not supported yet.
 - `imessage-exporter` is not bundled in the GUI installer; install it separately or choose its executable in the app.
 - `ffmpeg` and ImageMagick are not bundled.

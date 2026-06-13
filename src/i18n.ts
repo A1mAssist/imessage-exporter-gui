@@ -57,7 +57,10 @@ const en: Record<string, string> = {
   "第三方声明": "Third-party notices",
   "选择导出引擎": "Choose Engine",
   "下载": "Download",
+  "下载导出引擎": "Download Engine",
+  "选择": "Choose",
   "未选择；会尝试从 PATH 检测": "Not selected; PATH will be checked",
+  "GUI 不内置 imessage-exporter；请单独下载导出引擎，或选择本机已有的可执行文件。": "The GUI does not bundle imessage-exporter. Download the export engine separately, or choose an existing executable on this computer.",
   "下载 imessage-exporter 后选择可执行文件": "Download imessage-exporter, then choose the executable",
   "环境修复建议": "Environment fixes",
   "缺失项处理": "Missing items",
@@ -71,8 +74,21 @@ const en: Record<string, string> = {
   "设置保存失败": "Could not save settings",
   "已清除保存设置": "Saved settings cleared",
   "设置已保存": "Settings saved",
+  "回到数据源": "Back to Data Source",
+  "回到选项": "Back to Options",
+  "重试": "Retry",
   "选择 iOS 备份": "Choose iOS Backup",
   "从 Apple Devices 或 iTunes 的本地备份导出 Messages 数据，不修改原始备份。": "Export Messages data from a local Apple Devices or iTunes backup without modifying the original backup.",
+  "首次导出清单": "First Export Checklist",
+  "按顺序完成这三项，就能进入导出选项。": "Complete these three items in order, then continue to export options.",
+  "准备导出引擎": "Prepare Export Engine",
+  "已检测到 imessage-exporter，可以继续。": "imessage-exporter is detected, so you can continue.",
+  "先下载 imessage-exporter，然后在这里选择可执行文件。": "Download imessage-exporter first, then choose the executable here.",
+  "备份目录已就绪。": "Backup folder is ready.",
+  "选择包含 Manifest.db 和 Info.plist 的本机 iOS 备份根目录。": "Choose the local iOS backup root folder that contains Manifest.db and Info.plist.",
+  "选择备份": "Choose Backup",
+  "诊断已通过，可以继续设置导出选项。": "Diagnostics passed. You can continue to export options.",
+  "确认数据库、附件、联系人和可选转换器状态。": "Check the database, attachments, contacts, and optional converters.",
   "备份根目录": "Backup Root Folder",
   "自动发现": "Auto-discovered",
   "常见 MobileSync Backup 目录中的候选备份。": "Candidate backups found in common MobileSync Backup folders.",
@@ -116,6 +132,21 @@ const en: Record<string, string> = {
   "重新检查": "Check Again",
   "诊断备份": "Diagnose Backup",
   "先让 imessage-exporter 检查数据库、附件、联系人和转换器状态。": "Let imessage-exporter check the database, attachments, contacts, and converter status first.",
+  "诊断摘要": "Diagnostic Summary",
+  "先看能否继续，再按下面的诊断卡片定位细节。": "Check whether you can continue, then use the diagnostic cards below for details.",
+  "导出引擎可用": "Export engine is available",
+  "未就绪": "Not ready",
+  "需要有效的 iOS 备份根目录": "A valid iOS backup root folder is required",
+  "未检测到导出引擎": "Export engine was not detected",
+  "诊断结果": "Diagnostic Result",
+  "已通过": "Passed",
+  "需处理": "Needs action",
+  "诊断已完成，但仍有项目需要处理。": "Diagnostics finished, but some items still need attention.",
+  "运行诊断后会汇总检查结果。": "Run diagnostics to summarize the checks.",
+  "完整": "Complete",
+  "可选缺失": "Optional missing",
+  "basic/full 附件转换可用": "basic/full attachment conversion is available",
+  "clone 可直接导出；basic/full 需要 ffmpeg 和 ImageMagick": "clone can export directly; basic/full require ffmpeg and ImageMagick",
   "数据库": "Database",
   "附件": "Attachments",
   "联系人": "Contacts",
@@ -180,6 +211,23 @@ const en: Record<string, string> = {
   "打开输出目录": "Open Output Folder",
   "导出摘要": "Export Summary",
   "状态": "Status",
+  "项目": "Items",
+  "耗时": "Duration",
+  "下一步": "Next Step",
+  "日志未报告": "Not reported in logs",
+  "未报告": "Not reported",
+  "等待导出": "Waiting to export",
+  "正在等待 imessage-exporter 输出。": "Waiting for imessage-exporter output.",
+  "任务已成功结束。": "The task finished successfully.",
+  "任务已停止，已保留当前日志。": "The task stopped and current logs were kept.",
+  "请查看日志中的错误信息。": "Check the error details in the logs.",
+  "开始导出后会在这里汇总结果。": "A result summary appears here after export starts.",
+  "打开首个 HTML 或输出目录检查结果。": "Open the first HTML file or the output folder to review results.",
+  "打开首个 TXT 或输出目录检查结果。": "Open the first TXT file or the output folder to review results.",
+  "按失败提示修正后重新导出。": "Fix the issue shown in the failure hint, then export again.",
+  "调整选项后可重新导出。": "Adjust options, then export again.",
+  "保持窗口打开，必要时可取消任务。": "Keep this window open; cancel the task if needed.",
+  "开始导出后会显示下一步。": "The next step appears after export starts.",
   "命令预览": "Command Preview",
   "密码和敏感值已脱敏。": "Passwords and sensitive values are redacted.",
   "复制命令": "Copy Command",
@@ -305,6 +353,18 @@ export function translateText(language: AppLanguage, text: string): string {
 
   const attachments = text.match(/^(.+) 个附件$/);
   if (attachments) return `${attachments[1]} attachments`;
+
+  const genericItems = text.match(/^(.+) 项$/);
+  if (genericItems) return `${genericItems[1]} item(s)`;
+
+  const minuteSeconds = text.match(/^(.+) 分 (.+) 秒$/);
+  if (minuteSeconds) return `${minuteSeconds[1]} minute(s) ${minuteSeconds[2]} second(s)`;
+
+  const minutes = text.match(/^(.+) 分$/);
+  if (minutes) return `${minutes[1]} minute(s)`;
+
+  const seconds = text.match(/^(.+) 秒$/);
+  if (seconds) return `${seconds[1]} second(s)`;
 
   const missing = text.match(/^缺少 (.+)$/);
   if (missing) return `Missing ${missing[1]}`;

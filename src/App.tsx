@@ -557,7 +557,10 @@ export default function App() {
             config={config}
             environment={environment}
             loadingEnvironment={loading}
+            diagnosticsSucceeded={diagnosticsSucceeded}
             onChooseBackup={chooseBackupPath}
+            onChooseExporter={chooseExporterPath}
+            onOpenExporterDownload={openExporterDownload}
             onSelectBackup={applyBackup}
             onChange={updateConfig}
             onClearPassword={clearPassword}
@@ -582,6 +585,10 @@ export default function App() {
             onRunDiagnostics={startDiagnostics}
             onCancel={stopActiveJob}
             onNext={() => setStep("options")}
+            onChooseExporter={chooseExporterPath}
+            onOpenExporterDownload={openExporterDownload}
+            onChooseBackup={chooseBackupPath}
+            onBackToSource={() => setStep("source")}
           />
         )}
 
@@ -616,6 +623,9 @@ export default function App() {
             onStart={startExportJob}
             onCancel={stopActiveJob}
             onBackToOptions={() => setStep("options")}
+            onBackToSource={() => setStep("source")}
+            onChooseExporter={chooseExporterPath}
+            onOpenExporterDownload={openExporterDownload}
             onOpenOutput={openOutputPath}
             onOpenFirstResult={openFirstResultFile}
           />
@@ -724,7 +734,26 @@ function jobOutcomeLabel(outcome: JobOutcome, context: "diagnostics" | "export")
   return "尚未开始";
 }
 
-function JobOutcomeNotice({ outcome, context, logs }: { outcome: JobOutcome; context: "diagnostics" | "export"; logs: LogLine[] }) {
+type RecoveryActions = {
+  onChooseExporter?: () => void;
+  onOpenExporterDownload?: () => void;
+  onChooseBackup?: () => void;
+  onBackToSource?: () => void;
+  onBackToOptions?: () => void;
+  onRetry?: () => void;
+};
+
+function JobOutcomeNotice({
+  outcome,
+  context,
+  logs,
+  actions,
+}: {
+  outcome: JobOutcome;
+  context: "diagnostics" | "export";
+  logs: LogLine[];
+  actions?: RecoveryActions;
+}) {
   if (outcome.kind === "idle" || outcome.kind === "running" || outcome.kind === "succeeded") return null;
   const label = jobOutcomeLabel(outcome, context);
   const hint = outcome.kind === "failed" ? recoveryHintForFailure(logs, outcome.message) : undefined;
@@ -741,9 +770,81 @@ function JobOutcomeNotice({ outcome, context, logs }: { outcome: JobOutcome; con
         {hint ? <em>{label}</em> : null}
         <small>{outcome.message || detail}</small>
         {outcome.message && hint ? <small>{detail}</small> : null}
+        <RecoveryActionRow hint={hint} actions={actions} />
       </span>
     </div>
   );
+}
+
+function RecoveryActionRow({ hint, actions }: { hint?: ReturnType<typeof recoveryHintForFailure>; actions?: RecoveryActions }) {
+  if (!hint || !actions) return null;
+
+  if (hint.category === "exporter") {
+    return (
+      <span className="recovery-actions">
+        {actions.onOpenExporterDownload ? (
+          <button className="ghost-button" type="button" onClick={actions.onOpenExporterDownload}>
+            <ExternalLink size={15} />
+            下载导出引擎
+          </button>
+        ) : null}
+        {actions.onChooseExporter ? (
+          <button className="ghost-button" type="button" onClick={actions.onChooseExporter}>
+            <FolderOpen size={15} />
+            选择导出引擎
+          </button>
+        ) : null}
+      </span>
+    );
+  }
+
+  if (hint.category === "backup" || hint.category === "password") {
+    const sourceAction = hint.category === "backup" ? actions.onChooseBackup ?? actions.onBackToSource : actions.onBackToSource ?? actions.onChooseBackup;
+    return (
+      <span className="recovery-actions">
+        {sourceAction ? (
+          <button className="ghost-button" type="button" onClick={sourceAction}>
+            <Database size={15} />
+            回到数据源
+          </button>
+        ) : null}
+        {actions.onRetry ? (
+          <button className="ghost-button" type="button" onClick={actions.onRetry}>
+            <RefreshCcw size={15} />
+            重试
+          </button>
+        ) : null}
+      </span>
+    );
+  }
+
+  if (hint.category === "permission" || hint.category === "converter") {
+    return (
+      <span className="recovery-actions">
+        {actions.onBackToOptions ? (
+          <button className="ghost-button" type="button" onClick={actions.onBackToOptions}>
+            <Settings2 size={15} />
+            回到选项
+          </button>
+        ) : null}
+        {actions.onRetry ? (
+          <button className="ghost-button" type="button" onClick={actions.onRetry}>
+            <RefreshCcw size={15} />
+            重试
+          </button>
+        ) : null}
+      </span>
+    );
+  }
+
+  return actions.onRetry ? (
+    <span className="recovery-actions">
+      <button className="ghost-button" type="button" onClick={actions.onRetry}>
+        <RefreshCcw size={15} />
+        重试
+      </button>
+    </span>
+  ) : null;
 }
 
 function TopBar({
@@ -864,6 +965,7 @@ function EnvironmentPanel({
       <StatusLine ok={environment?.exporterAvailable} label="导出引擎" value={environment?.exporterVersion ?? (environment?.exporterAvailable ? "可用" : "未找到")} />
       <div className="engine-config">
         <small title={effectiveExporterPath || "未选择；会尝试从 PATH 检测"}>{effectiveExporterPath ? compactPath(effectiveExporterPath) : "未选择；会尝试从 PATH 检测"}</small>
+        <p className="engine-help">GUI 不内置 imessage-exporter；请单独下载导出引擎，或选择本机已有的可执行文件。</p>
         <div className="engine-actions">
           <button className="ghost-button" type="button" onClick={onChooseExporter}>
             <FolderOpen size={15} />
@@ -871,7 +973,7 @@ function EnvironmentPanel({
           </button>
           <button className="ghost-button" type="button" onClick={onOpenExporterDownload}>
             <ExternalLink size={15} />
-            下载
+            下载导出引擎
           </button>
           {exporterPath?.trim() ? (
             <button className="ghost-button" type="button" onClick={onClearExporter}>
@@ -1005,7 +1107,10 @@ function SourceStep({
   config,
   environment,
   loadingEnvironment,
+  diagnosticsSucceeded,
   onChooseBackup,
+  onChooseExporter,
+  onOpenExporterDownload,
   onSelectBackup,
   onChange,
   onClearPassword,
@@ -1017,7 +1122,10 @@ function SourceStep({
   config: ExportConfig;
   environment?: EnvironmentStatus;
   loadingEnvironment: boolean;
+  diagnosticsSucceeded: boolean;
   onChooseBackup: () => void;
+  onChooseExporter: () => void;
+  onOpenExporterDownload: () => void;
   onSelectBackup: (backup: BackupCandidate) => void;
   onChange: (patch: Partial<ExportConfig>) => void;
   onClearPassword: () => void;
@@ -1030,6 +1138,18 @@ function SourceStep({
   return (
     <div className="page">
       <Header eyebrow="Step 1" title="选择 iOS 备份" description="从 Apple Devices 或 iTunes 的本地备份导出 Messages 数据，不修改原始备份。" />
+
+      <FirstRunGuide
+        backup={selectedBackup}
+        config={config}
+        environment={environment}
+        diagnosticsSucceeded={diagnosticsSucceeded}
+        diagnosticsBlockers={diagnosticsBlockers}
+        onChooseExporter={onChooseExporter}
+        onOpenExporterDownload={onOpenExporterDownload}
+        onChooseBackup={onChooseBackup}
+        onRunDiagnostics={onRunDiagnostics}
+      />
 
       <ReadinessBand
         backup={selectedBackup}
@@ -1146,6 +1266,97 @@ function SourceStep({
   );
 }
 
+function FirstRunGuide({
+  backup,
+  config,
+  environment,
+  diagnosticsSucceeded,
+  diagnosticsBlockers,
+  onChooseExporter,
+  onOpenExporterDownload,
+  onChooseBackup,
+  onRunDiagnostics,
+}: {
+  backup?: BackupCandidate;
+  config: ExportConfig;
+  environment?: EnvironmentStatus;
+  diagnosticsSucceeded: boolean;
+  diagnosticsBlockers: string[];
+  onChooseExporter: () => void;
+  onOpenExporterDownload: () => void;
+  onChooseBackup: () => void;
+  onRunDiagnostics: () => void;
+}) {
+  const engineReady = Boolean(environment?.exporterAvailable);
+  const backupReady = Boolean(config.backupPath.trim() && backup?.valid);
+  const passwordReady = !config.encrypted || Boolean(config.cleartextPassword?.trim());
+  const canRunDiagnostics = diagnosticsBlockers.length === 0;
+  const items: Array<{ label: string; detail: string; done: boolean; actions: ReactNode }> = [
+    {
+      label: "准备导出引擎",
+      detail: engineReady ? "已检测到 imessage-exporter，可以继续。" : "先下载 imessage-exporter，然后在这里选择可执行文件。",
+      done: engineReady,
+      actions: (
+        <>
+          <button className="ghost-button" type="button" onClick={onOpenExporterDownload}>
+            <ExternalLink size={15} />
+            下载
+          </button>
+          <button className="ghost-button" type="button" onClick={onChooseExporter}>
+            <FolderOpen size={15} />
+            选择
+          </button>
+        </>
+      ),
+    },
+    {
+      label: "选择 iOS 备份",
+      detail: backupReady ? backup?.displayName ?? "备份目录已就绪。" : "选择包含 Manifest.db 和 Info.plist 的本机 iOS 备份根目录。",
+      done: backupReady && passwordReady,
+      actions: (
+        <button className="ghost-button" type="button" onClick={onChooseBackup}>
+          <Database size={15} />
+          选择备份
+        </button>
+      ),
+    },
+    {
+      label: "运行诊断",
+      detail: diagnosticsSucceeded ? "诊断已通过，可以继续设置导出选项。" : "确认数据库、附件、联系人和可选转换器状态。",
+      done: diagnosticsSucceeded,
+      actions: (
+        <button className="ghost-button" type="button" onClick={onRunDiagnostics} disabled={!canRunDiagnostics}>
+          <Search size={15} />
+          运行诊断
+        </button>
+      ),
+    },
+  ];
+
+  return (
+    <section className="content-band first-run-guide" aria-label="首次导出路线">
+      <div className="section-heading">
+        <div>
+          <h2>首次导出清单</h2>
+          <p>按顺序完成这三项，就能进入导出选项。</p>
+        </div>
+      </div>
+      <div className="first-run-grid">
+        {items.map((item, index) => (
+          <div className={item.done ? "first-run-item done" : "first-run-item"} key={item.label}>
+            <span className="first-run-index">{item.done ? <CheckCircle2 size={17} /> : index + 1}</span>
+            <span>
+              <strong>{item.label}</strong>
+              <small>{item.detail}</small>
+            </span>
+            <span className="first-run-actions">{item.actions}</span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function sourceDiagnosticsBlockers(config: ExportConfig, backup?: BackupCandidate, environment?: EnvironmentStatus): string[] {
   const blockers: string[] = [];
 
@@ -1247,6 +1458,78 @@ function ReadinessBand({
   );
 }
 
+function DiagnosticSummaryPanel({
+  diagnostics,
+  backup,
+  environment,
+  canContinue,
+}: {
+  diagnostics: ReturnType<typeof summarizeDiagnostics>;
+  backup?: BackupCandidate;
+  environment?: EnvironmentStatus;
+  canContinue: boolean;
+}) {
+  const diagnosticFindings = Object.values(diagnostics);
+  const hasDiagnosticOutput = diagnosticFindings.some((finding) => finding.status !== "unknown");
+  const hasDiagnosticWarning = diagnosticFindings.some((finding) => finding.status === "warn");
+  const convertersReady = Boolean(environment?.ffmpegAvailable && environment?.imagemagickAvailable);
+  const engineDetail = environment?.exporterAvailable ? environment.exporterVersion ?? environment.exporterPath ?? "导出引擎可用" : "未检测到导出引擎";
+  const diagnosticDetail = canContinue ? "诊断已通过，可以继续设置导出选项。" : hasDiagnosticOutput ? "诊断已完成，但仍有项目需要处理。" : "运行诊断后会汇总检查结果。";
+  const items: Array<{ label: string; value: string; detail: string; tone: "ok" | "warn" | "error" | "neutral"; icon: ReactNode }> = [
+    {
+      label: "备份目录",
+      value: backup?.valid ? "已就绪" : "未就绪",
+      detail: backup?.valid ? backup.displayName : "需要有效的 iOS 备份根目录",
+      tone: backup?.valid ? "ok" : "warn",
+      icon: <Database size={17} />,
+    },
+    {
+      label: "导出引擎",
+      value: environment?.exporterAvailable ? "可用" : "缺失",
+      detail: engineDetail,
+      tone: environment?.exporterAvailable ? "ok" : "error",
+      icon: <TerminalSquare size={17} />,
+    },
+    {
+      label: "诊断结果",
+      value: canContinue ? "已通过" : hasDiagnosticOutput ? "需处理" : "待运行",
+      detail: diagnosticDetail,
+      tone: canContinue ? "ok" : hasDiagnosticWarning ? "warn" : "neutral",
+      icon: canContinue ? <CheckCircle2 size={17} /> : <Search size={17} />,
+    },
+    {
+      label: "附件转换",
+      value: convertersReady ? "完整" : "可选缺失",
+      detail: convertersReady ? "basic/full 附件转换可用" : "clone 可直接导出；basic/full 需要 ffmpeg 和 ImageMagick",
+      tone: convertersReady ? "ok" : "warn",
+      icon: <Archive size={17} />,
+    },
+  ];
+
+  return (
+    <section className="content-band diagnostic-summary-panel" aria-label="诊断摘要">
+      <div className="section-heading">
+        <div>
+          <h2>诊断摘要</h2>
+          <p>先看能否继续，再按下面的诊断卡片定位细节。</p>
+        </div>
+      </div>
+      <div className="diagnostic-summary-grid">
+        {items.map((item) => (
+          <div className={`diagnostic-summary-item ${item.tone}`} key={item.label}>
+            <span className="diagnostic-summary-icon">{item.icon}</span>
+            <span>
+              <small>{item.label}</small>
+              <strong>{item.value}</strong>
+              <em>{item.detail}</em>
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function DiagnosticsStep({
   logs,
   diagnostics,
@@ -1262,6 +1545,10 @@ function DiagnosticsStep({
   onRunDiagnostics,
   onCancel,
   onNext,
+  onChooseExporter,
+  onOpenExporterDownload,
+  onChooseBackup,
+  onBackToSource,
 }: {
   logs: LogLine[];
   diagnostics: ReturnType<typeof summarizeDiagnostics>;
@@ -1277,6 +1564,10 @@ function DiagnosticsStep({
   onRunDiagnostics: () => void;
   onCancel: () => void;
   onNext: () => void;
+  onChooseExporter: () => void;
+  onOpenExporterDownload: () => void;
+  onChooseBackup: () => void;
+  onBackToSource: () => void;
 }) {
   const report = useMemo(
     () =>
@@ -1298,6 +1589,7 @@ function DiagnosticsStep({
   return (
     <div className="page">
       <Header eyebrow="Step 2" title="诊断备份" description="先让 imessage-exporter 检查数据库、附件、联系人和转换器状态。" />
+      <DiagnosticSummaryPanel diagnostics={diagnostics} backup={backup} environment={environment} canContinue={canContinue} />
       <div className="diagnostic-grid">
         <DiagnosticTile label="数据库" status={diagnostics.database} />
         <DiagnosticTile label="附件" status={diagnostics.attachments} />
@@ -1307,7 +1599,18 @@ function DiagnosticsStep({
       {job?.preview ? <CommandBox preview={job.preview} /> : null}
       <LogPanel logs={logs} running={running} exitCode={exitCode} outcome={outcome} />
       <DiagnosticReportActions report={report} disabled={!logs.length && !job?.preview} />
-      <JobOutcomeNotice outcome={outcome} context="diagnostics" logs={logs} />
+      <JobOutcomeNotice
+        outcome={outcome}
+        context="diagnostics"
+        logs={logs}
+        actions={{
+          onChooseExporter,
+          onOpenExporterDownload,
+          onChooseBackup,
+          onBackToSource,
+          onRetry: onRunDiagnostics,
+        }}
+      />
       <FooterActions
         secondaryLabel={running ? "取消诊断" : "重新诊断"}
         secondaryIcon={running ? <CircleStop size={17} /> : <RefreshCcw size={17} />}
@@ -1675,6 +1978,9 @@ function RunStep({
   onStart,
   onCancel,
   onBackToOptions,
+  onBackToSource,
+  onChooseExporter,
+  onOpenExporterDownload,
   onOpenOutput,
   onOpenFirstResult,
 }: {
@@ -1690,6 +1996,9 @@ function RunStep({
   onStart: () => void;
   onCancel: () => void;
   onBackToOptions: () => void;
+  onBackToSource: () => void;
+  onChooseExporter: () => void;
+  onOpenExporterDownload: () => void;
   onOpenOutput: () => void;
   onOpenFirstResult: () => void;
 }) {
@@ -1726,7 +2035,18 @@ function RunStep({
       </div>
       <ExportSummaryPanel summary={summary} />
       <LogPanel logs={logs} running={running} exitCode={exitCode} outcome={outcome} />
-      <JobOutcomeNotice outcome={outcome} context="export" logs={logs} />
+      <JobOutcomeNotice
+        outcome={outcome}
+        context="export"
+        logs={logs}
+        actions={{
+          onChooseExporter,
+          onOpenExporterDownload,
+          onBackToSource,
+          onBackToOptions,
+          onRetry: onStart,
+        }}
+      />
       <div className="result-actions">
         <button className="secondary-button" type="button" onClick={onOpenFirstResult} disabled={!exportPath.trim() || running || outcome.kind !== "succeeded"}>
           <ExternalLink size={17} />
@@ -1753,6 +2073,8 @@ function ExportSummaryPanel({ summary }: { summary: ExportSummary }) {
     { label: "状态", value: summary.statusLabel, icon: summary.status === "succeeded" ? <CheckCircle2 size={16} /> : <Info size={16} /> },
     { label: "格式", value: summary.format, icon: <FileArchive size={16} /> },
     { label: "附件", value: summary.copyMethod, icon: <Archive size={16} /> },
+    { label: "项目", value: summary.itemCountLabel, icon: <MessagesSquare size={16} /> },
+    { label: "耗时", value: summary.durationLabel, icon: <CalendarDays size={16} /> },
     { label: "输出", value: compactPath(summary.outputPath), icon: <FolderOpen size={16} /> },
   ];
 
@@ -1774,6 +2096,13 @@ function ExportSummaryPanel({ summary }: { summary: ExportSummary }) {
             </span>
           </div>
         ))}
+      </div>
+      <div className="summary-next-step">
+        <CheckCircle2 size={17} />
+        <span>
+          <strong>下一步</strong>
+          <small>{summary.nextStep}</small>
+        </span>
       </div>
     </section>
   );
