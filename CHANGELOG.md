@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- Made the language and theme controls larger and easier to notice in the top bar.
+- Simplified the Environment panel so the export engine row shows availability instead of the exporter version string.
+
+### Fixed
+- Completed English localization coverage for export presets, output folder warnings, diagnostic report text, and dynamic review labels.
+- Added smoke coverage that scans the English mock flow for untranslated Chinese text.
+
 ## v0.2.1 - 2026-06-13
 
 ### Added
