@@ -1168,7 +1168,7 @@ function normalizeConfigPath(path: string): string {
 
 function StatusLine({ ok, label, value }: { ok?: boolean; label: string; value: string }) {
   return (
-    <div className="status-line">
+    <div className={`status-line ${ok ? "ok" : "warn"}`}>
       {ok ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
       <span>{label}</span>
       <strong>{value}</strong>

@@ -185,6 +185,9 @@ check("styles include startup readiness band", styles.includes(".readiness-band"
 check("styles include first-run and diagnostic summary panels", styles.includes(".first-run-guide") && styles.includes(".first-run-grid") && styles.includes(".diagnostic-summary-panel") && styles.includes(".diagnostic-summary-grid"));
 check("styles include compact topbar controls and OOBE dialog", styles.includes(".topbar-utilities") && styles.includes(".guide-chip") && styles.includes(".oobe-dialog") && styles.includes(".oobe-backdrop"));
 check("styles make language and theme controls discoverable", styles.includes("grid-template-columns: repeat(2, minmax(46px, auto))") && styles.includes("grid-template-columns: repeat(3, 38px)") && styles.includes("var(--accent-soft)"));
+check("styles keep topbar controls legible in dark mode", styles.includes(':root[data-theme="dark"] .language-toggle') && styles.includes(':root[data-theme="dark"] .theme-toggle button.selected'));
+check("styles use green available status lines", app.includes('status-line ${ok ? "ok" : "warn"}') && styles.includes(".status-line.ok svg") && styles.includes(".status-line.warn svg"));
+check("styles use wide desktop workspace", styles.includes("width: min(100%, 1480px)") && styles.includes("margin: 0 auto 24px"));
 check("styles include diagnostic detail text", styles.includes(".diagnostic-tile small"));
 check("styles include password clear row", styles.includes(".password-row") && styles.includes("grid-template-columns: minmax(0, 1fr) auto"));
 check("styles include source blockers", styles.includes(".source-blockers") && styles.includes("#fff8e7"));
