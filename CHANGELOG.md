@@ -2,12 +2,19 @@
 
 ## Unreleased
 
-## v0.2.2 - 2026-06-13
+## v0.1.0 - 2026-06-13
+
+### Added
+- Added a guided desktop workflow for selecting an iOS backup, configuring an external `imessage-exporter` binary, running diagnostics, choosing export options, viewing logs, cancelling long-running jobs, and opening generated output folders.
+- Added first-run setup guidance, startup readiness checks, recovery hints, export summaries, and bundled license/resource links.
+- Added English and Simplified Chinese localization with automatic device-language detection and a manual language switch.
+- Added light, dark, and system theme modes.
+- Added Windows and macOS release packaging for installer artifacts and checksums.
 
 ### Changed
-- Made the language and theme controls larger and easier to notice in the top bar.
-- Simplified the Environment panel so the export engine row shows availability instead of the exporter version string.
-- Widened the desktop workspace so maximized browser and app windows use more of the available space.
+- Uses `A1mAssist` as the app author and package publisher, with the bundle identifier `com.a1massist.imessage-exporter-gui`.
+- Keeps `imessage-exporter` as an external user-provided engine instead of bundling it in the installer.
+- Uses a wider desktop workspace so maximized browser and app windows make better use of available space.
 
 ### Fixed
 - Completed English localization coverage for export presets, output folder warnings, diagnostic report text, and dynamic review labels.
@@ -16,24 +23,5 @@
 - Fixed the language and theme toggle backgrounds in dark mode.
 
 ### Packaging
-- Bumped the app, Tauri, and Rust crate versions to `0.2.2`.
-
-## v0.2.1 - 2026-06-13
-
-### Added
-- Added a first-run setup guide that walks users through choosing or downloading the export engine, selecting an iOS backup, and running diagnostics.
-- Added a compact setup guide entry in the top bar so the guide can be reopened after first launch.
-- Added release coverage for the onboarding flow and the English/Chinese language switch round trip.
-
-### Changed
-- Moved language and theme controls out of the sidebar into compact top-bar utilities.
-- Refreshed the preview screenshots for the updated onboarding and preference-control layout.
-
-### Fixed
-- Fixed switching from English back to Chinese after the UI had already been translated.
-- Fixed mock UI smoke flows so the first-run guide does not block later automation steps.
-
-### Packaging
-- Bumped the app, Tauri, and Rust crate versions to `0.2.1`.
-- Release artifacts continue to ship Windows and macOS installers only.
+- Reset the public release line to `0.1.0` after correcting package identity metadata before public adoption.
 

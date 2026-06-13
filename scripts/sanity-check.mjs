@@ -70,6 +70,7 @@ for (const path of [
   "scripts/serve-dist.mjs",
   "scripts/smoke-mock-ui.mjs",
   "scripts/verify.ps1",
+  "app-icon.png",
   "preview/index.html",
   "src-tauri/icons/32x32.png",
   "src-tauri/icons/64x64.png",
@@ -168,6 +169,7 @@ check("package exposes Windows packaging script", Boolean(pkg.scripts?.["package
 check("package exposes one-command verify script", Boolean(pkg.scripts?.verify));
 check("package exposes offline verify script", Boolean(pkg.scripts?.["verify:offline"]));
 check("package uses Vite runner config loader", ["dev", "dev:mock", "build", "preview", "test"].every((name) => pkg.scripts?.[name]?.includes("--configLoader runner")));
+check("package uses A1mAssist author metadata", pkg.author === "A1mAssist");
 check("package pins @tauri-apps/api", isExactVersion(pkg.dependencies?.["@tauri-apps/api"]));
 check("package pins @tauri-apps/plugin-dialog", isExactVersion(pkg.dependencies?.["@tauri-apps/plugin-dialog"]));
 check("package pins @tauri-apps/cli", isExactVersion(pkg.devDependencies?.["@tauri-apps/cli"]));
@@ -229,9 +231,13 @@ check("release packaging script collects Windows and macOS artifacts only", pack
 check("release packaging script writes platform checksums", packageRelease.includes("Get-ChecksumFileName") && packageRelease.includes("SHA256SUMS-") && packageRelease.includes('$_.Name -notlike "SHA256SUMS*.txt"'));
 check("release packaging script builds Tauri bundles without sidecar", !packageRelease.includes("build-sidecar") && packageRelease.includes("npm run tauri build -- --bundles"));
 check("release packaging script rejects unsupported Linux bundles", packageRelease.includes("Release packaging is only supported on Windows and macOS") && packageRelease.includes("Unsupported bundle target"));
+check("release packaging script respects Cargo target dir", packageRelease.includes("CARGO_TARGET_DIR") && packageRelease.includes("Get-BundleRoot"));
+check("release packaging script filters current app artifacts", packageRelease.includes("Get-ArtifactPrefix") && packageRelease.includes(".StartsWith($Prefix"));
 const packageWindows = read("scripts/package-windows.ps1");
 check("Windows packaging script collects installers", packageWindows.includes("dist-installers") && packageWindows.includes("SHA256SUMS.txt"));
 check("Windows packaging script runs native verification", packageWindows.includes("scripts\\verify.ps1") && packageWindows.includes("-Native"));
+check("Windows packaging script respects Cargo target dir", packageWindows.includes("CARGO_TARGET_DIR") && packageWindows.includes("Get-CargoTargetDir"));
+check("Windows packaging script filters current app installers", packageWindows.includes("Get-ArtifactPrefix") && packageWindows.includes(".StartsWith($Prefix"));
 const verifyScript = read("scripts/verify.ps1");
 check("native verification runs Rust tests", verifyScript.includes('Invoke-Step "Rust tests"') && verifyScript.includes("& $Cargo test"));
 
@@ -239,6 +245,7 @@ const tauriConfig = read("src-tauri/tauri.conf.json");
 const tauriConfigJson = JSON.parse(tauriConfig);
 check("Tauri does not bundle imessage-exporter", !tauriConfig.includes('"externalBin"') && !tauriConfig.includes('"binaries/imessage-exporter"'));
 check("Tauri keeps Windows local bundle defaults", tauriConfig.includes('"nsis"') && tauriConfig.includes('"msi"'));
+check("Tauri uses A1mAssist package identity", tauriConfigJson.identifier === "com.a1massist.imessage-exporter-gui" && tauriConfigJson.bundle?.publisher === "A1mAssist" && !tauriConfig.includes("com.reagentx"));
 check("Tauri has desktop platform icons", tauriConfig.includes('"icons/icon.ico"') && tauriConfig.includes('"icons/icon.icns"') && tauriConfig.includes('"icons/icon.png"'));
 check("Tauri bundles license resources", tauriConfig.includes('"../LICENSE"') && tauriConfig.includes('"../THIRD_PARTY_NOTICES.md"') && !tauriConfig.includes('"../SIDE_CAR.md"'));
 check(
@@ -253,6 +260,7 @@ check(
 );
 
 const cargoToml = read("src-tauri/Cargo.toml");
+check("Cargo uses A1mAssist author metadata", cargoToml.includes('authors = ["A1mAssist"]'));
 checkSameMajorMinor("@tauri-apps/api and tauri crate", pkg.dependencies?.["@tauri-apps/api"], cargoVersion(cargoToml, "tauri"));
 checkSameMajorMinor("@tauri-apps/cli and tauri crate", pkg.devDependencies?.["@tauri-apps/cli"], cargoVersion(cargoToml, "tauri"));
 checkSameMajorMinor(

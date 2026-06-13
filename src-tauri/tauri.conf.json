@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "iMessage Exporter GUI",
-  "version": "0.2.2",
-  "identifier": "com.reagentx.imessage-exporter-gui",
+  "version": "0.1.0",
+  "identifier": "com.a1massist.imessage-exporter-gui",
   "build": {
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build",
@@ -25,6 +25,8 @@
   },
   "bundle": {
     "active": true,
+    "publisher": "A1mAssist",
+    "copyright": "Copyright (c) 2026 A1mAssist",
     "targets": ["nsis", "msi"],
     "icon": [
       "icons/32x32.png",
