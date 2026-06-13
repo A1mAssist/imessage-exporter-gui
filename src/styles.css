@@ -124,57 +124,59 @@ button:disabled {
 
 .language-toggle {
   display: inline-grid;
-  grid-template-columns: repeat(2, 32px);
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: var(--surface-strong);
+  grid-template-columns: repeat(2, minmax(46px, auto));
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: var(--shadow-tight);
 }
 
 .language-toggle button {
-  min-height: 28px;
-  padding: 0;
+  min-height: 34px;
+  padding: 0 8px;
   border: 0;
-  border-radius: 5px;
+  border-radius: 6px;
   background: transparent;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 800;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 900;
 }
 
 .language-toggle button.selected {
-  background: var(--surface);
+  background: var(--accent-soft);
   color: var(--accent-ink);
-  box-shadow: var(--shadow-tight);
+  box-shadow: inset 0 0 0 1px rgba(13, 148, 154, 0.32);
 }
 
 .theme-toggle {
   display: inline-grid;
-  grid-template-columns: repeat(3, 30px);
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: var(--surface-strong);
+  grid-template-columns: repeat(3, 38px);
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: var(--shadow-tight);
 }
 
 .theme-toggle button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 28px;
+  min-height: 34px;
   padding: 0;
   border: 0;
-  border-radius: 5px;
+  border-radius: 6px;
   background: transparent;
-  color: var(--muted);
+  color: #475569;
 }
 
 .theme-toggle button.selected {
-  background: var(--surface);
+  background: var(--accent-soft);
   color: var(--accent-ink);
-  box-shadow: var(--shadow-tight);
+  box-shadow: inset 0 0 0 1px rgba(13, 148, 154, 0.32);
 }
 
 .step-list {
@@ -333,7 +335,15 @@ button:disabled {
 }
 
 .status-line svg {
-  color: #d05b36;
+  color: var(--amber);
+}
+
+.status-line.ok svg {
+  color: var(--green);
+}
+
+.status-line.warn svg {
+  color: var(--amber);
 }
 
 .status-line span,
@@ -492,23 +502,24 @@ button:disabled {
 
 .workspace {
   overflow: auto;
-  padding: 26px 30px 34px;
+  padding: 26px clamp(24px, 2.4vw, 44px) 34px;
 }
 
 .page {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  max-width: 980px;
+  width: min(100%, 1480px);
+  margin: 0 auto;
 }
 
 .topbar {
   display: grid;
   grid-template-columns: minmax(280px, 360px) 1fr;
   align-items: start;
-  gap: 18px;
-  max-width: 1180px;
-  margin-bottom: 24px;
+  gap: 24px;
+  width: min(100%, 1480px);
+  margin: 0 auto 24px;
 }
 
 .topbar-title {
@@ -1950,6 +1961,30 @@ label span {
 :root[data-theme="dark"] .diagnostic-summary-icon {
   background: #25313d;
   color: #b8c6d1;
+}
+
+:root[data-theme="dark"] .language-toggle,
+:root[data-theme="dark"] .theme-toggle {
+  border-color: var(--line-strong);
+  background: #202b36;
+  box-shadow: var(--shadow-tight);
+}
+
+:root[data-theme="dark"] .language-toggle button,
+:root[data-theme="dark"] .theme-toggle button {
+  color: #d7e1e8;
+}
+
+:root[data-theme="dark"] .language-toggle button:not(.selected):hover,
+:root[data-theme="dark"] .theme-toggle button:not(.selected):hover {
+  background: #25313d;
+}
+
+:root[data-theme="dark"] .language-toggle button.selected,
+:root[data-theme="dark"] .theme-toggle button.selected {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  box-shadow: inset 0 0 0 1px rgba(66, 184, 189, 0.38);
 }
 
 :root[data-theme="dark"] .env-panel,

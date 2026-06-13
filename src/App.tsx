@@ -973,7 +973,7 @@ function LanguageToggle({ language, onChange }: { language: "en" | "zh-CN"; onCh
         EN
       </button>
       <button className={language === "zh-CN" ? "selected" : ""} type="button" onClick={() => onChange("zh-CN")} aria-label="中文" aria-pressed={language === "zh-CN"}>
-        中
+        中文
       </button>
     </div>
   );
@@ -1037,7 +1037,7 @@ function EnvironmentPanel({
           {loading ? <Loader2 className="spin" size={16} /> : <RefreshCcw size={16} />}
         </button>
       </div>
-      <StatusLine ok={environment?.exporterAvailable} label="导出引擎" value={environment?.exporterVersion ?? (environment?.exporterAvailable ? "可用" : "未找到")} />
+      <StatusLine ok={environment?.exporterAvailable} label="导出引擎" value={environment?.exporterAvailable ? "可用" : "未找到"} />
       <div className="engine-config">
         <small title={effectiveExporterPath || "未选择；会尝试从 PATH 检测"}>{effectiveExporterPath ? compactPath(effectiveExporterPath) : "未选择；会尝试从 PATH 检测"}</small>
         <p className="engine-help">GUI 不内置 imessage-exporter；请单独下载导出引擎，或选择本机已有的可执行文件。</p>
@@ -1168,7 +1168,7 @@ function normalizeConfigPath(path: string): string {
 
 function StatusLine({ ok, label, value }: { ok?: boolean; label: string; value: string }) {
   return (
-    <div className="status-line">
+    <div className={`status-line ${ok ? "ok" : "warn"}`}>
       {ok ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
       <span>{label}</span>
       <strong>{value}</strong>

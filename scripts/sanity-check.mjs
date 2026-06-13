@@ -100,6 +100,7 @@ check("app renders first-run checklist", app.includes("function FirstRunGuide") 
 check("app renders first-run OOBE dialog", app.includes("function OnboardingDialog") && app.includes("首次设置指引") && app.includes("onboardingStorageKey"));
 check("app keeps preferences compact in topbar", app.includes("topbar-utilities") && app.includes("设置向导") && !app.includes("preference-controls"));
 check("app remounts shell on language changes", app.includes('key={language}'));
+check("app hides exporter version in environment status line", app.includes('label="导出引擎" value={environment?.exporterAvailable ? "可用" : "未找到"}'));
 check("app renders diagnostic summary panel", app.includes("function DiagnosticSummaryPanel") && app.includes("诊断摘要") && app.includes("附件转换"));
 check("app renders recovery action buttons", app.includes("function RecoveryActionRow") && app.includes("下载导出引擎") && app.includes("回到数据源") && app.includes("回到选项"));
 check("app exposes generated archive directory action", app.includes("新建归档目录") && app.includes("timestampedArchiveSequence") && app.includes("生成带时间戳的新文件夹"));
@@ -183,6 +184,10 @@ check("styles include export path inspection states", styles.includes(".path-ins
 check("styles include startup readiness band", styles.includes(".readiness-band") && styles.includes(".readiness-grid"));
 check("styles include first-run and diagnostic summary panels", styles.includes(".first-run-guide") && styles.includes(".first-run-grid") && styles.includes(".diagnostic-summary-panel") && styles.includes(".diagnostic-summary-grid"));
 check("styles include compact topbar controls and OOBE dialog", styles.includes(".topbar-utilities") && styles.includes(".guide-chip") && styles.includes(".oobe-dialog") && styles.includes(".oobe-backdrop"));
+check("styles make language and theme controls discoverable", styles.includes("grid-template-columns: repeat(2, minmax(46px, auto))") && styles.includes("grid-template-columns: repeat(3, 38px)") && styles.includes("var(--accent-soft)"));
+check("styles keep topbar controls legible in dark mode", styles.includes(':root[data-theme="dark"] .language-toggle') && styles.includes(':root[data-theme="dark"] .theme-toggle button.selected'));
+check("styles use green available status lines", app.includes('status-line ${ok ? "ok" : "warn"}') && styles.includes(".status-line.ok svg") && styles.includes(".status-line.warn svg"));
+check("styles use wide desktop workspace", styles.includes("width: min(100%, 1480px)") && styles.includes("margin: 0 auto 24px"));
 check("styles include diagnostic detail text", styles.includes(".diagnostic-tile small"));
 check("styles include password clear row", styles.includes(".password-row") && styles.includes("grid-template-columns: minmax(0, 1fr) auto"));
 check("styles include source blockers", styles.includes(".source-blockers") && styles.includes("#fff8e7"));
@@ -277,6 +282,7 @@ check("smoke verifies theme switching", read("scripts/smoke-mock-ui.mjs").includ
 check("smoke verifies export cancellation", read("scripts/smoke-mock-ui.mjs").includes("assertCancelledOutcome") && read("scripts/smoke-mock-ui.mjs").includes(".result-strip.cancelled"));
 check("smoke verifies export summary panel", read("scripts/smoke-mock-ui.mjs").includes("assertExportSummary") && read("scripts/smoke-mock-ui.mjs").includes("导出摘要"));
 check("smoke verifies OOBE, language round-trip, and diagnostic summary panels", read("scripts/smoke-mock-ui.mjs").includes("assertOnboardingDialog") && read("scripts/smoke-mock-ui.mjs").includes("assertLanguageRoundTrip") && read("scripts/smoke-mock-ui.mjs").includes("assertDiagnosticSummaryPanel"));
+check("smoke verifies English localization coverage", read("scripts/smoke-mock-ui.mjs").includes("assertEnglishLocalizationCoverage") && read("src/i18n.ts").includes("快速归档") && read("src/i18n.ts").includes("iMessage Exporter GUI 诊断报告"));
 check(
   "smoke verifies goal polish features",
   [

@@ -49,6 +49,19 @@ const en: Record<string, string> = {
   "未找到": "Not found",
   "可用": "Available",
   "未检测到": "Not detected",
+  "环境": "Environment",
+  "路径": "Path",
+  "名称": "Name",
+  "密码状态": "Password Status",
+  "未确认或缺失": "Not confirmed or missing",
+  "未输入": "Not entered",
+  "不适用": "Not applicable",
+  "已输入，未写入报告": "Entered, omitted from report",
+  "暂无日志": "No logs yet",
+  "iMessage Exporter GUI 诊断报告": "iMessage Exporter GUI Diagnostic Report",
+  "生成时间": "Generated At",
+  "脱敏命令": "Redacted Command",
+  "脱敏日志": "Redacted Logs",
   "Mock 模式：未调用真实导出引擎。basic/full 附件转换仍会显示依赖提示。": "Mock mode: no real export engine is called. basic/full attachment conversion still shows dependency hints.",
   "Mock 模式：模拟导出引擎缺失，诊断和导出会被禁用。": "Mock mode: simulating a missing export engine, so diagnostics and export are disabled.",
   "仅保存路径和导出选项，不保存备份密码": "Only paths and export options are saved. Backup passwords are never saved.",
@@ -140,6 +153,7 @@ const en: Record<string, string> = {
   "basic/full 可用": "basic/full available",
   "clone 可直接导出，basic/full 需要 ffmpeg 和 ImageMagick": "clone can export directly; basic/full require ffmpeg and ImageMagick",
   "启动就绪检查": "Startup readiness checks",
+  "首次导出路线": "First export path",
   "就绪检查": "Readiness Checks",
   "重新检查": "Check Again",
   "诊断备份": "Diagnose Backup",
@@ -153,6 +167,8 @@ const en: Record<string, string> = {
   "诊断结果": "Diagnostic Result",
   "已通过": "Passed",
   "需处理": "Needs action",
+  "联系人解析可用": "Contact parsing is available",
+  "缺少 ffmpeg / ImageMagick": "Missing ffmpeg / ImageMagick",
   "诊断已完成，但仍有项目需要处理。": "Diagnostics finished, but some items still need attention.",
   "运行诊断后会汇总检查结果。": "Run diagnostics to summarize the checks.",
   "完整": "Complete",
@@ -172,11 +188,23 @@ const en: Record<string, string> = {
   "选择输出格式、附件复制策略、日期范围和会话筛选。": "Choose output format, attachment copy strategy, date range, and conversation filters.",
   "预设": "Presets",
   "只调整格式、附件策略和打印模式，不改备份路径、输出目录或密码。": "Only changes format, attachment strategy, and print mode. Backup path, output folder, and password are kept.",
+  "快速归档": "Quick Archive",
+  "HTML + clone，保留附件引用，适合第一轮完整导出。": "HTML + clone, keeps attachment references, good for the first complete export.",
+  "轻量文本": "Text Lite",
+  "TXT + disabled，只导出文本，便于长期保存和搜索。": "TXT + disabled, exports text only for long-term storage and search.",
+  "打印准备": "Print Ready",
+  "HTML + clone + no-lazy，方便后续用浏览器打印为 PDF。": "HTML + clone + no-lazy, ready for printing to PDF in a browser.",
   "输出目录": "Output Folder",
   "新建归档目录": "New Archive Folder",
   "生成带时间戳的新文件夹，避免导出结果混入旧目录。": "Generate a timestamped folder so new exports do not mix with old files.",
   "格式": "Format",
   "Windows 第一版建议使用 clone；basic/full 依赖本机转换器。": "For the first Windows version, clone is recommended; basic/full depend on local converters.",
+  "保留更多富文本和附件引用，适合归档与打印。": "Preserves richer text and attachment references for archiving and printing.",
+  "纯文本输出，更轻量，适合检索和长期保存。": "Plain text output, lighter and easier to search or store long term.",
+  "不复制附件，导出最快，输出最轻。": "Does not copy attachments. Fastest export and smallest output.",
+  "复制原始附件，Windows 第一版推荐。": "Copies original attachments. Recommended for the first Windows release.",
+  "基础转换，需要 ffmpeg/ImageMagick。": "Basic conversion; requires ffmpeg/ImageMagick.",
+  "完整转换，需要 ffmpeg/ImageMagick，耗时更久。": "Full conversion; requires ffmpeg/ImageMagick and takes longer.",
   "开始日期": "Start Date",
   "结束日期": "End Date",
   "会话筛选": "Conversation Filter",
@@ -208,6 +236,9 @@ const en: Record<string, string> = {
   "上级目录不存在。": "The parent folder does not exist.",
   "目录当前不存在，导出前请确认路径可创建。": "The folder does not exist yet. Make sure it can be created before export.",
   "空文件夹，适合写入新的导出结果。": "Empty folder, suitable for a new export.",
+  "请选择导出输出目录。": "Choose the export output folder.",
+  "检测到疑似旧导出文件，建议选择一个新的空目录。": "Old export files were detected. Choose a new empty folder.",
+  "全部日期": "All dates",
   "导出与结果": "Export and Results",
   "实时查看 imessage-exporter 输出，导出完成后打开结果目录。": "Watch imessage-exporter output in real time, then open the result folder when export finishes.",
   "还没有开始导出": "Export has not started",
@@ -354,8 +385,23 @@ export function translateText(language: AppLanguage, text: string): string {
   const copiedFullPath = text.match(/^复制完整(.+): (.+)$/);
   if (copiedFullPath) return `Copy full ${translateText(language, copiedFullPath[1]).toLowerCase()}: ${copiedFullPath[2]}`;
 
+  const attachmentSummary = text.match(/^(.+) · 附件 (.+)$/);
+  if (attachmentSummary) return `${attachmentSummary[1]} · Attachments ${attachmentSummary[2]}`;
+
+  const copyLabel = text.match(/^复制(.+)$/);
+  if (copyLabel) return `Copy ${translateText(language, copyLabel[1])}`;
+
   const chooseLabel = text.match(/^选择(.+)$/);
   if (chooseLabel) return `Choose ${translateText(language, chooseLabel[1])}`;
+
+  const generatedAt = text.match(/^生成时间: (.+)$/);
+  if (generatedAt) return `Generated At: ${generatedAt[1]}`;
+
+  const reportField = text.match(/^- ([^:：]+): (.+)$/);
+  if (reportField) return `- ${translateText(language, reportField[1])}: ${translateText(language, reportField[2])}`;
+
+  const logLine = text.match(/^\[([^\]]+)\] (.+)$/);
+  if (logLine) return `[${logLine[1]}] ${translateText(language, logLine[2])}`;
 
   const items = text.match(/^已有 (.+) 个项目。继续导出前建议确认这些文件可以保留。$/);
   if (items) return `${items[1]} item(s) already exist. Confirm these files can stay before continuing.`;

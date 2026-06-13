@@ -8,6 +8,7 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 const previewDir = join(root, "preview");
 const port = Number(process.env.MOCK_UI_PORT || 1421);
 const baseUrl = `http://127.0.0.1:${port}/?mock=1&lang=zh-CN`;
+const englishBaseUrl = `http://127.0.0.1:${port}/?mock=1&lang=en`;
 
 mkdirSync(previewDir, { recursive: true });
 
@@ -43,6 +44,7 @@ try {
   });
   console.log("smoke: browser started");
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, deviceScaleFactor: 1 });
+  await clearOnboardingDismissalBeforeLoad(page);
   let sawOutputConfirm = false;
   page.on("dialog", async (dialog) => {
     if (!dialog.message().includes("输出目录已有内容")) {
@@ -151,6 +153,8 @@ try {
   console.log("smoke: empty state passed");
   await assertAutoClearPasswordAfterDiagnostics(browser);
   console.log("smoke: auto-clear passed");
+  await assertEnglishLocalizationCoverage(browser);
+  console.log("smoke: English localization passed");
   await browser.close();
   browser = undefined;
   console.log("Mock UI smoke passed.");
@@ -253,6 +257,12 @@ async function dismissOnboardingIfPresent(page) {
   }
 }
 
+async function clearOnboardingDismissalBeforeLoad(page) {
+  await page.addInitScript(() => {
+    window.localStorage.removeItem("imessage-exporter-gui.oobe.dismissed.v1");
+  });
+}
+
 async function assertLanguageRoundTrip(page) {
   await page.getByRole("button", { name: "English" }).click();
   await page.waitForFunction(() => document.querySelector(".app-shell")?.textContent?.includes("Data Source"));
@@ -263,6 +273,65 @@ async function assertLanguageRoundTrip(page) {
   await page.waitForFunction(() => document.querySelector(".app-shell")?.textContent?.includes("数据源"));
   const chineseText = await page.locator(".app-shell").textContent();
   if (!chineseText?.includes("设置向导")) throw new Error("Chinese UI did not return after switching from English");
+}
+
+async function assertEnglishLocalizationCoverage(browser) {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, deviceScaleFactor: 1 });
+  page.on("dialog", async (dialog) => {
+    if (!dialog.message().includes("already has files")) {
+      throw new Error(`Unexpected English dialog: ${dialog.message()}`);
+    }
+    await dialog.accept();
+  });
+
+  await page.goto(englishBaseUrl, { waitUntil: "networkidle" });
+  await dismissOnboardingIfPresent(page);
+  await assertNoUnexpectedCjk(page, "English source");
+
+  await page.getByLabel("Backup Password").fill("english-password");
+  await page.locator(".footer-actions").getByRole("button", { name: /^Run Diagnostics$/ }).click();
+  await waitForExitZero(page);
+  await assertNoUnexpectedCjk(page, "English diagnostics");
+
+  await page.getByRole("button", { name: /Continue to Options/ }).click();
+  await assertNoUnexpectedCjk(page, "English options");
+  await page.getByRole("button", { name: /Choose Output Folder/ }).click();
+  await assertNoUnexpectedCjk(page, "English output warning");
+
+  await page.close();
+}
+
+async function assertNoUnexpectedCjk(page, label) {
+  const allowed = new Set(["中文", "aria-label: 中文"]);
+  const cjk = await page.evaluate(() => {
+    const visible = (element) => {
+      const style = getComputedStyle(element);
+      const box = element.getBoundingClientRect();
+      return style.visibility !== "hidden" && style.display !== "none" && box.width > 0 && box.height > 0;
+    };
+    const matches = [];
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    let node = walker.nextNode();
+    while (node) {
+      const text = (node.textContent ?? "").replace(/\s+/g, " ").trim();
+      if (text && /[\u3400-\u9fff]/.test(text) && node.parentElement && visible(node.parentElement)) {
+        matches.push(text);
+      }
+      node = walker.nextNode();
+    }
+    for (const element of document.querySelectorAll("[aria-label],[title],[placeholder]")) {
+      if (!visible(element)) continue;
+      for (const attribute of ["aria-label", "title", "placeholder"]) {
+        const value = element.getAttribute(attribute);
+        if (value && /[\u3400-\u9fff]/.test(value)) matches.push(`${attribute}: ${value}`);
+      }
+    }
+    return [...new Set(matches)].sort();
+  });
+  const unexpected = cjk.filter((text) => !allowed.has(text));
+  if (unexpected.length) {
+    throw new Error(`${label} has untranslated Chinese text:\n${unexpected.join("\n")}`);
+  }
 }
 
 async function assertFirstRunGuide(page) {
