@@ -48,7 +48,20 @@ function Resolve-BundleTarget {
     if ($IsMacOS) {
         return "dmg"
     }
-    return "deb,appimage"
+    throw "Release packaging is only supported on Windows and macOS."
+}
+
+function Assert-SupportedBundleTarget {
+    param(
+        [Parameter(Mandatory = $true)][string]$Target
+    )
+
+    $UnsupportedTargets = @("deb", "appimage", "app", "rpm")
+    foreach ($UnsupportedTarget in $UnsupportedTargets) {
+        if ($Target.ToLowerInvariant().Split(",") -contains $UnsupportedTarget) {
+            throw "Unsupported bundle target '$UnsupportedTarget'. Release packaging is only supported on Windows and macOS."
+        }
+    }
 }
 
 function Add-ArtifactsFromPattern {
@@ -73,8 +86,6 @@ function Find-ReleaseArtifacts {
     Add-ArtifactsFromPattern $Artifacts (Join-Path $BundleRoot "nsis/*.exe")
     Add-ArtifactsFromPattern $Artifacts (Join-Path $BundleRoot "msi/*.msi")
     Add-ArtifactsFromPattern $Artifacts (Join-Path $BundleRoot "dmg/*.dmg")
-    Add-ArtifactsFromPattern $Artifacts (Join-Path $BundleRoot "deb/*.deb")
-    Add-ArtifactsFromPattern $Artifacts (Join-Path $BundleRoot "appimage/*.AppImage")
 
     return $Artifacts | Sort-Object FullName -Unique
 }
@@ -88,6 +99,7 @@ function Get-ChecksumFileName {
 }
 
 $ResolvedBundleTarget = Resolve-BundleTarget
+Assert-SupportedBundleTarget $ResolvedBundleTarget
 
 Push-Location $Root
 try {

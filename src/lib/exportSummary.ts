@@ -8,6 +8,9 @@ export type ExportSummary = {
   format: string;
   copyMethod: string;
   outputPath: string;
+  itemCountLabel: string;
+  durationLabel: string;
+  nextStep: string;
   detail: string;
 };
 
@@ -31,6 +34,9 @@ export function summarizeExportResult(input: ExportSummaryInput): ExportSummary 
     format: input.format.toUpperCase(),
     copyMethod: input.copyMethod,
     outputPath,
+    itemCountLabel: itemCountLabel(logText),
+    durationLabel: durationLabel(input.logs),
+    nextStep: nextStep(status, input.format),
     detail: summaryDetail(status, logText, input.outcome.message),
   };
 }
@@ -64,6 +70,39 @@ function parseOutputPath(logText: string): string | undefined {
     if (match?.[1]?.trim()) return match[1].trim();
   }
   return undefined;
+}
+
+function itemCountLabel(logText: string): string {
+  const patterns = [
+    /total messages:\s*([\d,]+)/i,
+    /exporting\s+([\d,]+)\s+(?:conversations|messages|chats)/i,
+    /exported\s+([\d,]+)\s+(?:conversations|messages|chats)/i,
+  ];
+  for (const pattern of patterns) {
+    const match = logText.match(pattern);
+    if (match?.[1]) return `${match[1]} 项`;
+  }
+  return "日志未报告";
+}
+
+function durationLabel(logs: LogLine[]): string {
+  if (logs.length < 2) return "未报告";
+  const first = logs[0]?.timestamp;
+  const last = logs[logs.length - 1]?.timestamp;
+  if (!Number.isFinite(first) || !Number.isFinite(last) || last <= first) return "未报告";
+  const seconds = Math.max(1, Math.round((last - first) / 1000));
+  if (seconds < 60) return `${seconds} 秒`;
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return remainder ? `${minutes} 分 ${remainder} 秒` : `${minutes} 分`;
+}
+
+function nextStep(status: ExportSummaryStatus, format: ExportFormat): string {
+  if (status === "succeeded") return format === "html" ? "打开首个 HTML 或输出目录检查结果。" : "打开首个 TXT 或输出目录检查结果。";
+  if (status === "failed") return "按失败提示修正后重新导出。";
+  if (status === "cancelled") return "调整选项后可重新导出。";
+  if (status === "running") return "保持窗口打开，必要时可取消任务。";
+  return "开始导出后会显示下一步。";
 }
 
 function latestMeaningfulLine(logText: string): string | undefined {

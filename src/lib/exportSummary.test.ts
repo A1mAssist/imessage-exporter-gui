@@ -2,14 +2,14 @@ import { describe, expect, it } from "vitest";
 import type { LogLine } from "../types";
 import { summarizeExportResult } from "./exportSummary";
 
-function line(text: string, kind: LogLine["kind"] = "stdout"): LogLine {
-  return { id: text, kind, text, timestamp: 1 };
+function line(text: string, kind: LogLine["kind"] = "stdout", timestamp = 1): LogLine {
+  return { id: text, kind, text, timestamp };
 }
 
 describe("summarizeExportResult", () => {
   it("summarizes successful HTML exports from logs and config", () => {
     const summary = summarizeExportResult({
-      logs: [line("Copied attachments with clone strategy."), line("Export complete: C:\\Messages Export")],
+      logs: [line("Exporting 42 conversations as HTML...", "stdout", 1_000), line("Export complete: C:\\Messages Export", "stdout", 4_400)],
       running: false,
       outcome: { kind: "succeeded", code: 0 },
       format: "html",
@@ -23,6 +23,9 @@ describe("summarizeExportResult", () => {
       format: "HTML",
       copyMethod: "clone",
       outputPath: "C:\\Messages Export",
+      itemCountLabel: "42 项",
+      durationLabel: "3 秒",
+      nextStep: "打开首个 HTML 或输出目录检查结果。",
       detail: "Export complete: C:\\Messages Export",
     });
   });
@@ -40,6 +43,7 @@ describe("summarizeExportResult", () => {
     expect(summary.format).toBe("TXT");
     expect(summary.copyMethod).toBe("disabled");
     expect(summary.outputPath).toBe("D:\\Text Archive");
+    expect(summary.nextStep).toBe("打开首个 TXT 或输出目录检查结果。");
   });
 
   it("shows cancelled and failed states distinctly", () => {

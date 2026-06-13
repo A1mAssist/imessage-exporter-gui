@@ -96,6 +96,9 @@ check("app reports clipboard copy failure", app.includes("复制失败") && app.
 check("app warns before exporting into non-empty output folders", app.includes("ExportPathNotice") && app.includes("输出目录已有内容") && app.includes("needsExportPathConfirmation"));
 check("app shows explicit cancelled and failed job outcomes", app.includes("type JobOutcome") && app.includes("JobOutcomeNotice") && app.includes("resultStripClass"));
 check("app renders export summary panel", app.includes("ExportSummaryPanel") && app.includes("导出摘要") && app.includes("summarizeExportResult"));
+check("app renders first-run checklist", app.includes("function FirstRunGuide") && app.includes("首次导出清单") && app.includes("准备导出引擎"));
+check("app renders diagnostic summary panel", app.includes("function DiagnosticSummaryPanel") && app.includes("诊断摘要") && app.includes("附件转换"));
+check("app renders recovery action buttons", app.includes("function RecoveryActionRow") && app.includes("下载导出引擎") && app.includes("回到数据源") && app.includes("回到选项"));
 check("app exposes generated archive directory action", app.includes("新建归档目录") && app.includes("timestampedArchiveSequence") && app.includes("生成带时间戳的新文件夹"));
 check("app increments generated archive directory collisions", app.includes("nextAvailableArchivePath") && app.includes("无法生成未占用的归档目录"));
 check("app wires export presets", app.includes("exportPresets.map") && app.includes("onApplyPreset") && app.includes("applyExportPreset"));
@@ -145,7 +148,7 @@ check("frontend normalizes no-lazy for TXT", exportConfig.includes('noLazy: conf
 const diagnosticParser = read("src/lib/diagnostics.ts");
 check("diagnostics parser scopes warnings to relevant lines", diagnosticParser.includes("relevant") && diagnosticParser.includes("hasWarning(line.lower)") && read("src/lib/diagnostics.test.ts").includes("keeps converter warnings from contaminating other sections"));
 const exportSummary = read("src/lib/exportSummary.ts");
-check("export summary parses result status and output path", exportSummary.includes("Export complete") && exportSummary.includes("statusLabel") && read("src/lib/exportSummary.test.ts").includes("summarizes successful HTML exports"));
+check("export summary parses result status, counts, duration, and output path", exportSummary.includes("Export complete") && exportSummary.includes("itemCountLabel") && exportSummary.includes("durationLabel") && read("src/lib/exportSummary.test.ts").includes("summarizes successful HTML exports"));
 check("archive path helper creates timestamped output folders", read("src/lib/archivePath.ts").includes("Messages Export") && read("src/lib/archivePath.ts").includes("timestampedArchiveSequence") && read("src/lib/archivePath.test.ts").includes("startSuffix"));
 check("export presets preserve source secrets", read("src/lib/exportPresets.ts").includes("quickArchive") && read("src/lib/exportPresets.test.ts").includes("does not overwrite source path"));
 check("recovery hints classify known failure modes", read("src/lib/recoveryHints.ts").includes("备份密码可能不正确") && read("src/lib/recoveryHints.test.ts").includes("classifies known failure modes"));
@@ -175,6 +178,7 @@ check("styles support narrow browser layout", !styles.includes("min-width: 940px
 check("styles wrap dense panel actions", styles.includes("flex-wrap: wrap") && styles.includes(".panel-actions"));
 check("styles include export path inspection states", styles.includes(".path-inspection.warn") && styles.includes(".path-inspection.error"));
 check("styles include startup readiness band", styles.includes(".readiness-band") && styles.includes(".readiness-grid"));
+check("styles include first-run and diagnostic summary panels", styles.includes(".first-run-guide") && styles.includes(".first-run-grid") && styles.includes(".diagnostic-summary-panel") && styles.includes(".diagnostic-summary-grid"));
 check("styles include diagnostic detail text", styles.includes(".diagnostic-tile small"));
 check("styles include password clear row", styles.includes(".password-row") && styles.includes("grid-template-columns: minmax(0, 1fr) auto"));
 check("styles include source blockers", styles.includes(".source-blockers") && styles.includes("#fff8e7"));
@@ -212,9 +216,10 @@ check("backend redacts job log secrets", jobs.includes("struct LogRedactor") && 
 const doctor = read("scripts/doctor.ps1");
 check("doctor summarizes native packaging blockers", doctor.includes("Missing required item(s)") && doctor.includes(".\\scripts\\verify.ps1 -Native"));
 const packageRelease = read("scripts/package-release.ps1");
-check("release packaging script collects platform artifacts", packageRelease.includes("dist-release") && packageRelease.includes("SHA256SUMS") && packageRelease.includes("*.dmg") && packageRelease.includes("*.deb") && packageRelease.includes("*.AppImage"));
+check("release packaging script collects Windows and macOS artifacts only", packageRelease.includes("dist-release") && packageRelease.includes("SHA256SUMS") && packageRelease.includes("*.dmg") && packageRelease.includes("*.exe") && packageRelease.includes("*.msi") && !packageRelease.includes("*.deb") && !packageRelease.includes("*.AppImage"));
 check("release packaging script writes platform checksums", packageRelease.includes("Get-ChecksumFileName") && packageRelease.includes("SHA256SUMS-") && packageRelease.includes('$_.Name -notlike "SHA256SUMS*.txt"'));
 check("release packaging script builds Tauri bundles without sidecar", !packageRelease.includes("build-sidecar") && packageRelease.includes("npm run tauri build -- --bundles"));
+check("release packaging script rejects unsupported Linux bundles", packageRelease.includes("Release packaging is only supported on Windows and macOS") && packageRelease.includes("Unsupported bundle target"));
 const packageWindows = read("scripts/package-windows.ps1");
 check("Windows packaging script collects installers", packageWindows.includes("dist-installers") && packageWindows.includes("SHA256SUMS.txt"));
 check("Windows packaging script runs native verification", packageWindows.includes("scripts\\verify.ps1") && packageWindows.includes("-Native"));
@@ -267,6 +272,7 @@ check("smoke verifies missing exporter export blocking", read("scripts/smoke-moc
 check("smoke verifies theme switching", read("scripts/smoke-mock-ui.mjs").includes("assertThemeToggle"));
 check("smoke verifies export cancellation", read("scripts/smoke-mock-ui.mjs").includes("assertCancelledOutcome") && read("scripts/smoke-mock-ui.mjs").includes(".result-strip.cancelled"));
 check("smoke verifies export summary panel", read("scripts/smoke-mock-ui.mjs").includes("assertExportSummary") && read("scripts/smoke-mock-ui.mjs").includes("导出摘要"));
+check("smoke verifies first-run and diagnostic summary panels", read("scripts/smoke-mock-ui.mjs").includes("assertFirstRunGuide") && read("scripts/smoke-mock-ui.mjs").includes("assertDiagnosticSummaryPanel"));
 check(
   "smoke verifies goal polish features",
   [
@@ -277,6 +283,7 @@ check(
     "assertDiagnosticReportDoesNotLeak",
     "assertPathCopyActions",
     "assertFirstUseEmptyState",
+    "assertFirstRunGuide",
   ].every((name) => read("scripts/smoke-mock-ui.mjs").includes(name)),
 );
 
@@ -287,13 +294,14 @@ check("CI runs frontend production build", ci.includes("npm run build"));
 check("CI runs Rust format", ci.includes("cargo fmt --check"));
 check("CI activates MSVC shell for native Windows builds", ci.includes("ilammy/msvc-dev-cmd@v1") && ci.includes("arch: x64"));
 const release = read(".github/workflows/release.yml");
-check("release workflow packages platform installers", release.includes("Release Installers") && release.includes("windows-latest") && release.includes("macos-latest") && release.includes("ubuntu-22.04") && release.includes("scripts/package-release.ps1"));
-check("release workflow requests platform bundle targets", release.includes("bundles: nsis,msi") && release.includes("bundles: dmg") && release.includes("bundles: deb,appimage"));
-check("release workflow uploads platform artifacts", release.includes("imessage-exporter-gui-windows") && release.includes("imessage-exporter-gui-macos") && release.includes("imessage-exporter-gui-linux"));
+check("release workflow packages Windows and macOS installers", release.includes("Release Installers") && release.includes("windows-latest") && release.includes("macos-latest") && !release.includes("ubuntu-22.04") && release.includes("scripts/package-release.ps1"));
+check("release workflow requests supported bundle targets only", release.includes("bundles: nsis,msi") && release.includes("bundles: dmg") && !release.includes("bundles: deb,appimage"));
+check("release workflow uploads supported platform artifacts only", release.includes("imessage-exporter-gui-windows") && release.includes("imessage-exporter-gui-macos") && !release.includes("imessage-exporter-gui-linux"));
 check("release workflow publishes tagged releases", release.includes("softprops/action-gh-release") && release.includes("refs/tags/"));
+check("release workflow marks beta tags as prereleases", release.includes("prerelease: ${{ contains(github.ref_name, '-') }}"));
 check("release workflow can publish with GitHub token", release.includes("permissions:") && release.includes("contents: write"));
 check("release workflow activates MSVC shell", release.includes("ilammy/msvc-dev-cmd@v1") && release.includes("arch: x64"));
-check("release workflow installs Linux Tauri dependencies", release.includes("libwebkit2gtk-4.1-dev") && release.includes("libayatana-appindicator3-dev") && release.includes("patchelf"));
+check("release workflow does not install Linux Tauri dependencies", !release.includes("libwebkit2gtk") && !release.includes("libayatana-appindicator") && !release.includes("patchelf"));
 
 if (failures.length) {
   console.error("\nSanity check failed:");

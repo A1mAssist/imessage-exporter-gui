@@ -14,21 +14,19 @@
 
 ## 下载安装
 
-普通用户不需要拉取源码，也不需要安装 Node.js、Rust 或 Visual Studio Build Tools。直接从 GitHub Releases 下载安装包即可：
+普通用户不需要拉取源码，也不需要安装 Node.js、Rust 或 Visual Studio Build Tools。直接从 GitHub Releases 下载当前 beta 安装包即可：
 
-[下载最新版](https://github.com/A1mAssist/imessage-exporter-gui/releases/latest)
+[下载当前 beta 版本](https://github.com/A1mAssist/imessage-exporter-gui/releases)
 
 按系统选择文件：
 
 - Windows：下载 `.exe` 或 `.msi` 安装包。
 - macOS：下载 `.dmg`。
-- Linux：下载 `.AppImage` 或 `.deb`。
 
 当前安装包还没有代码签名，所以系统可能会弹出安全提示：
 
 - Windows SmartScreen：点击“更多信息”，然后选择“仍要运行”。
 - macOS Gatekeeper：如果提示无法打开，可以右键 App 选择“打开”，或到“系统设置 -> 隐私与安全性”允许打开。
-- Linux：如果 `.AppImage` 不能启动，先给它执行权限，例如 `chmod +x iMessage*.AppImage`。
 
 ## 基本使用
 
@@ -71,6 +69,7 @@ macOS: ~/Library/Application Support/MobileSync/Backup
 当前限制：
 
 - v1 只面向本机 iOS 备份导出。
+- 当前安装包只面向 Windows 和 macOS。
 - 暂不支持直接读取 macOS `chat.db`、越狱设备 `sms.db` 或独立附件目录。
 - GUI 安装包不内置 `imessage-exporter`；请单独安装，或在界面里选择它的可执行文件。
 - 暂不内置 `ffmpeg` 和 ImageMagick。

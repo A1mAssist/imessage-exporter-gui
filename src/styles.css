@@ -342,6 +342,11 @@ button:disabled {
   color: #d05b36;
 }
 
+.status-line span,
+.status-line strong {
+  white-space: nowrap;
+}
+
 .engine-config {
   display: grid;
   gap: 8px;
@@ -356,6 +361,13 @@ button:disabled {
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.engine-help {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .engine-actions {
@@ -640,6 +652,18 @@ button:disabled {
   line-height: 1.45;
 }
 
+.recovery-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.recovery-actions .ghost-button {
+  min-height: 30px;
+  background: rgba(255, 255, 255, 0.84);
+}
+
 .path-inspection {
   display: grid;
   grid-template-columns: 20px minmax(0, 1fr);
@@ -791,7 +815,7 @@ button:disabled {
 
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -833,6 +857,36 @@ button:disabled {
 
 .summary-item strong {
   margin-top: 2px;
+}
+
+.summary-next-step {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+  padding: 10px 12px;
+  border: 1px solid rgba(158, 212, 216, 0.85);
+  border-radius: 7px;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+
+.summary-next-step svg {
+  margin-top: 1px;
+}
+
+.summary-next-step strong,
+.summary-next-step small {
+  display: block;
+}
+
+.summary-next-step strong {
+  font-size: 13px;
+}
+
+.summary-next-step small {
+  margin-top: 2px;
+  line-height: 1.4;
 }
 
 .toolbar {
@@ -909,6 +963,69 @@ input:disabled {
 .content-band {
   padding: 18px;
   box-shadow: var(--shadow-tight);
+}
+
+.first-run-guide {
+  display: grid;
+  gap: 2px;
+}
+
+.first-run-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.first-run-item {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 64px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-strong);
+}
+
+.first-run-item.done {
+  border-color: #bde7cb;
+  background: #f0fbf4;
+}
+
+.first-run-index {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  background: #eef2f6;
+  color: #526075;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.first-run-item.done .first-run-index {
+  background: #dff5e8;
+  color: var(--green);
+}
+
+.first-run-item strong,
+.first-run-item small {
+  display: block;
+  min-width: 0;
+}
+
+.first-run-item small {
+  margin-top: 3px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.first-run-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
 }
 
 .readiness-band {
@@ -1173,6 +1290,86 @@ label span {
   color: #7a5414;
   font-size: 12px;
   font-weight: 800;
+}
+
+.diagnostic-summary-panel {
+  display: grid;
+  gap: 2px;
+}
+
+.diagnostic-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.diagnostic-summary-item {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  min-height: 92px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-strong);
+}
+
+.diagnostic-summary-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  background: #eef2f6;
+  color: #526075;
+}
+
+.diagnostic-summary-item small,
+.diagnostic-summary-item strong,
+.diagnostic-summary-item em {
+  display: block;
+  min-width: 0;
+}
+
+.diagnostic-summary-item small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.diagnostic-summary-item strong {
+  margin-top: 2px;
+}
+
+.diagnostic-summary-item em {
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--muted);
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+}
+
+.diagnostic-summary-item.ok .diagnostic-summary-icon {
+  background: #e0f5e9;
+  color: var(--green);
+}
+
+.diagnostic-summary-item.warn .diagnostic-summary-icon {
+  background: #fff0cf;
+  color: var(--amber);
+}
+
+.diagnostic-summary-item.error {
+  border-color: #efb4a2;
+  background: #fff7f4;
+}
+
+.diagnostic-summary-item.error .diagnostic-summary-icon {
+  background: #fff0eb;
+  color: var(--red);
 }
 
 .diagnostic-grid {
@@ -1588,7 +1785,9 @@ label span {
 
 :root[data-theme="dark"] .step-icon,
 :root[data-theme="dark"] .quick-stat-icon,
-:root[data-theme="dark"] .readiness-icon {
+:root[data-theme="dark"] .readiness-icon,
+:root[data-theme="dark"] .first-run-index,
+:root[data-theme="dark"] .diagnostic-summary-icon {
   background: #25313d;
   color: #b8c6d1;
 }
@@ -1599,6 +1798,8 @@ label span {
 :root[data-theme="dark"] .log-panel,
 :root[data-theme="dark"] .quick-stat,
 :root[data-theme="dark"] .backup-card,
+:root[data-theme="dark"] .first-run-item,
+:root[data-theme="dark"] .diagnostic-summary-item,
 :root[data-theme="dark"] .review-item,
 :root[data-theme="dark"] .summary-item,
 :root[data-theme="dark"] .diagnostic-tile,
@@ -1645,6 +1846,8 @@ label span {
 }
 
 :root[data-theme="dark"] .readiness-item,
+:root[data-theme="dark"] .first-run-item,
+:root[data-theme="dark"] .diagnostic-summary-item,
 :root[data-theme="dark"] .review-item,
 :root[data-theme="dark"] .summary-item {
   background: var(--surface-strong);
@@ -1661,6 +1864,7 @@ label span {
 :root[data-theme="dark"] .notice.error,
 :root[data-theme="dark"] .path-inspection.error,
 :root[data-theme="dark"] .readiness-item.error,
+:root[data-theme="dark"] .diagnostic-summary-item.error,
 :root[data-theme="dark"] .result-strip.failed {
   border-color: rgba(240, 139, 119, 0.55);
   background: #3b201d;
@@ -1671,6 +1875,7 @@ label span {
 :root[data-theme="dark"] .path-inspection.warn,
 :root[data-theme="dark"] .risk-pill.warn,
 :root[data-theme="dark"] .source-blockers span,
+:root[data-theme="dark"] .diagnostic-summary-item.warn .diagnostic-summary-icon,
 :root[data-theme="dark"] .result-strip.cancelled {
   border-color: rgba(224, 174, 90, 0.55);
   background: #332817;
@@ -1678,6 +1883,8 @@ label span {
 }
 
 :root[data-theme="dark"] .path-inspection.ok,
+:root[data-theme="dark"] .first-run-item.done,
+:root[data-theme="dark"] .diagnostic-summary-item.ok .diagnostic-summary-icon,
 :root[data-theme="dark"] .result-strip.success {
   border-color: rgba(105, 210, 139, 0.5);
   background: #163423;
@@ -1685,10 +1892,16 @@ label span {
 }
 
 :root[data-theme="dark"] .result-strip.running,
-:root[data-theme="dark"] .log-filters button.selected {
+:root[data-theme="dark"] .log-filters button.selected,
+:root[data-theme="dark"] .summary-next-step {
   border-color: rgba(66, 184, 189, 0.62);
   background: var(--accent-soft);
   color: var(--accent-ink);
+}
+
+:root[data-theme="dark"] .diagnostic-summary-item.error .diagnostic-summary-icon {
+  background: #4a251f;
+  color: #ffb5a6;
 }
 
 :root[data-theme="dark"] .command-box code,
@@ -1734,6 +1947,7 @@ label span {
   }
 
   .diagnostic-grid,
+  .diagnostic-summary-grid,
   .readiness-grid,
   .review-grid,
   .summary-grid,
@@ -1800,11 +2014,12 @@ label span {
   .step-list,
   .quick-stats,
   .diagnostic-grid,
+  .diagnostic-summary-grid,
   .readiness-grid,
-    .review-grid,
-    .summary-grid,
-    .preset-grid,
-    .segment-grid {
+  .review-grid,
+  .summary-grid,
+  .preset-grid,
+  .segment-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1842,6 +2057,15 @@ label span {
   .path-field > div,
   .log-tools {
     grid-template-columns: 1fr;
+  }
+
+  .first-run-item {
+    grid-template-columns: 30px minmax(0, 1fr);
+  }
+
+  .first-run-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
   }
 
   .path-field .ghost-button {
