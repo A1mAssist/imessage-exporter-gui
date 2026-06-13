@@ -2,13 +2,21 @@
 
 ## Unreleased
 
+## v0.2.2 - 2026-06-13
+
 ### Changed
 - Made the language and theme controls larger and easier to notice in the top bar.
 - Simplified the Environment panel so the export engine row shows availability instead of the exporter version string.
+- Widened the desktop workspace so maximized browser and app windows use more of the available space.
 
 ### Fixed
 - Completed English localization coverage for export presets, output folder warnings, diagnostic report text, and dynamic review labels.
 - Added smoke coverage that scans the English mock flow for untranslated Chinese text.
+- Fixed the available export engine status icon so it uses the green success state.
+- Fixed the language and theme toggle backgrounds in dark mode.
+
+### Packaging
+- Bumped the app, Tauri, and Rust crate versions to `0.2.2`.
 
 ## v0.2.1 - 2026-06-13
 
