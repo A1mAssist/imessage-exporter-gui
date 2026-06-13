@@ -67,7 +67,8 @@ function Assert-SupportedBundleTarget {
 function Add-ArtifactsFromPattern {
     param(
         [System.Collections.Generic.List[object]]$Artifacts,
-        [Parameter(Mandatory = $true)][string]$Pattern
+        [Parameter(Mandatory = $true)][string]$Pattern,
+        [Parameter(Mandatory = $true)][string]$Prefix
     )
 
     if ($null -eq $Artifacts) {
@@ -75,17 +76,40 @@ function Add-ArtifactsFromPattern {
     }
 
     Get-ChildItem -Path $Pattern -File -ErrorAction SilentlyContinue | ForEach-Object {
-        [void]$Artifacts.Add($_)
+        if ($_.Name.StartsWith($Prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+            [void]$Artifacts.Add($_)
+        }
     }
 }
 
+function Get-CargoTargetDir {
+    if ($env:CARGO_TARGET_DIR) {
+        if ([System.IO.Path]::IsPathRooted($env:CARGO_TARGET_DIR)) {
+            return [System.IO.Path]::GetFullPath($env:CARGO_TARGET_DIR)
+        }
+        return [System.IO.Path]::GetFullPath((Join-Path $Root $env:CARGO_TARGET_DIR))
+    }
+
+    return Join-Path $Root "src-tauri/target"
+}
+
+function Get-ArtifactPrefix {
+    $TauriConfig = Get-Content -LiteralPath (Join-Path $Root "src-tauri/tauri.conf.json") -Raw | ConvertFrom-Json
+    return "$($TauriConfig.productName)_$($TauriConfig.version)"
+}
+
+function Get-BundleRoot {
+    return Join-Path (Get-CargoTargetDir) "release/bundle"
+}
+
 function Find-ReleaseArtifacts {
-    $BundleRoot = Join-Path $Root "src-tauri/target/release/bundle"
+    $BundleRoot = Get-BundleRoot
+    $Prefix = Get-ArtifactPrefix
     $Artifacts = [System.Collections.Generic.List[object]]::new()
 
-    Add-ArtifactsFromPattern $Artifacts (Join-Path $BundleRoot "nsis/*.exe")
-    Add-ArtifactsFromPattern $Artifacts (Join-Path $BundleRoot "msi/*.msi")
-    Add-ArtifactsFromPattern $Artifacts (Join-Path $BundleRoot "dmg/*.dmg")
+    Add-ArtifactsFromPattern $Artifacts (Join-Path $BundleRoot "nsis/*.exe") $Prefix
+    Add-ArtifactsFromPattern $Artifacts (Join-Path $BundleRoot "msi/*.msi") $Prefix
+    Add-ArtifactsFromPattern $Artifacts (Join-Path $BundleRoot "dmg/*.dmg") $Prefix
 
     return $Artifacts | Sort-Object FullName -Unique
 }
@@ -126,7 +150,7 @@ try {
 
     $Artifacts = Find-ReleaseArtifacts
     if (-not $Artifacts -or $Artifacts.Count -eq 0) {
-        throw "No release artifacts were found under src-tauri/target/release/bundle."
+        throw "No release artifacts for $(Get-ArtifactPrefix) were found under $(Get-BundleRoot)."
     }
 
     Invoke-Checked "Collect release artifacts" {

@@ -22,6 +22,36 @@ function Invoke-Checked {
     }
 }
 
+function Get-CargoTargetDir {
+    if ($env:CARGO_TARGET_DIR) {
+        if ([System.IO.Path]::IsPathRooted($env:CARGO_TARGET_DIR)) {
+            return [System.IO.Path]::GetFullPath($env:CARGO_TARGET_DIR)
+        }
+        return [System.IO.Path]::GetFullPath((Join-Path $Root $env:CARGO_TARGET_DIR))
+    }
+
+    return Join-Path $Root "src-tauri\target"
+}
+
+function Get-ArtifactPrefix {
+    $TauriConfig = Get-Content -LiteralPath (Join-Path $Root "src-tauri\tauri.conf.json") -Raw | ConvertFrom-Json
+    return "$($TauriConfig.productName)_$($TauriConfig.version)"
+}
+
+function Get-CurrentInstallers {
+    param(
+        [Parameter(Mandatory = $true)][string]$BundleRoot
+    )
+
+    $Prefix = Get-ArtifactPrefix
+    @(
+        Get-ChildItem -Path (Join-Path $BundleRoot "nsis") -Filter "*.exe" -File -ErrorAction SilentlyContinue
+        Get-ChildItem -Path (Join-Path $BundleRoot "msi") -Filter "*.msi" -File -ErrorAction SilentlyContinue
+    ) | Where-Object {
+        $_ -and $_.Name.StartsWith($Prefix, [System.StringComparison]::OrdinalIgnoreCase)
+    }
+}
+
 Push-Location $Root
 try {
     $VerifyArgs = @("-ExecutionPolicy", "Bypass", "-File", (Join-Path $Root "scripts\verify.ps1"), "-Native")
@@ -33,14 +63,11 @@ try {
         & powershell @VerifyArgs
     }
 
-    $BundleRoot = Join-Path $Root "src-tauri\target\release\bundle"
-    $Installers = @(
-        Get-ChildItem -Path (Join-Path $BundleRoot "nsis") -Filter "*.exe" -File -ErrorAction SilentlyContinue
-        Get-ChildItem -Path (Join-Path $BundleRoot "msi") -Filter "*.msi" -File -ErrorAction SilentlyContinue
-    ) | Where-Object { $_ }
+    $BundleRoot = Join-Path (Get-CargoTargetDir) "release\bundle"
+    $Installers = @(Get-CurrentInstallers -BundleRoot $BundleRoot)
 
     if (-not $Installers -or $Installers.Count -eq 0) {
-        throw "No Windows installers were found under $BundleRoot."
+        throw "No Windows installers for $(Get-ArtifactPrefix) were found under $BundleRoot."
     }
 
     Invoke-Checked "Collect installers" {

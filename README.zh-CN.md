@@ -14,9 +14,9 @@
 
 ## 下载安装
 
-普通用户不需要拉取源码，也不需要安装 Node.js、Rust 或 Visual Studio Build Tools。直接从 GitHub Releases 下载当前 beta 安装包即可：
+普通用户不需要拉取源码，也不需要安装 Node.js、Rust 或 Visual Studio Build Tools。直接从 GitHub Releases 下载当前安装包即可：
 
-[下载当前 beta 版本](https://github.com/A1mAssist/imessage-exporter-gui/releases)
+[下载当前版本](https://github.com/A1mAssist/imessage-exporter-gui/releases)
 
 按系统选择文件：
 

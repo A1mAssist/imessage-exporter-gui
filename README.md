@@ -14,9 +14,9 @@ It turns the common export flow into a guided app: choose an iOS backup, configu
 
 ## Download
 
-You do not need to clone the source code or install Node.js, Rust, or Visual Studio Build Tools. Download the current beta installer from GitHub Releases:
+You do not need to clone the source code or install Node.js, Rust, or Visual Studio Build Tools. Download the current installer from GitHub Releases:
 
-[Download the current beta release](https://github.com/A1mAssist/imessage-exporter-gui/releases)
+[Download the current release](https://github.com/A1mAssist/imessage-exporter-gui/releases)
 
 Choose the file for your system:
 

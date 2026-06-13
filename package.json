@@ -1,9 +1,10 @@
 {
   "name": "imessage-exporter-gui",
-  "version": "0.2.2",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "license": "GPL-3.0-only",
+  "author": "A1mAssist",
   "scripts": {
     "dev": "vite --configLoader runner --host 127.0.0.1 --port 1420",
     "dev:mock": "vite --configLoader runner --host 127.0.0.1 --port 1421 --open /?mock=1",
