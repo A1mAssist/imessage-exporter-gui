@@ -53,7 +53,10 @@ try {
   });
 
   await page.goto(baseUrl, { waitUntil: "networkidle" });
+  await assertOnboardingDialog(page);
+  await dismissOnboardingIfPresent(page);
   await assertHealthyApp(page, "source desktop");
+  await assertLanguageRoundTrip(page);
   await assertReadinessBand(page);
   await assertFirstRunGuide(page);
   await assertThemeToggle(page);
@@ -233,6 +236,35 @@ async function assertReadinessBand(page) {
   if (!text.includes("导出引擎")) throw new Error("Readiness band did not show exporter status");
 }
 
+async function assertOnboardingDialog(page) {
+  const dialog = page.getByRole("dialog", { name: "首次设置指引" });
+  await dialog.waitFor({ timeout: 5000 });
+  const text = await dialog.textContent();
+  for (const expected of ["首次设置指引", "准备导出引擎", "选择 iOS 备份", "运行诊断", "开始设置"]) {
+    if (!text?.includes(expected)) throw new Error(`OOBE dialog did not include ${expected}`);
+  }
+}
+
+async function dismissOnboardingIfPresent(page) {
+  const dialog = page.locator(".oobe-dialog");
+  if (await dialog.isVisible().catch(() => false)) {
+    await page.locator(".oobe-footer .secondary-button").click();
+    await dialog.waitFor({ state: "detached", timeout: 5000 });
+  }
+}
+
+async function assertLanguageRoundTrip(page) {
+  await page.getByRole("button", { name: "English" }).click();
+  await page.waitForFunction(() => document.querySelector(".app-shell")?.textContent?.includes("Data Source"));
+  const englishText = await page.locator(".app-shell").textContent();
+  if (!englishText?.includes("Setup Guide")) throw new Error("English UI did not render the compact setup guide action");
+
+  await page.getByRole("button", { name: "中文" }).click();
+  await page.waitForFunction(() => document.querySelector(".app-shell")?.textContent?.includes("数据源"));
+  const chineseText = await page.locator(".app-shell").textContent();
+  if (!chineseText?.includes("设置向导")) throw new Error("Chinese UI did not return after switching from English");
+}
+
 async function assertFirstRunGuide(page) {
   const text = await page.locator(".first-run-guide").textContent();
   if (!text?.includes("首次导出清单")) throw new Error("First-run checklist was not rendered");
@@ -372,6 +404,7 @@ async function assertPersistedSettingsDoNotLeak(page, secret) {
 async function assertSavedManualBackupIsValidated(browser) {
   const page = await browser.newPage({ viewport: { width: 1120, height: 900 }, deviceScaleFactor: 1 });
   await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
+  await dismissOnboardingIfPresent(page);
   await page.evaluate(() => {
     window.localStorage.setItem(
       "imessage-exporter-gui.exportSettings.v1",
@@ -390,6 +423,7 @@ async function assertSavedManualBackupIsValidated(browser) {
     );
   });
   await page.reload({ waitUntil: "networkidle" });
+  await dismissOnboardingIfPresent(page);
 
   const backupStatus = await page.locator(".fact-list").textContent();
   if (!backupStatus?.includes("Manifest.db") || !backupStatus.includes("Info.plist") || !backupStatus.includes("存在")) {
@@ -405,6 +439,7 @@ async function assertSavedManualBackupIsValidated(browser) {
 async function assertMissingExporterBlocksExport(browser) {
   const page = await browser.newPage({ viewport: { width: 1120, height: 900 }, deviceScaleFactor: 1 });
   await page.goto(`${baseUrl}&missingExporter=1`, { waitUntil: "networkidle" });
+  await dismissOnboardingIfPresent(page);
   await page.getByRole("button", { name: /^选项$/ }).click();
 
   const text = await page.locator(".app-shell").textContent();
@@ -481,6 +516,7 @@ async function assertTxtResultsExposeTxtAction(browser) {
   });
 
   await page.goto(baseUrl, { waitUntil: "networkidle" });
+  await dismissOnboardingIfPresent(page);
   await page.getByLabel("备份密码").fill("txt-password");
   await sourceDiagnosticsButton(page).click();
   await waitForExitZero(page);
@@ -613,6 +649,7 @@ async function assertDiagnosticReportDoesNotLeak(browser) {
   const secret = "report-password";
   const page = await browser.newPage({ viewport: { width: 1120, height: 900 }, deviceScaleFactor: 1 });
   await page.goto(baseUrl, { waitUntil: "networkidle" });
+  await dismissOnboardingIfPresent(page);
   await page.getByLabel("备份密码").fill(secret);
   await sourceDiagnosticsButton(page).click();
   await waitForExitZero(page);
@@ -661,6 +698,7 @@ async function assertFirstUseEmptyState(browser) {
   const context = await browser.newContext({ viewport: { width: 1120, height: 900 }, deviceScaleFactor: 1 });
   const page = await context.newPage();
   await page.goto(`${baseUrl}&emptyBackups=1`, { waitUntil: "networkidle" });
+  await dismissOnboardingIfPresent(page);
   const text = await page.locator(".backup-empty-guidance").textContent();
   if (!text?.includes("没有自动发现本机 iOS 备份") || !text.includes("Apple Devices") || !text.includes("iTunes")) {
     throw new Error("First-use empty state did not show Apple Devices/iTunes guidance");
@@ -686,6 +724,7 @@ async function assertAutoClearPasswordAfterDiagnostics(browser) {
   const secret = "auto-clear-password";
   const page = await browser.newPage({ viewport: { width: 1120, height: 900 }, deviceScaleFactor: 1 });
   await page.goto(baseUrl, { waitUntil: "networkidle" });
+  await dismissOnboardingIfPresent(page);
   await page.getByLabel("备份密码").fill(secret);
   await page.getByLabel("任务结束后自动清除密码").check();
   await assertPersistedSettingsDoNotLeak(page, secret);
@@ -712,6 +751,7 @@ async function assertCopyActions(page) {
 async function openOptionsPage(browser, url, secret) {
   const page = await browser.newPage({ viewport: { width: 1120, height: 900 }, deviceScaleFactor: 1 });
   await page.goto(url, { waitUntil: "networkidle" });
+  await dismissOnboardingIfPresent(page);
   await page.getByLabel("备份密码").fill(secret);
   await sourceDiagnosticsButton(page).click();
   await waitForExitZero(page);

@@ -27,6 +27,7 @@ import {
   ShieldAlert,
   Sun,
   TerminalSquare,
+  X,
   UserRound,
 } from "lucide-react";
 
@@ -82,6 +83,7 @@ const steps: Array<{ id: WizardStep; label: string; icon: typeof Database }> = [
 
 const maxArchivePathAttempts = 50;
 const exporterDownloadUrl = "https://github.com/ReagentX/imessage-exporter/releases/latest";
+const onboardingStorageKey = "imessage-exporter-gui.oobe.dismissed.v1";
 
 type SettingsSaveState = "saved" | "saving" | "failed" | "cleared";
 type JobOutcome = { kind: "idle" | "running" | "succeeded" | "failed" | "cancelled"; code?: number; message?: string };
@@ -92,6 +94,7 @@ export default function App() {
   const { theme, setTheme } = useAppTheme();
   useDocumentLocalization(language);
   const [step, setStep] = useState<WizardStep>("source");
+  const [showOnboarding, setShowOnboarding] = useState(() => !loadOnboardingDismissed());
   const [environment, setEnvironment] = useState<EnvironmentStatus>();
   const [backups, setBackups] = useState<BackupCandidate[]>([]);
   const [selectedBackup, setSelectedBackup] = useState<BackupCandidate>();
@@ -475,8 +478,17 @@ export default function App() {
     }
   }
 
+  function dismissOnboarding() {
+    saveOnboardingDismissed();
+    setShowOnboarding(false);
+  }
+
+  function openOnboarding() {
+    setShowOnboarding(true);
+  }
+
   return (
-    <main className="app-shell">
+    <main className="app-shell" key={language}>
       <aside className="sidebar">
         <div className="brand">
           <MessageSquareText size={28} />
@@ -484,10 +496,6 @@ export default function App() {
             <h1>iMessage Exporter</h1>
             <p>Windows iOS 备份导出向导</p>
           </div>
-        </div>
-        <div className="preference-controls">
-          <LanguageToggle language={language} onChange={setLanguage} />
-          <ThemeToggle theme={theme} onChange={setTheme} />
         </div>
 
         <nav className="step-list" aria-label="导出步骤">
@@ -541,6 +549,11 @@ export default function App() {
           exportPath={config.exportPath}
           environment={environment}
           running={Boolean(runningJobId)}
+          language={language}
+          onLanguageChange={setLanguage}
+          theme={theme}
+          onThemeChange={setTheme}
+          onOpenOnboarding={openOnboarding}
         />
 
         {error ? (
@@ -631,6 +644,25 @@ export default function App() {
           />
         )}
       </section>
+
+      {showOnboarding ? (
+        <OnboardingDialog
+          backup={selectedBackup}
+          config={config}
+          environment={environment}
+          diagnosticsSucceeded={diagnosticsSucceeded}
+          diagnosticsBlockers={sourceDiagnosticsBlockers(config, selectedBackup, environment)}
+          onChooseExporter={chooseExporterPath}
+          onOpenExporterDownload={openExporterDownload}
+          onChooseBackup={chooseBackupPath}
+          onRunDiagnostics={startDiagnostics}
+          onClose={dismissOnboarding}
+          onStart={() => {
+            setStep("source");
+            dismissOnboarding();
+          }}
+        />
+      ) : null}
     </main>
   );
 }
@@ -702,6 +734,22 @@ function stepCompletionMap(
 function needsExportPathConfirmation(status?: ExportPathStatus): boolean {
   if (!status?.exists || !status.isDirectory) return false;
   return Boolean((status.entryCount ?? 0) > 0 || status.containsHtml || status.containsTxt || status.containsAttachments);
+}
+
+function loadOnboardingDismissed(): boolean {
+  try {
+    return typeof window !== "undefined" && window.localStorage.getItem(onboardingStorageKey) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function saveOnboardingDismissed() {
+  try {
+    window.localStorage.setItem(onboardingStorageKey, "true");
+  } catch {
+    // OOBE can still be dismissed for this session if storage is unavailable.
+  }
 }
 
 function terminalOutcome(event: JobEvent, cancelRequested: boolean): JobOutcome {
@@ -853,18 +901,38 @@ function TopBar({
   exportPath,
   environment,
   running,
+  language,
+  onLanguageChange,
+  theme,
+  onThemeChange,
+  onOpenOnboarding,
 }: {
   activeStepLabel: string;
   backup?: BackupCandidate;
   exportPath: string;
   environment?: EnvironmentStatus;
   running: boolean;
+  language: "en" | "zh-CN";
+  onLanguageChange: (language: "en" | "zh-CN") => void;
+  theme: "system" | "light" | "dark";
+  onThemeChange: (theme: "system" | "light" | "dark") => void;
+  onOpenOnboarding: () => void;
 }) {
   return (
     <header className="topbar">
-      <div>
-        <span className="workspace-kicker">Export Workspace</span>
-        <h2>{activeStepLabel}</h2>
+      <div className="topbar-title">
+        <div>
+          <span className="workspace-kicker">Export Workspace</span>
+          <h2>{activeStepLabel}</h2>
+        </div>
+        <div className="topbar-utilities" aria-label="界面设置">
+          <button className="guide-chip" type="button" onClick={onOpenOnboarding}>
+            <Info size={15} />
+            设置向导
+          </button>
+          <LanguageToggle language={language} onChange={onLanguageChange} />
+          <ThemeToggle theme={theme} onChange={onThemeChange} />
+        </div>
       </div>
       <div className="quick-stats" aria-label="当前导出状态">
         <QuickStat icon={<Database size={16} />} label="备份" value={backup?.displayName ?? "未选择"} tone={backup?.valid ? "ok" : "neutral"} />
@@ -901,11 +969,11 @@ function QuickStat({
 function LanguageToggle({ language, onChange }: { language: "en" | "zh-CN"; onChange: (language: "en" | "zh-CN") => void }) {
   return (
     <div className="language-toggle" aria-label="Language">
-      <button className={language === "en" ? "selected" : ""} type="button" onClick={() => onChange("en")} aria-pressed={language === "en"}>
-        English
+      <button className={language === "en" ? "selected" : ""} type="button" onClick={() => onChange("en")} aria-label="English" aria-pressed={language === "en"}>
+        EN
       </button>
-      <button className={language === "zh-CN" ? "selected" : ""} type="button" onClick={() => onChange("zh-CN")} aria-pressed={language === "zh-CN"}>
-        中文
+      <button className={language === "zh-CN" ? "selected" : ""} type="button" onClick={() => onChange("zh-CN")} aria-label="中文" aria-pressed={language === "zh-CN"}>
+        中
       </button>
     </div>
   );
@@ -921,9 +989,16 @@ function ThemeToggle({ theme, onChange }: { theme: "system" | "light" | "dark"; 
   return (
     <div className="theme-toggle" aria-label="主题">
       {options.map((option) => (
-        <button className={theme === option.value ? "selected" : ""} key={option.value} type="button" onClick={() => onChange(option.value)} aria-pressed={theme === option.value} title={option.label}>
+        <button
+          aria-label={option.label}
+          className={theme === option.value ? "selected" : ""}
+          key={option.value}
+          type="button"
+          onClick={() => onChange(option.value)}
+          aria-pressed={theme === option.value}
+          title={option.label}
+        >
           {option.icon}
-          <span>{option.label}</span>
         </button>
       ))}
     </div>
@@ -1354,6 +1429,123 @@ function FirstRunGuide({
         ))}
       </div>
     </section>
+  );
+}
+
+function OnboardingDialog({
+  backup,
+  config,
+  environment,
+  diagnosticsSucceeded,
+  diagnosticsBlockers,
+  onChooseExporter,
+  onOpenExporterDownload,
+  onChooseBackup,
+  onRunDiagnostics,
+  onClose,
+  onStart,
+}: {
+  backup?: BackupCandidate;
+  config: ExportConfig;
+  environment?: EnvironmentStatus;
+  diagnosticsSucceeded: boolean;
+  diagnosticsBlockers: string[];
+  onChooseExporter: () => void;
+  onOpenExporterDownload: () => void;
+  onChooseBackup: () => void;
+  onRunDiagnostics: () => void;
+  onClose: () => void;
+  onStart: () => void;
+}) {
+  const engineReady = Boolean(environment?.exporterAvailable);
+  const backupReady = Boolean(config.backupPath.trim() && backup?.valid);
+  const passwordReady = !config.encrypted || Boolean(config.cleartextPassword?.trim());
+  const canRunDiagnostics = diagnosticsBlockers.length === 0;
+  const items: Array<{ label: string; detail: string; done: boolean; icon: ReactNode }> = [
+    {
+      label: "准备导出引擎",
+      detail: engineReady ? "已检测到 imessage-exporter，可以继续。" : "GUI 不内置导出引擎，请先下载或选择本机可执行文件。",
+      done: engineReady,
+      icon: <TerminalSquare size={17} />,
+    },
+    {
+      label: "选择 iOS 备份",
+      detail: backupReady ? backup?.displayName ?? "备份目录已就绪。" : "选择 Apple Devices 或 iTunes 创建的本机 iOS 备份根目录。",
+      done: backupReady && passwordReady,
+      icon: <Database size={17} />,
+    },
+    {
+      label: "运行诊断",
+      detail: diagnosticsSucceeded ? "诊断已通过，可以继续设置导出选项。" : "先确认数据库、附件、联系人和转换器状态。",
+      done: diagnosticsSucceeded,
+      icon: <Search size={17} />,
+    },
+  ];
+
+  return (
+    <div className="oobe-backdrop">
+      <section className="oobe-dialog" role="dialog" aria-modal="true" aria-labelledby="oobe-title">
+        <button className="icon-button oobe-close" type="button" onClick={onClose} aria-label="关闭首次设置指引">
+          <X size={16} />
+        </button>
+        <div className="oobe-header">
+          <span className="oobe-mark">
+            <MessageSquareText size={22} />
+          </span>
+          <div>
+            <span className="workspace-kicker">First Run</span>
+            <h2 id="oobe-title">首次设置指引</h2>
+            <p>按这条路线完成第一次导出；以后可以从顶部重新打开这个向导。</p>
+          </div>
+        </div>
+        <div className="oobe-steps">
+          {items.map((item, index) => (
+            <div className={item.done ? "oobe-step done" : "oobe-step"} key={item.label}>
+              <span className="oobe-step-icon">{item.done ? <CheckCircle2 size={17} /> : item.icon}</span>
+              <span>
+                <small>{index + 1}</small>
+                <strong>{item.label}</strong>
+                <em>{item.detail}</em>
+              </span>
+            </div>
+          ))}
+        </div>
+        <div className="oobe-actions" aria-label="首次设置操作">
+          <button className="ghost-button" type="button" onClick={onOpenExporterDownload}>
+            <ExternalLink size={15} />
+            下载导出引擎
+          </button>
+          <button className="ghost-button" type="button" onClick={onChooseExporter}>
+            <FolderOpen size={15} />
+            选择导出引擎
+          </button>
+          <button className="ghost-button" type="button" onClick={onChooseBackup}>
+            <Database size={15} />
+            选择备份
+          </button>
+          <button
+            className="ghost-button"
+            type="button"
+            onClick={() => {
+              onRunDiagnostics();
+              onClose();
+            }}
+            disabled={!canRunDiagnostics}
+          >
+            <Search size={15} />
+            运行诊断
+          </button>
+        </div>
+        <footer className="oobe-footer">
+          <button className="secondary-button" type="button" onClick={onClose}>
+            稍后
+          </button>
+          <button className="primary-button" type="button" onClick={onStart}>
+            开始设置
+          </button>
+        </footer>
+      </section>
+    </div>
   );
 }
 

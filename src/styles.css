@@ -122,27 +122,24 @@ button:disabled {
   color: var(--muted);
 }
 
-.preference-controls {
-  display: grid;
-  gap: 8px;
-}
-
 .language-toggle {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px;
-  padding: 4px;
+  display: inline-grid;
+  grid-template-columns: repeat(2, 32px);
+  gap: 2px;
+  padding: 2px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 7px;
   background: var(--surface-strong);
 }
 
 .language-toggle button {
-  min-height: 32px;
+  min-height: 28px;
+  padding: 0;
   border: 0;
-  border-radius: 6px;
+  border-radius: 5px;
   background: transparent;
   color: var(--muted);
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -153,12 +150,12 @@ button:disabled {
 }
 
 .theme-toggle {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4px;
-  padding: 4px;
+  display: inline-grid;
+  grid-template-columns: repeat(3, 30px);
+  gap: 2px;
+  padding: 2px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 7px;
   background: var(--surface-strong);
 }
 
@@ -166,15 +163,12 @@ button:disabled {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  min-height: 32px;
-  padding: 0 6px;
+  min-height: 28px;
+  padding: 0;
   border: 0;
-  border-radius: 6px;
+  border-radius: 5px;
   background: transparent;
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 800;
 }
 
 .theme-toggle button.selected {
@@ -510,11 +504,37 @@ button:disabled {
 
 .topbar {
   display: grid;
-  grid-template-columns: minmax(180px, 260px) 1fr;
-  align-items: center;
+  grid-template-columns: minmax(280px, 360px) 1fr;
+  align-items: start;
   gap: 18px;
   max-width: 1180px;
   margin-bottom: 24px;
+}
+
+.topbar-title {
+  display: grid;
+  gap: 10px;
+}
+
+.topbar-utilities {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.guide-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.76);
+  color: #334155;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .workspace-kicker {
@@ -1026,6 +1046,145 @@ input:disabled {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 6px;
+}
+
+.oobe-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(17, 24, 32, 0.38);
+  backdrop-filter: blur(3px);
+}
+
+.oobe-dialog {
+  position: relative;
+  display: grid;
+  gap: 16px;
+  width: min(720px, 100%);
+  max-height: min(760px, calc(100vh - 48px));
+  overflow: auto;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 24px 80px rgba(17, 24, 32, 0.24);
+}
+
+.oobe-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+}
+
+.oobe-header {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 12px;
+  padding-right: 40px;
+}
+
+.oobe-header h2,
+.oobe-header p {
+  margin: 0;
+}
+
+.oobe-header h2 {
+  margin-top: 3px;
+  font-size: 24px;
+  letter-spacing: 0;
+}
+
+.oobe-header p {
+  margin-top: 5px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.oobe-mark {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+
+.oobe-steps {
+  display: grid;
+  gap: 10px;
+}
+
+.oobe-step {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-strong);
+}
+
+.oobe-step.done {
+  border-color: #bde7cb;
+  background: #f0fbf4;
+}
+
+.oobe-step-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 7px;
+  background: #eef2f6;
+  color: #526075;
+}
+
+.oobe-step.done .oobe-step-icon {
+  background: #dff5e8;
+  color: var(--green);
+}
+
+.oobe-step small,
+.oobe-step strong,
+.oobe-step em {
+  display: block;
+}
+
+.oobe-step small {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+
+.oobe-step strong {
+  margin-top: 2px;
+}
+
+.oobe-step em {
+  margin-top: 3px;
+  color: var(--muted);
+  font-style: normal;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.oobe-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.oobe-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 4px;
 }
 
 .readiness-band {
@@ -1787,6 +1946,7 @@ label span {
 :root[data-theme="dark"] .quick-stat-icon,
 :root[data-theme="dark"] .readiness-icon,
 :root[data-theme="dark"] .first-run-index,
+:root[data-theme="dark"] .oobe-step-icon,
 :root[data-theme="dark"] .diagnostic-summary-icon {
   background: #25313d;
   color: #b8c6d1;
@@ -1794,11 +1954,13 @@ label span {
 
 :root[data-theme="dark"] .env-panel,
 :root[data-theme="dark"] .content-band,
+:root[data-theme="dark"] .oobe-dialog,
 :root[data-theme="dark"] .command-box,
 :root[data-theme="dark"] .log-panel,
 :root[data-theme="dark"] .quick-stat,
 :root[data-theme="dark"] .backup-card,
 :root[data-theme="dark"] .first-run-item,
+:root[data-theme="dark"] .oobe-step,
 :root[data-theme="dark"] .diagnostic-summary-item,
 :root[data-theme="dark"] .review-item,
 :root[data-theme="dark"] .summary-item,
@@ -1814,6 +1976,7 @@ label span {
 :root[data-theme="dark"] .ghost-button,
 :root[data-theme="dark"] .icon-button,
 :root[data-theme="dark"] .secondary-button,
+:root[data-theme="dark"] .guide-chip,
 :root[data-theme="dark"] .resource-links button,
 :root[data-theme="dark"] .path-field > div > button:not(.ghost-button),
 :root[data-theme="dark"] .log-filters button {
@@ -1847,6 +2010,7 @@ label span {
 
 :root[data-theme="dark"] .readiness-item,
 :root[data-theme="dark"] .first-run-item,
+:root[data-theme="dark"] .oobe-step,
 :root[data-theme="dark"] .diagnostic-summary-item,
 :root[data-theme="dark"] .review-item,
 :root[data-theme="dark"] .summary-item {
@@ -1884,6 +2048,7 @@ label span {
 
 :root[data-theme="dark"] .path-inspection.ok,
 :root[data-theme="dark"] .first-run-item.done,
+:root[data-theme="dark"] .oobe-step.done,
 :root[data-theme="dark"] .diagnostic-summary-item.ok .diagnostic-summary-icon,
 :root[data-theme="dark"] .result-strip.success {
   border-color: rgba(105, 210, 139, 0.5);
@@ -2030,7 +2195,8 @@ label span {
 
   .toolbar,
   .footer-actions,
-  .result-actions {
+  .result-actions,
+  .oobe-footer {
     flex-direction: column;
     align-items: stretch;
   }
@@ -2046,8 +2212,24 @@ label span {
   }
 
   .primary-button,
-  .secondary-button {
+  .secondary-button,
+  .oobe-actions .ghost-button {
     width: 100%;
+  }
+
+  .oobe-backdrop {
+    align-items: start;
+    padding: 14px;
+  }
+
+  .oobe-dialog {
+    max-height: calc(100vh - 28px);
+    padding: 18px;
+  }
+
+  .oobe-header {
+    grid-template-columns: 1fr;
+    padding-right: 36px;
   }
 
   .password-row {
