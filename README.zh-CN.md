@@ -12,6 +12,8 @@
 
 ![导出完成](./preview/example-results-zh.png)
 
+`example-*` 图片用于 README 展示；`react-mock-*` 图片由 mock UI 烟测生成，作为发布前 QA 截图保留。
+
 ## 下载安装
 
 普通用户不需要拉取源码，也不需要安装 Node.js、Rust 或 Visual Studio Build Tools。直接从 GitHub Releases 下载当前安装包即可：
@@ -20,13 +22,16 @@
 
 按系统选择文件：
 
-- Windows：下载 `.exe` 或 `.msi` 安装包。
-- macOS：下载 `.dmg`。
+- Windows：普通个人安装推荐下载 `.exe` 安装包。
+- Windows 托管部署：如果公司设备管理、软件分发或管理员策略要求 MSI，请下载 `.msi`。
+- macOS Apple Silicon 或 Intel：下载 `.dmg`。
 
 当前安装包还没有代码签名，所以系统可能会弹出安全提示：
 
 - Windows SmartScreen：点击“更多信息”，然后选择“仍要运行”。
 - macOS Gatekeeper：如果提示无法打开，可以右键 App 选择“打开”，或到“系统设置 -> 隐私与安全性”允许打开。
+
+GUI 安装包不内置 `imessage-exporter`。首次运行时，可以通过设置向导或“运行环境”面板打开上游下载页，然后选择它的可执行文件。安装版可以在“关于与诊断”面板里检查 GitHub Releases 更新；更新包会通过 updater 签名校验，但应用安装包本身目前仍未做代码签名。
 
 ## 基本使用
 
@@ -39,6 +44,8 @@
 7. 运行诊断，确认数据库、附件和可选转换工具状态。
 8. 选择导出格式、附件策略、日期范围和输出目录。
 9. 开始导出，等待完成后打开输出目录或第一个结果文件。
+
+可以在“关于与诊断”面板里检查应用更新，并复制支持摘要；摘要会包含应用版本、平台、导出引擎路径和可选转换工具状态，便于反馈问题。
 
 常见备份位置：
 
@@ -54,6 +61,8 @@ macOS: ~/Library/Application Support/MobileSync/Backup
 - 中英文向导式界面：数据源、诊断、导出选项、结果。
 - 根据设备语言自动选择中文或英文；如果设备语言不是中文或英文，则默认英文。
 - 支持浅色、深色和跟随系统主题。
+- “关于与诊断”面板：显示应用版本、更新检查、引擎状态和可复制的支持摘要。
+- 安装版支持通过 GitHub Releases 自动检查更新。
 - 自动扫描本机 iOS 备份，也支持手动选择备份目录。
 - 检查 `Manifest.db`、`Info.plist` 等备份关键文件。
 - 从 `PATH` 检测外部 `imessage-exporter` 导出引擎，也支持在界面里选择可执行文件。

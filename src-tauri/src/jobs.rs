@@ -161,12 +161,6 @@ impl JobRegistry {
         Ok(())
     }
 
-    fn remove(&self, job_id: &str) {
-        if let Ok(mut guard) = self.inner.lock() {
-            guard.remove(job_id);
-        }
-    }
-
     fn spawn_waiter<S: JobEventSink>(
         &self,
         sink: S,

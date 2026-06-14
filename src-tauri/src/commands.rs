@@ -10,14 +10,29 @@ use crate::{
     cli, environment,
     jobs::JobRegistry,
     models::{
-        BackupCandidate, CommandPreview, EnvironmentStatus, ExportConfig, ExportFormat,
-        ExportPathStatus, JobStarted, ResourceFile, SourceConfig,
+        AppDiagnostics, BackupCandidate, CommandPreview, ConversationCandidate, EnvironmentStatus,
+        ExportConfig, ExportFormat, ExportPathStatus, JobStarted, ResourceFile, SourceConfig,
     },
 };
 
 #[tauri::command]
 pub fn get_environment(exporter_path: Option<String>) -> EnvironmentStatus {
     environment::get_environment(exporter_path.as_deref())
+}
+
+#[tauri::command]
+pub fn get_app_diagnostics(app: AppHandle) -> AppDiagnostics {
+    let package = app.package_info();
+    AppDiagnostics {
+        name: package.name.clone(),
+        version: package.version.to_string(),
+        identifier: app.config().identifier.clone(),
+        authors: package.authors.to_string(),
+        description: package.description.to_string(),
+        os: std::env::consts::OS.to_string(),
+        arch: std::env::consts::ARCH.to_string(),
+        family: std::env::consts::FAMILY.to_string(),
+    }
 }
 
 #[tauri::command]
@@ -28,6 +43,11 @@ pub fn scan_ios_backups() -> Vec<BackupCandidate> {
 #[tauri::command]
 pub fn validate_backup_path(path: String) -> BackupCandidate {
     environment::validate_backup_path(&path)
+}
+
+#[tauri::command]
+pub fn scan_conversations(backup_path: String) -> Result<Vec<ConversationCandidate>, String> {
+    crate::conversations::scan_conversations(Path::new(&backup_path))
 }
 
 #[tauri::command]

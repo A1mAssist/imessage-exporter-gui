@@ -68,7 +68,8 @@ function Add-ArtifactsFromPattern {
     param(
         [System.Collections.Generic.List[object]]$Artifacts,
         [Parameter(Mandatory = $true)][string]$Pattern,
-        [Parameter(Mandatory = $true)][string]$Prefix
+        [Parameter(Mandatory = $true)][string]$Prefix,
+        [string[]]$ExactNames = @()
     )
 
     if ($null -eq $Artifacts) {
@@ -76,7 +77,9 @@ function Add-ArtifactsFromPattern {
     }
 
     Get-ChildItem -Path $Pattern -File -ErrorAction SilentlyContinue | ForEach-Object {
-        if ($_.Name.StartsWith($Prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        $MatchesPrefix = $_.Name.StartsWith($Prefix, [System.StringComparison]::OrdinalIgnoreCase)
+        $MatchesExactName = $ExactNames -contains $_.Name
+        if ($MatchesPrefix -or $MatchesExactName) {
             [void]$Artifacts.Add($_)
         }
     }
@@ -108,8 +111,19 @@ function Find-ReleaseArtifacts {
     $Artifacts = [System.Collections.Generic.List[object]]::new()
 
     Add-ArtifactsFromPattern $Artifacts (Join-Path $BundleRoot "nsis/*.exe") $Prefix
+    Add-ArtifactsFromPattern $Artifacts (Join-Path $BundleRoot "nsis/*.zip") $Prefix
+    Add-ArtifactsFromPattern $Artifacts (Join-Path $BundleRoot "nsis/*.sig") $Prefix
     Add-ArtifactsFromPattern $Artifacts (Join-Path $BundleRoot "msi/*.msi") $Prefix
+    Add-ArtifactsFromPattern $Artifacts (Join-Path $BundleRoot "msi/*.zip") $Prefix
+    Add-ArtifactsFromPattern $Artifacts (Join-Path $BundleRoot "msi/*.sig") $Prefix
     Add-ArtifactsFromPattern $Artifacts (Join-Path $BundleRoot "dmg/*.dmg") $Prefix
+    Add-ArtifactsFromPattern $Artifacts (Join-Path $BundleRoot "dmg/*.tar.gz") $Prefix
+    Add-ArtifactsFromPattern $Artifacts (Join-Path $BundleRoot "dmg/*.zip") $Prefix
+    Add-ArtifactsFromPattern $Artifacts (Join-Path $BundleRoot "dmg/*.sig") $Prefix
+    Add-ArtifactsFromPattern $Artifacts (Join-Path $BundleRoot "macos/*.tar.gz") $Prefix
+    Add-ArtifactsFromPattern $Artifacts (Join-Path $BundleRoot "macos/*.sig") $Prefix
+    Add-ArtifactsFromPattern $Artifacts (Join-Path $BundleRoot "updater/*") $Prefix @("latest.json")
+    Add-ArtifactsFromPattern $Artifacts (Join-Path $BundleRoot "latest.json") $Prefix @("latest.json")
 
     return $Artifacts | Sort-Object FullName -Unique
 }
@@ -147,6 +161,13 @@ try {
         Invoke-InDirectory (Join-Path $Root "src-tauri") { cargo test }
     }
     Invoke-Checked "Build Tauri bundle ($ResolvedBundleTarget)" { npm run tauri build -- --bundles $ResolvedBundleTarget }
+
+    $RequestedTargets = $ResolvedBundleTarget.ToLowerInvariant().Split(",") | ForEach-Object { $_.Trim() }
+    if (($env:OS -eq "Windows_NT") -and ($RequestedTargets -contains "nsis")) {
+        Invoke-Checked "Installed artifact smoke test" {
+            powershell -ExecutionPolicy Bypass -File (Join-Path $Root "scripts\smoke-installed-windows.ps1") -BundleRoot (Get-BundleRoot)
+        }
+    }
 
     $Artifacts = Find-ReleaseArtifacts
     if (-not $Artifacts -or $Artifacts.Count -eq 0) {

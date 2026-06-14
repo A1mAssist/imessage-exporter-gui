@@ -61,11 +61,13 @@ try {
   await assertLanguageRoundTrip(page);
   await assertReadinessBand(page);
   await assertFirstRunGuide(page);
+  await assertAboutAndUpdaterPanel(browser);
+  console.log("smoke: about/updater passed");
   await assertThemeToggle(page);
   await assertEnvironmentFixList(page);
   await assertResourceLinks(page);
   await assertSettingsPersistenceStatus(page);
-  await assertInitialStepNavigation(page);
+  await assertInitialSectionNavigation(page);
   await assertIncompleteBackupBlocksDiagnostics(page);
   await assertPasswordClearControls(page);
   await page.screenshot({ path: join(previewDir, "react-mock-source.png"), fullPage: true });
@@ -78,7 +80,7 @@ try {
   console.log("smoke: source compact passed");
 
   await page.getByLabel("备份密码").fill("mock-password");
-  await assertReadyStepNavigation(page);
+  await assertReadySectionNavigation(page);
   await assertPersistedSettingsDoNotLeak(page, "mock-password");
   await sourceDiagnosticsButton(page).click();
   await waitForExitZero(page);
@@ -100,6 +102,7 @@ try {
   await assertOutputDirectoryWarning(page);
   await assertExportReview(page);
   await assertFormatSpecificControls(page);
+  await assertConversationPicker(page);
   await page.screenshot({ path: join(previewDir, "react-mock-options.png"), fullPage: true });
   await page.setViewportSize({ width: 720, height: 1000 });
   await assertHealthyApp(page, "options compact");
@@ -151,6 +154,8 @@ try {
   console.log("smoke: path copy passed");
   await assertFirstUseEmptyState(browser);
   console.log("smoke: empty state passed");
+  await assertConversationPickerFallbacks(browser);
+  console.log("smoke: conversation fallback passed");
   await assertAutoClearPasswordAfterDiagnostics(browser);
   console.log("smoke: auto-clear passed");
   await assertEnglishLocalizationCoverage(browser);
@@ -247,6 +252,15 @@ async function assertOnboardingDialog(page) {
   for (const expected of ["首次设置指引", "准备导出引擎", "选择 iOS 备份", "运行诊断", "开始设置"]) {
     if (!text?.includes(expected)) throw new Error(`OOBE dialog did not include ${expected}`);
   }
+  await assertDialogFocusTrap(page, ".oobe-dialog", "OOBE dialog");
+  await page.keyboard.press("Escape");
+  await dialog.waitFor({ state: "detached", timeout: 5000 });
+  const focusedLabel = await page.evaluate(() => document.activeElement?.textContent ?? document.activeElement?.getAttribute("aria-label") ?? "");
+  if (!focusedLabel.includes("设置向导")) {
+    throw new Error("OOBE dialog did not restore focus to the setup guide trigger");
+  }
+  await page.getByRole("button", { name: "设置向导" }).click();
+  await dialog.waitFor({ timeout: 5000 });
 }
 
 async function dismissOnboardingIfPresent(page) {
@@ -287,6 +301,10 @@ async function assertEnglishLocalizationCoverage(browser) {
   await page.goto(englishBaseUrl, { waitUntil: "networkidle" });
   await dismissOnboardingIfPresent(page);
   await assertNoUnexpectedCjk(page, "English source");
+  await page.getByRole("button", { name: "About" }).click();
+  await page.getByRole("dialog", { name: "About and Diagnostics" }).waitFor({ timeout: 5000 });
+  await assertNoUnexpectedCjk(page, "English about dialog");
+  await page.getByRole("button", { name: "Close About and Diagnostics" }).click();
 
   await page.getByLabel("Backup Password").fill("english-password");
   await page.locator(".footer-actions").getByRole("button", { name: /^Run Diagnostics$/ }).click();
@@ -340,6 +358,63 @@ async function assertFirstRunGuide(page) {
   for (const expected of ["准备导出引擎", "选择 iOS 备份", "运行诊断"]) {
     if (!text.includes(expected)) throw new Error(`First-run checklist did not include ${expected}`);
   }
+}
+
+async function assertAboutAndUpdaterPanel(browser) {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1 });
+  await page.goto(`${baseUrl}&updateAvailable=1`, { waitUntil: "networkidle" });
+  await dismissOnboardingIfPresent(page);
+  await page.getByRole("button", { name: "关于" }).click();
+  const dialog = page.getByRole("dialog", { name: "关于与诊断" });
+  await dialog.waitFor({ timeout: 5000 });
+  const text = await dialog.textContent();
+  for (const expected of ["应用信息", "自动更新", "导出引擎", "支持摘要", "复制摘要"]) {
+    if (!text?.includes(expected)) throw new Error(`About dialog did not include ${expected}`);
+  }
+  const snapshot = await dialog.locator(".support-snapshot").inputValue();
+  if (!snapshot.includes("iMessage Exporter GUI support snapshot") || !snapshot.includes("Exporter available: yes")) {
+    throw new Error("Support snapshot did not include app and exporter details");
+  }
+  await assertDialogFocusTrap(page, ".about-dialog", "About dialog");
+  await dialog.getByRole("button", { name: "检查更新" }).click();
+  await dialog.getByText("发现新版本", { exact: false }).waitFor({ timeout: 5000 });
+  await dialog.getByRole("button", { name: "下载并安装" }).click();
+  await dialog.getByText("更新已安装", { exact: false }).waitFor({ timeout: 5000 });
+  await page.screenshot({ path: join(previewDir, "react-mock-about.png"), fullPage: true });
+  await page.keyboard.press("Escape");
+  await dialog.waitFor({ state: "detached", timeout: 5000 });
+  const focusedLabel = await page.evaluate(() => document.activeElement?.textContent ?? document.activeElement?.getAttribute("aria-label") ?? "");
+  if (!focusedLabel.includes("关于")) {
+    throw new Error("About dialog did not restore focus to the About trigger");
+  }
+  await page.close();
+}
+
+async function assertDialogFocusTrap(page, selector, label) {
+  const escapedAfterShiftTab = await page.evaluate(async ({ selector }) => {
+    const dialog = document.querySelector(selector);
+    if (!(dialog instanceof HTMLElement)) return true;
+    dialog.focus();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true, cancelable: true }));
+    return !dialog.contains(document.activeElement);
+  }, { selector });
+  if (escapedAfterShiftTab) throw new Error(`${label} did not keep Shift+Tab focus inside the dialog`);
+
+  const escapedAfterTab = await page.evaluate(async ({ selector }) => {
+    const dialog = document.querySelector(selector);
+    if (!(dialog instanceof HTMLElement)) return true;
+    const focusable = Array.from(
+      dialog.querySelectorAll("button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])"),
+    ).filter((element) => element instanceof HTMLElement && getComputedStyle(element).visibility !== "hidden" && getComputedStyle(element).display !== "none");
+    const last = focusable.at(-1);
+    if (!(last instanceof HTMLElement)) return true;
+    last.focus();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }));
+    return !dialog.contains(document.activeElement);
+  }, { selector });
+  if (escapedAfterTab) throw new Error(`${label} did not keep Tab focus inside the dialog`);
 }
 
 async function assertThemeToggle(page) {
@@ -399,44 +474,44 @@ async function assertPasswordClearControls(page) {
   await assertNoVisibleTextLeak(page, secret);
 }
 
-async function assertInitialStepNavigation(page) {
-  const nav = page.locator(".step-list");
+async function assertInitialSectionNavigation(page) {
+  const nav = page.locator(".workspace-nav");
   const source = nav.getByRole("button", { name: /数据源/ });
   const diagnostics = nav.getByRole("button", { name: /诊断/ });
   const options = nav.getByRole("button", { name: /^选项$/ });
   const run = nav.getByRole("button", { name: /导出/ });
 
-  if ((await source.getAttribute("aria-current")) !== "step") {
-    throw new Error("Source step should be marked as the current step");
+  if ((await source.getAttribute("aria-current")) !== "page") {
+    throw new Error("Source section should be marked as the current page");
   }
   if (!(await diagnostics.isDisabled())) {
-    throw new Error("Diagnostics step should be disabled until the encrypted backup password is entered");
+    throw new Error("Diagnostics section should be disabled until the encrypted backup password is entered");
   }
   if (await options.isDisabled()) {
-    throw new Error("Options step should remain reachable once a valid backup is selected");
+    throw new Error("Options section should remain reachable once a valid backup is selected");
   }
   if (!(await run.isDisabled())) {
-    throw new Error("Run step should be disabled before an export job has started");
+    throw new Error("Run section should be disabled before an export job has started");
   }
   if ((await run.getAttribute("aria-disabled")) !== "true") {
-    throw new Error("Disabled run step should expose aria-disabled=true");
+    throw new Error("Disabled run section should expose aria-disabled=true");
   }
 }
 
-async function assertReadyStepNavigation(page) {
-  const nav = page.locator(".step-list");
+async function assertReadySectionNavigation(page) {
+  const nav = page.locator(".workspace-nav");
   const diagnostics = nav.getByRole("button", { name: /^诊断$/ });
   const options = nav.getByRole("button", { name: /^选项$/ });
   const run = nav.getByRole("button", { name: /导出/ });
 
   if (await diagnostics.isDisabled()) {
-    throw new Error("Diagnostics step should be reachable after entering the encrypted backup password");
+    throw new Error("Diagnostics section should be reachable after entering the encrypted backup password");
   }
   if (await options.isDisabled()) {
-    throw new Error("Options step should be reachable after source setup");
+    throw new Error("Options section should be reachable after source setup");
   }
   if (!(await run.isDisabled())) {
-    throw new Error("Run step should stay disabled until an export job has started");
+    throw new Error("Run section should stay disabled until an export job has started");
   }
 }
 
@@ -450,12 +525,12 @@ async function assertIncompleteBackupBlocksDiagnostics(page) {
   if (!(await diagnosticsButton.isDisabled())) {
     throw new Error("Diagnostics should be disabled for incomplete backups");
   }
-  const nav = page.locator(".step-list");
+  const nav = page.locator(".workspace-nav");
   if (!(await nav.getByRole("button", { name: /选项/ }).isDisabled())) {
-    throw new Error("Options step should be disabled for incomplete backups");
+    throw new Error("Options section should be disabled for incomplete backups");
   }
   if (!(await nav.getByRole("button", { name: /导出/ }).isDisabled())) {
-    throw new Error("Run step should be disabled for incomplete backups");
+    throw new Error("Run section should be disabled for incomplete backups");
   }
   await page.getByRole("button", { name: /A1mAssist 的 iPhone/ }).click();
 }
@@ -543,6 +618,29 @@ async function assertFormatSpecificControls(page) {
 
   await page.getByRole("button", { name: /^HTML/ }).click();
   await page.waitForFunction(() => document.querySelector(".command-box code")?.textContent?.includes("-f html"));
+}
+
+async function assertConversationPicker(page) {
+  const picker = page.getByLabel("会话筛选");
+  await page.getByLabel("搜索会话").fill("bank");
+  const filteredText = await page.locator(".conversation-picker").textContent();
+  if (!filteredText?.includes("已筛出 1 个会话")) {
+    throw new Error("Conversation search did not report the filtered result count");
+  }
+  await picker.selectOption("alerts@example.com");
+  await page.waitForFunction(() => document.querySelector(".command-box code")?.textContent?.includes("-t alerts@example.com"));
+  await page.getByLabel("搜索会话").fill("");
+  await page.getByLabel("排序").selectOption("recent");
+  await picker.selectOption("+15551234567");
+  await page.waitForFunction(() => document.querySelector(".command-box code")?.textContent?.includes("-t +15551234567"));
+  const commandText = await page.locator(".command-box code").textContent();
+  if (!commandText?.includes("-t +15551234567")) {
+    throw new Error("Conversation picker did not update the command preview");
+  }
+  const reviewText = await page.locator(".review-panel").textContent();
+  if (!reviewText?.includes("+15551234567")) {
+    throw new Error("Conversation picker selection was not reflected in the review panel");
+  }
 }
 
 async function assertDiagnosticDetails(page) {
@@ -808,6 +906,27 @@ async function assertAutoClearPasswordAfterDiagnostics(browser) {
   await assertPersistedSettingsDoNotLeak(page, secret);
   await assertNoVisibleTextLeak(page, secret);
   await page.close();
+}
+
+async function assertConversationPickerFallbacks(browser) {
+  const emptyPage = await openOptionsPage(browser, `${baseUrl}&emptyConversations=1`, "empty-conversation-password");
+  const emptyText = await emptyPage.locator(".conversation-picker").textContent();
+  if (!emptyText?.includes("没有读取到可选择的会话") || !emptyText.includes("手动输入筛选值")) {
+    throw new Error("Empty conversation list should explain the manual fallback");
+  }
+  await emptyPage.getByRole("button", { name: "手动输入筛选值" }).click();
+  await emptyPage.getByLabel("手动筛选值").fill("alerts@example.com");
+  await emptyPage.waitForFunction(() => document.querySelector(".command-box code")?.textContent?.includes("-t alerts@example.com"));
+  await emptyPage.close();
+
+  const failedPage = await openOptionsPage(browser, `${baseUrl}&conversationError=1`, "failed-conversation-password");
+  const failedText = await failedPage.locator(".conversation-picker").textContent();
+  if (!failedText?.includes("无法读取会话列表") || !failedText.includes("仍可手动输入")) {
+    throw new Error("Conversation scan failure should explain the manual fallback");
+  }
+  await failedPage.getByLabel("手动筛选值").fill("+15550001111");
+  await failedPage.waitForFunction(() => document.querySelector(".command-box code")?.textContent?.includes("-t +15550001111"));
+  await failedPage.close();
 }
 
 async function assertCopyActions(page) {

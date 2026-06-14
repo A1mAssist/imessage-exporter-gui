@@ -25,6 +25,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "publisher": "A1mAssist",
     "copyright": "Copyright (c) 2026 A1mAssist",
     "targets": ["nsis", "msi"],
@@ -51,5 +52,12 @@
       }
     }
   },
-  "plugins": {}
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/A1mAssist/imessage-exporter-gui/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlFREQ2RkMwMUVGRTBFRQpSV1R1NE84Qi9OYnRDWVkrenBJdnJ0M3lwR1g3VGgzeW0wVGw5a1p4NUVKcStIc2lqSG1UQk01ago="
+    }
+  }
 }

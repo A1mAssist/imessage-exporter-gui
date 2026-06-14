@@ -38,7 +38,7 @@ function Get-ArtifactPrefix {
     return "$($TauriConfig.productName)_$($TauriConfig.version)"
 }
 
-function Get-CurrentInstallers {
+function Get-CurrentWindowsArtifacts {
     param(
         [Parameter(Mandatory = $true)][string]$BundleRoot
     )
@@ -46,9 +46,15 @@ function Get-CurrentInstallers {
     $Prefix = Get-ArtifactPrefix
     @(
         Get-ChildItem -Path (Join-Path $BundleRoot "nsis") -Filter "*.exe" -File -ErrorAction SilentlyContinue
+        Get-ChildItem -Path (Join-Path $BundleRoot "nsis") -Filter "*.zip" -File -ErrorAction SilentlyContinue
+        Get-ChildItem -Path (Join-Path $BundleRoot "nsis") -Filter "*.sig" -File -ErrorAction SilentlyContinue
         Get-ChildItem -Path (Join-Path $BundleRoot "msi") -Filter "*.msi" -File -ErrorAction SilentlyContinue
+        Get-ChildItem -Path (Join-Path $BundleRoot "msi") -Filter "*.zip" -File -ErrorAction SilentlyContinue
+        Get-ChildItem -Path (Join-Path $BundleRoot "msi") -Filter "*.sig" -File -ErrorAction SilentlyContinue
+        Get-ChildItem -Path (Join-Path $BundleRoot "updater") -File -ErrorAction SilentlyContinue
+        Get-ChildItem -Path (Join-Path $BundleRoot "latest.json") -File -ErrorAction SilentlyContinue
     ) | Where-Object {
-        $_ -and $_.Name.StartsWith($Prefix, [System.StringComparison]::OrdinalIgnoreCase)
+        $_ -and ($_.Name.StartsWith($Prefix, [System.StringComparison]::OrdinalIgnoreCase) -or $_.Name -eq "latest.json")
     }
 }
 
@@ -64,20 +70,26 @@ try {
     }
 
     $BundleRoot = Join-Path (Get-CargoTargetDir) "release\bundle"
-    $Installers = @(Get-CurrentInstallers -BundleRoot $BundleRoot)
+    $Artifacts = @(Get-CurrentWindowsArtifacts -BundleRoot $BundleRoot)
 
-    if (-not $Installers -or $Installers.Count -eq 0) {
-        throw "No Windows installers for $(Get-ArtifactPrefix) were found under $BundleRoot."
+    if (-not $Artifacts -or $Artifacts.Count -eq 0) {
+        throw "No Windows artifacts for $(Get-ArtifactPrefix) were found under $BundleRoot."
+    }
+
+    Invoke-Checked "Installed artifact smoke test" {
+        powershell -ExecutionPolicy Bypass -File (Join-Path $Root "scripts\smoke-installed-windows.ps1") -BundleRoot $BundleRoot
     }
 
     Invoke-Checked "Collect installers" {
         New-Item -ItemType Directory -Force -Path $OutputPath | Out-Null
         Get-ChildItem -Path $OutputPath -File -ErrorAction SilentlyContinue | Remove-Item -Force
 
-        foreach ($Installer in $Installers) {
-            Copy-Item -LiteralPath $Installer.FullName -Destination $OutputPath -Force
-            Write-Host ("Copied {0}" -f $Installer.Name)
+        foreach ($Artifact in $Artifacts) {
+            Copy-Item -LiteralPath $Artifact.FullName -Destination $OutputPath -Force
+            Write-Host ("Copied {0}" -f $Artifact.Name)
         }
+
+        powershell -ExecutionPolicy Bypass -File (Join-Path $Root "scripts\create-updater-manifest.ps1") -ArtifactsDir $OutputDir
 
         $ChecksumPath = Join-Path $OutputPath "SHA256SUMS.txt"
         Get-ChildItem -Path $OutputPath -File |
@@ -91,7 +103,7 @@ try {
     }
 
     Write-Host ""
-    Write-Host "Windows installers are ready:"
+    Write-Host "Windows artifacts are ready:"
     Get-ChildItem -Path $OutputPath -File | Sort-Object Name | ForEach-Object {
         Write-Host ("  {0}" -f $_.FullName)
     }

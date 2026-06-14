@@ -15,8 +15,10 @@
     "check:static": "node scripts/sanity-check.mjs",
     "doctor": "powershell -ExecutionPolicy Bypass -File scripts/doctor.ps1",
     "icons": "node scripts/generate-icons.mjs",
+    "manifest:updater": "powershell -ExecutionPolicy Bypass -File scripts/create-updater-manifest.ps1",
     "package:release": "powershell -ExecutionPolicy Bypass -File scripts/package-release.ps1",
     "package:windows": "powershell -ExecutionPolicy Bypass -File scripts/package-windows.ps1",
+    "smoke:installed-windows": "powershell -ExecutionPolicy Bypass -File scripts/smoke-installed-windows.ps1",
     "smoke:mock-ui": "node scripts/smoke-mock-ui.mjs",
     "test": "vitest run --configLoader runner",
     "tauri": "tauri",
@@ -26,6 +28,8 @@
   "dependencies": {
     "@tauri-apps/api": "2.11.0",
     "@tauri-apps/plugin-dialog": "2.7.1",
+    "@tauri-apps/plugin-process": "2.3.1",
+    "@tauri-apps/plugin-updater": "2.10.1",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

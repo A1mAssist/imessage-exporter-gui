@@ -11,7 +11,7 @@ const en: Record<string, string> = {
   "选项": "Options",
   "导出": "Export",
   "Windows iOS 备份导出向导": "Windows iOS Backup Export Wizard",
-  "导出步骤": "Export steps",
+  "工作区导航": "Workspace navigation",
   "无法检查输出目录，请重新选择或确认权限。": "Could not inspect the output folder. Choose it again or check permissions.",
   "输出目录已有内容或疑似旧导出文件。继续导出会把新结果写入同一个目录，是否继续？": "The output folder already has files or looks like an old export. Continue writing the new export into this folder?",
   "输出路径已存在，但它不是文件夹。": "The output path already exists, but it is not a folder.",
@@ -91,9 +91,53 @@ const en: Record<string, string> = {
   "回到数据源": "Back to Data Source",
   "回到选项": "Back to Options",
   "重试": "Retry",
+  "数据准备": "Data Prep",
   "选择 iOS 备份": "Choose iOS Backup",
   "从 Apple Devices 或 iTunes 的本地备份导出 Messages 数据，不修改原始备份。": "Export Messages data from a local Apple Devices or iTunes backup without modifying the original backup.",
+  "诊断检查": "Diagnostics Check",
+  "导出设置": "Export Settings",
+  "运行结果": "Run Results",
   "设置向导": "Setup Guide",
+  "关于": "About",
+  "导出引擎设置": "Export Engine Setup",
+  "获取方式": "Source",
+  "已使用本机可执行文件": "Using a local executable",
+  "需要下载或选择 imessage-exporter.exe": "Download or choose imessage-exporter.exe",
+  "当前位置": "Current location",
+  "可用状态": "Availability",
+  "检测通过": "Detected",
+  "尚未检测到可用版本": "No usable version detected yet",
+  "已检测到 imessage-exporter，诊断和导出可以继续运行。": "imessage-exporter is detected. Diagnostics and exports can continue.",
+  "GUI 不内置 imessage-exporter；需要先下载或选择本机已有的可执行文件。": "The GUI does not bundle imessage-exporter. Download it or choose an existing executable on this computer.",
+  "需要设置": "Needs setup",
+  "打开下载页": "Open download page",
+  "重新检测": "Check again",
+  "关闭关于与诊断": "Close About and Diagnostics",
+  "App Diagnostics": "App Diagnostics",
+  "关于与诊断": "About and Diagnostics",
+  "查看版本、更新、导出引擎和运行环境信息；反馈问题时可以直接复制这份摘要。": "Review version, update, export engine, and runtime details. Copy the snapshot when reporting an issue.",
+  "应用信息": "App information",
+  "版本": "Version",
+  "标识符": "Identifier",
+  "平台": "Platform",
+  "作者": "Author",
+  "自动更新": "Automatic updates",
+  "正在连接 GitHub Release 检查新版本。": "Connecting to GitHub Releases to check for a new version.",
+  "更新已安装，应用正在重启。": "The update is installed. The app is restarting.",
+  "更新检查失败。可以稍后重试，或从 GitHub Releases 手动下载。": "Update check failed. Try again later, or download manually from GitHub Releases.",
+  "手动检查 GitHub Releases 上是否有新版本。": "Check GitHub Releases for a new version manually.",
+  "更新下载进度": "Update download progress",
+  "检查更新": "Check for updates",
+  "下载并安装": "Download and install",
+  "未检测到 imessage-exporter；可以下载新版或选择本机已有文件。": "imessage-exporter was not detected. Download the latest build or choose an existing local file.",
+  "获取 imessage-exporter": "Get imessage-exporter",
+  "可执行文件位置": "Executable location",
+  "可用性检测": "Availability check",
+  "未选择；会检查 PATH": "Not selected; PATH will be checked",
+  "支持摘要": "Support snapshot",
+  "复制这份信息可以快速说明版本、平台、引擎和依赖状态。": "Copy this information to summarize version, platform, engine, and dependency status.",
+  "支持诊断摘要": "Support diagnostics snapshot",
+  "复制摘要": "Copy snapshot",
   "首次导出清单": "First Export Checklist",
   "按顺序完成这三项，就能进入导出选项。": "Complete these three items in order, then continue to export options.",
   "First Run": "First Run",
@@ -205,9 +249,34 @@ const en: Record<string, string> = {
   "复制原始附件，Windows 第一版推荐。": "Copies original attachments. Recommended for the first Windows release.",
   "基础转换，需要 ffmpeg/ImageMagick。": "Basic conversion; requires ffmpeg/ImageMagick.",
   "完整转换，需要 ffmpeg/ImageMagick，耗时更久。": "Full conversion; requires ffmpeg/ImageMagick and takes longer.",
+  "日期范围": "Date Range",
   "开始日期": "Start Date",
   "结束日期": "End Date",
+  "清除日期": "Clear Dates",
   "会话筛选": "Conversation Filter",
+  "正在读取会话...": "Reading conversations...",
+  "正在从备份读取会话列表。": "Reading conversations from the backup.",
+  "选择一个会话，导出时会自动传入对应筛选值。": "Choose a conversation; the matching filter value will be passed to export.",
+  "会话列表不可用；手动输入后仍会把筛选值传给导出引擎。": "The conversation list is unavailable; manual entries are still passed to the export engine.",
+  "将使用手动筛选值导出指定会话。": "The manual filter value will be used for this export.",
+  "输入联系人、手机号或聊天标识来筛选单个会话。": "Enter a contact, phone number, or chat identifier to filter one conversation.",
+  "没有读取到可选择的会话；默认导出全部会话。": "No selectable conversations were found; all conversations will be exported by default.",
+  "无法读取会话列表：": "Could not read the conversation list: ",
+  "。仍可手动输入联系人、手机号或聊天标识继续导出。": ". You can still enter a contact, phone number, or chat identifier manually.",
+  "这个备份暂时没有可选择的会话列表；需要筛选时可以手动输入。": "This backup does not have a selectable conversation list right now; enter a filter manually if needed.",
+  "无法读取 Messages 数据库，可能是备份已加密或数据库不可直接访问": "Could not read the Messages database. The backup may be encrypted or the database may not be directly accessible.",
+  "搜索会话": "Search Conversations",
+  "姓名、手机号、邮箱或群聊": "Name, phone number, email, or group",
+  "排序": "Sort",
+  "消息最多": "Most messages",
+  "最近消息": "Recent messages",
+  "没有匹配的会话；可以换个关键词或手动输入。": "No conversations match. Try another keyword or enter a filter manually.",
+  "手动输入...": "Enter manually...",
+  "手动输入筛选值": "Enter filter manually",
+  "手动筛选值": "Manual Filter Value",
+  "清除会话": "Clear Conversation",
+  "群聊": "Group chat",
+  "单聊": "Direct chat",
   "联系人、手机号或聊天标识": "Contact, phone number, or chat identifier",
   "自定义显示名": "Custom Display Name",
   "留空使用默认联系人解析": "Leave blank to use default contact parsing",
@@ -368,6 +437,15 @@ export function translateText(language: AppLanguage, text: string): string {
   const exact = en[text];
   if (exact) return exact;
 
+  const updateAvailable = text.match(/^发现新版本 (.+)，当前版本 (.+)。$/);
+  if (updateAvailable) return `Version ${updateAvailable[1]} is available. Current version: ${updateAvailable[2]}.`;
+
+  const updateInstalling = text.match(/^正在下载 (.+)，安装后会重启应用。$/);
+  if (updateInstalling) return `Downloading ${updateInstalling[1]}. The app will restart after installation.`;
+
+  const updateCurrent = text.match(/^当前已经是最新版本 (.+)。$/);
+  if (updateCurrent) return `You are already on the latest version, ${updateCurrent[1]}.`;
+
   const withCode = text.match(/^(诊断|导出)(运行中|完成|已取消|失败)(?:，代码 (.+))?$/);
   if (withCode) {
     const action = withCode[1] === "诊断" ? "Diagnostics" : "Export";
@@ -375,6 +453,17 @@ export function translateText(language: AppLanguage, text: string): string {
     const stateText = state === "运行中" ? "running" : state === "完成" ? "complete" : state === "已取消" ? "cancelled" : "failed";
     return withCode[3] ? `${action} ${stateText}, code ${withCode[3]}` : `${action} ${stateText}`;
   }
+
+  const conversationScanFailure = text.match(/^无法读取会话列表：(.+)。仍可手动输入联系人、手机号或聊天标识继续导出。$/);
+  if (conversationScanFailure) {
+    return `Could not read the conversation list: ${translateText(language, conversationScanFailure[1])}. You can still enter a contact, phone number, or chat identifier manually.`;
+  }
+
+  const conversationFilterCount = text.match(/^已筛出 (.+) 个会话。$/);
+  if (conversationFilterCount) return `${conversationFilterCount[1]} conversation(s) shown.`;
+
+  const recentConversation = text.match(/^最近 (.+)$/);
+  if (recentConversation) return `Recent ${recentConversation[1]}`;
 
   const exit = text.match(/^进程退出，代码 (.+)$/);
   if (exit) return `Process exited, code ${exit[1]}`;

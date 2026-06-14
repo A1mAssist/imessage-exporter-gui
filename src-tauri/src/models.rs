@@ -12,6 +12,19 @@ pub struct EnvironmentStatus {
     pub warnings: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppDiagnostics {
+    pub name: String,
+    pub version: String,
+    pub identifier: String,
+    pub authors: String,
+    pub description: String,
+    pub os: String,
+    pub arch: String,
+    pub family: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ResourceFile {
@@ -39,6 +52,19 @@ pub struct BackupCandidate {
     pub has_info_plist: bool,
     pub encrypted: Option<bool>,
     pub valid: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationCandidate {
+    pub id: String,
+    pub title: String,
+    pub subtitle: Option<String>,
+    pub filter_value: String,
+    pub service: Option<String>,
+    pub message_count: usize,
+    pub last_message_at: Option<String>,
+    pub is_group: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

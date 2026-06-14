@@ -33,6 +33,25 @@ export type EnvironmentStatus = {
   warnings: string[];
 };
 
+export type AppDiagnostics = {
+  name: string;
+  version: string;
+  identifier: string;
+  authors: string;
+  description: string;
+  os: string;
+  arch: string;
+  family: string;
+};
+
+export type UpdateInfo = {
+  available: boolean;
+  currentVersion?: string;
+  version?: string;
+  date?: string;
+  body?: string;
+};
+
 export type BackupCandidate = {
   path: string;
   displayName: string;
@@ -42,6 +61,17 @@ export type BackupCandidate = {
   hasInfoPlist: boolean;
   encrypted?: boolean;
   valid: boolean;
+};
+
+export type ConversationCandidate = {
+  id: string;
+  title: string;
+  subtitle?: string;
+  filterValue: string;
+  service?: string;
+  messageCount: number;
+  lastMessageAt?: string;
+  isGroup: boolean;
 };
 
 export type ExportPathStatus = {
@@ -83,4 +113,4 @@ export type LogLine = {
   timestamp: number;
 };
 
-export type WizardStep = "source" | "diagnostics" | "options" | "run";
+export type WorkspaceSectionId = "source" | "diagnostics" | "options" | "run";
