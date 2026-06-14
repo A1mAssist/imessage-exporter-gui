@@ -70,6 +70,15 @@ function Invoke-NodeScript {
     & $Node (Join-Path $Root $Script) @Args
 }
 
+function Get-TauriBuildArgs {
+    if ($env:TAURI_SIGNING_PRIVATE_KEY) {
+        return @("build")
+    }
+
+    Write-Host "TAURI_SIGNING_PRIVATE_KEY is not set; building local unsigned installers."
+    return @("build", "--", "--no-sign")
+}
+
 $Node = Resolve-LocalTool "node"
 $Npm = Resolve-LocalTool "npm"
 $Cargo = Resolve-LocalTool "cargo"
@@ -150,6 +159,9 @@ try {
             Pop-Location
         }
     }
+    Invoke-Step "Real imessage-exporter CLI compatibility smoke" {
+        & powershell -ExecutionPolicy Bypass -File (Join-Path $Root "scripts\smoke-exporter-cli.ps1")
+    }
 
     if ($Native) {
         Invoke-Step "Rust tests" {
@@ -170,7 +182,7 @@ try {
                 Pop-Location
             }
         }
-        Invoke-Step "Tauri bundle" { & $Npm run tauri build }
+        Invoke-Step "Tauri bundle" { & $Npm run tauri @(Get-TauriBuildArgs) }
     }
     else {
         Invoke-Step "Native environment doctor" { & powershell -ExecutionPolicy Bypass -File (Join-Path $Root "scripts\doctor.ps1") }

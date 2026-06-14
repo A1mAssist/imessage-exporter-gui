@@ -424,23 +424,42 @@ async function assertThemeToggle(page) {
   await page.getByRole("button", { name: /系统/ }).click();
 }
 
+async function openEnvironmentDialog(page) {
+  const detailsButton = page.locator(".env-panel-actions .ghost-button").last();
+  await detailsButton.click();
+  const dialog = page.getByRole("dialog", { name: "运行环境详情" });
+  await dialog.waitFor({ timeout: 5000 });
+  return dialog;
+}
+
+async function closeEnvironmentDialog(page, dialog) {
+  await page.keyboard.press("Escape");
+  await dialog.waitFor({ state: "detached", timeout: 5000 });
+}
+
 async function assertEnvironmentFixList(page) {
-  const text = await page.locator(".env-fix-list").textContent();
+  const dialog = await openEnvironmentDialog(page);
+  const text = await dialog.locator(".env-fix-list").textContent();
   if (!text?.includes("缺失项处理")) throw new Error("Environment fix list was not rendered");
   if (!text.includes("setup-windows.ps1")) throw new Error("Environment fix list did not show converter install command");
+  await closeEnvironmentDialog(page, dialog);
 }
 
 async function assertResourceLinks(page) {
-  const text = await page.locator(".resource-links").textContent();
+  const dialog = await openEnvironmentDialog(page);
+  const text = await dialog.locator(".resource-links").textContent();
   if (!text?.includes("GPL")) throw new Error("Resource links did not include the GPL license");
   if (!text.includes("第三方声明")) throw new Error("Resource links did not include third-party notices");
+  await closeEnvironmentDialog(page, dialog);
 }
 
 async function assertSettingsPersistenceStatus(page) {
-  const text = await page.locator(".settings-save-line").textContent();
+  const dialog = await openEnvironmentDialog(page);
+  const text = await dialog.locator(".settings-save-line").textContent();
   if (!text?.includes("不保存备份密码")) {
     throw new Error("Settings persistence status did not mention password exclusion");
   }
+  await closeEnvironmentDialog(page, dialog);
 }
 
 async function assertPasswordClearControls(page) {

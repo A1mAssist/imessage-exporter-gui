@@ -11,7 +11,7 @@ import {
 
 import { terminalOutcome } from "./components/CommonUi";
 import type { JobOutcome } from "./components/CommonUi";
-import { AboutDialog, OnboardingDialog } from "./components/Dialogs";
+import { AboutDialog, EnvironmentDialog, OnboardingDialog } from "./components/Dialogs";
 import type { UpdateCheckState } from "./components/Dialogs";
 import { EnvironmentPanel, TopBar } from "./components/ShellPanels";
 import type { SettingsSaveState } from "./components/ShellPanels";
@@ -110,6 +110,7 @@ export default function App() {
   const [settingsSaveState, setSettingsSaveState] = useState<SettingsSaveState>("saved");
   const [appDiagnostics, setAppDiagnostics] = useState<AppDiagnostics>();
   const [showAbout, setShowAbout] = useState(false);
+  const [showEnvironmentDetails, setShowEnvironmentDetails] = useState(false);
   const [updateState, setUpdateState] = useState<UpdateCheckState>({ kind: "idle" });
   const activeLogJobIdRef = useRef<string>();
   const diagnosticJobIdRef = useRef<string>();
@@ -119,6 +120,7 @@ export default function App() {
   const generatedArchivePathsRef = useRef(new Set<string>());
   const onboardingTriggerRef = useRef<HTMLButtonElement>(null);
   const aboutTriggerRef = useRef<HTMLButtonElement>(null);
+  const environmentDetailsTriggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     refreshEnvironment();
@@ -538,6 +540,15 @@ export default function App() {
     window.setTimeout(() => aboutTriggerRef.current?.focus(), 0);
   }
 
+  function openEnvironmentDetails() {
+    setShowEnvironmentDetails(true);
+  }
+
+  function closeEnvironmentDetails() {
+    setShowEnvironmentDetails(false);
+    window.setTimeout(() => environmentDetailsTriggerRef.current?.focus(), 0);
+  }
+
   async function checkForUpdates() {
     setUpdateState({ kind: "checking" });
     try {
@@ -581,6 +592,16 @@ export default function App() {
           </div>
         </div>
 
+        <EnvironmentPanel
+          environment={environment}
+          loading={loading}
+          exporterPath={config.exporterPath}
+          onChooseExporter={chooseExporterPath}
+          onRefresh={() => refreshEnvironment()}
+          onOpenDetails={openEnvironmentDetails}
+          detailsButtonRef={environmentDetailsTriggerRef}
+        />
+
         <nav className="workspace-nav" aria-label="工作区导航">
           {workspaceSections.map((candidate) => {
             const Icon = candidate.icon;
@@ -610,20 +631,6 @@ export default function App() {
             );
           })}
         </nav>
-
-        <EnvironmentPanel
-          environment={environment}
-          loading={loading}
-          settingsSaveState={settingsSaveState}
-          exporterPath={config.exporterPath}
-          onChooseExporter={chooseExporterPath}
-          onClearExporter={clearExporterPath}
-          onOpenExporterDownload={openExporterDownload}
-          onRefresh={() => refreshEnvironment()}
-          onClearSettings={clearSavedSettings}
-          onOpenResource={(file) => openResourceFile(file).catch((err) => setError(String(err)))}
-          onCopy={copyText}
-        />
       </aside>
 
       <section className="workspace">
@@ -765,6 +772,21 @@ export default function App() {
           onChooseExporter={chooseExporterPath}
           onOpenResource={(file) => openResourceFile(file).catch((err) => setError(String(err)))}
           onClose={closeAbout}
+        />
+      ) : null}
+      {showEnvironmentDetails ? (
+        <EnvironmentDialog
+          environment={environment}
+          config={config}
+          settingsSaveState={settingsSaveState}
+          onChooseExporter={chooseExporterPath}
+          onClearExporter={clearExporterPath}
+          onOpenExporterDownload={openExporterDownload}
+          onRefresh={() => refreshEnvironment()}
+          onClearSettings={clearSavedSettings}
+          onOpenResource={(file) => openResourceFile(file).catch((err) => setError(String(err)))}
+          onCopy={copyText}
+          onClose={closeEnvironmentDetails}
         />
       ) : null}
     </main>

@@ -63,7 +63,6 @@ pub fn diagnostics_args(config: &SourceConfig) -> Result<Vec<String>, String> {
         config.backup_path.clone(),
         "-a".to_string(),
         "iOS".to_string(),
-        "--no-progress".to_string(),
     ];
 
     if config.encrypted {
@@ -293,6 +292,11 @@ fn shell_quote(value: &str) -> String {
 mod tests {
     use super::*;
     use crate::models::{CopyMethod, ExportFormat, SourceKind};
+    use std::{
+        fs,
+        process::Command,
+        time::{SystemTime, UNIX_EPOCH},
+    };
 
     fn base_config() -> ExportConfig {
         ExportConfig {
@@ -304,6 +308,31 @@ mod tests {
             export_path: "C:\\Exports".to_string(),
             format: ExportFormat::Html,
             copy_method: CopyMethod::Clone,
+            start_date: None,
+            end_date: None,
+            conversation_filter: None,
+            no_lazy: None,
+            custom_name: None,
+            use_caller_id: None,
+            ignore_disk_warning: None,
+        }
+    }
+
+    fn smoke_config(
+        backup_path: &str,
+        export_path: &str,
+        format: ExportFormat,
+        copy_method: CopyMethod,
+    ) -> ExportConfig {
+        ExportConfig {
+            kind: SourceKind::IosBackup,
+            backup_path: backup_path.to_string(),
+            exporter_path: None,
+            encrypted: false,
+            cleartext_password: None,
+            export_path: export_path.to_string(),
+            format,
+            copy_method,
             start_date: None,
             end_date: None,
             conversation_filter: None,
@@ -429,7 +458,6 @@ mod tests {
                 "C:\\Backups\\device",
                 "-a",
                 "iOS",
-                "--no-progress",
                 "--cleartext-password",
                 "secret"
             ]
@@ -514,5 +542,286 @@ mod tests {
     fn rejects_missing_configured_exporter_path() {
         let error = resolve_exporter_path(Some("C:\\missing\\imessage-exporter.exe")).unwrap_err();
         assert!(error.contains("imessage-exporter was not found"));
+    }
+
+    #[test]
+    fn real_exporter_accepts_gui_generated_command_matrix() {
+        let Ok(exporter) = std::env::var("IMESSAGE_EXPORTER_REAL_SMOKE_PATH") else {
+            eprintln!(
+                "IMESSAGE_EXPORTER_REAL_SMOKE_PATH is not set; real exporter CLI matrix skipped."
+            );
+            return;
+        };
+
+        let version = Command::new(&exporter)
+            .arg("--version")
+            .output()
+            .expect("failed to run imessage-exporter --version");
+        assert!(
+            version.status.success(),
+            "could not run imessage-exporter --version: {}{}",
+            String::from_utf8_lossy(&version.stdout),
+            String::from_utf8_lossy(&version.stderr)
+        );
+
+        let run_id = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let missing_backup = std::env::temp_dir().join(format!(
+            "imessage-exporter-gui-real-cli-missing-backup-{run_id}"
+        ));
+        let missing_output =
+            std::env::temp_dir().join(format!("imessage-exporter-gui-real-cli-output-{run_id}"));
+        let missing_backup_text = missing_backup.display().to_string();
+        let missing_output_text = missing_output.display().to_string();
+
+        let _ = fs::remove_dir_all(&missing_backup);
+        let _ = fs::remove_dir_all(&missing_output);
+
+        let mut cases: Vec<(String, Vec<String>)> = Vec::new();
+        let source = SourceConfig {
+            kind: SourceKind::IosBackup,
+            backup_path: missing_backup_text.clone(),
+            exporter_path: None,
+            encrypted: false,
+            cleartext_password: None,
+        };
+        cases.push((
+            "Diagnostics plain".to_string(),
+            diagnostics_args(&source).unwrap(),
+        ));
+
+        let mut encrypted_source = source.clone();
+        encrypted_source.encrypted = true;
+        encrypted_source.cleartext_password = Some("dummy-password".to_string());
+        cases.push((
+            "Diagnostics encrypted backup password".to_string(),
+            diagnostics_args(&encrypted_source).unwrap(),
+        ));
+
+        let formats = [(ExportFormat::Html, "html"), (ExportFormat::Txt, "txt")];
+        let copy_methods = [
+            (CopyMethod::Disabled, "disabled"),
+            (CopyMethod::Clone, "clone"),
+            (CopyMethod::Basic, "basic"),
+            (CopyMethod::Full, "full"),
+        ];
+
+        for (format, format_name) in formats {
+            for (copy_method, copy_name) in &copy_methods {
+                let config = smoke_config(
+                    &missing_backup_text,
+                    &missing_output_text,
+                    format.clone(),
+                    copy_method.clone(),
+                );
+                cases.push((
+                    format!("Export {format_name} / {copy_name}"),
+                    export_args(&config).unwrap(),
+                ));
+
+                if matches!(&format, ExportFormat::Html) {
+                    let mut no_lazy_config = config;
+                    no_lazy_config.no_lazy = Some(true);
+                    cases.push((
+                        format!("Export {format_name} / {copy_name} / no-lazy"),
+                        export_args(&no_lazy_config).unwrap(),
+                    ));
+                }
+            }
+        }
+
+        let mut config = smoke_config(
+            &missing_backup_text,
+            &missing_output_text,
+            ExportFormat::Html,
+            CopyMethod::Clone,
+        );
+        config.encrypted = true;
+        config.cleartext_password = Some("dummy-password".to_string());
+        cases.push((
+            "Export encrypted password".to_string(),
+            export_args(&config).unwrap(),
+        ));
+
+        let mut config = smoke_config(
+            &missing_backup_text,
+            &missing_output_text,
+            ExportFormat::Html,
+            CopyMethod::Clone,
+        );
+        config.start_date = Some("2024-01-01".to_string());
+        cases.push((
+            "Export start date".to_string(),
+            export_args(&config).unwrap(),
+        ));
+
+        let mut config = smoke_config(
+            &missing_backup_text,
+            &missing_output_text,
+            ExportFormat::Html,
+            CopyMethod::Clone,
+        );
+        config.end_date = Some("2024-12-31".to_string());
+        cases.push(("Export end date".to_string(), export_args(&config).unwrap()));
+
+        let mut config = smoke_config(
+            &missing_backup_text,
+            &missing_output_text,
+            ExportFormat::Html,
+            CopyMethod::Clone,
+        );
+        config.start_date = Some("2024-01-01".to_string());
+        config.end_date = Some("2024-12-31".to_string());
+        cases.push((
+            "Export date range".to_string(),
+            export_args(&config).unwrap(),
+        ));
+
+        let mut config = smoke_config(
+            &missing_backup_text,
+            &missing_output_text,
+            ExportFormat::Html,
+            CopyMethod::Clone,
+        );
+        config.conversation_filter = Some("chat-42".to_string());
+        cases.push((
+            "Export conversation filter".to_string(),
+            export_args(&config).unwrap(),
+        ));
+
+        let mut config = smoke_config(
+            &missing_backup_text,
+            &missing_output_text,
+            ExportFormat::Html,
+            CopyMethod::Clone,
+        );
+        config.custom_name = Some("ArchiveName".to_string());
+        cases.push((
+            "Export custom display name".to_string(),
+            export_args(&config).unwrap(),
+        ));
+
+        let mut config = smoke_config(
+            &missing_backup_text,
+            &missing_output_text,
+            ExportFormat::Html,
+            CopyMethod::Clone,
+        );
+        config.use_caller_id = Some(true);
+        cases.push((
+            "Export caller ID display".to_string(),
+            export_args(&config).unwrap(),
+        ));
+
+        let mut config = smoke_config(
+            &missing_backup_text,
+            &missing_output_text,
+            ExportFormat::Html,
+            CopyMethod::Clone,
+        );
+        config.ignore_disk_warning = Some(true);
+        cases.push((
+            "Export ignore disk warning".to_string(),
+            export_args(&config).unwrap(),
+        ));
+
+        let mut config = smoke_config(
+            &missing_backup_text,
+            &missing_output_text,
+            ExportFormat::Html,
+            CopyMethod::Full,
+        );
+        config.encrypted = true;
+        config.cleartext_password = Some("dummy-password".to_string());
+        config.start_date = Some("2024-01-01".to_string());
+        config.end_date = Some("2024-12-31".to_string());
+        config.conversation_filter = Some("chat-42".to_string());
+        config.no_lazy = Some(true);
+        config.custom_name = Some("ArchiveName".to_string());
+        config.ignore_disk_warning = Some(true);
+        cases.push((
+            "Export combined custom-name options".to_string(),
+            export_args(&config).unwrap(),
+        ));
+
+        let mut config = smoke_config(
+            &missing_backup_text,
+            &missing_output_text,
+            ExportFormat::Html,
+            CopyMethod::Basic,
+        );
+        config.encrypted = true;
+        config.cleartext_password = Some("dummy-password".to_string());
+        config.start_date = Some("2024-01-01".to_string());
+        config.end_date = Some("2024-12-31".to_string());
+        config.conversation_filter = Some("chat-42".to_string());
+        config.no_lazy = Some(true);
+        config.use_caller_id = Some(true);
+        config.ignore_disk_warning = Some(true);
+        cases.push((
+            "Export combined caller-ID options".to_string(),
+            export_args(&config).unwrap(),
+        ));
+
+        let mut config = smoke_config(
+            &missing_backup_text,
+            &missing_output_text,
+            ExportFormat::Txt,
+            CopyMethod::Disabled,
+        );
+        config.no_lazy = Some(true);
+        let txt_normalized_args = export_args(&config).unwrap();
+        assert!(
+            !txt_normalized_args.contains(&"-l".to_string()),
+            "TXT exports must not pass HTML-only no-lazy flag"
+        );
+        cases.push((
+            "Export TXT normalized no-lazy off".to_string(),
+            txt_normalized_args,
+        ));
+
+        println!("Real imessage-exporter CLI compatibility smoke:");
+        println!("  Exporter: {exporter}");
+        println!(
+            "  Version: {}",
+            String::from_utf8_lossy(&version.stdout).trim()
+        );
+        println!("  GUI-generated command matrix: {} cases", cases.len());
+
+        for (name, args) in cases {
+            let output = Command::new(&exporter)
+                .args(&args)
+                .output()
+                .unwrap_or_else(|err| panic!("{name} failed to launch imessage-exporter: {err}"));
+            let combined = format!(
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+
+            for pattern in [
+                "requires --format",
+                "Invalid command line options",
+                "Invalid options",
+                "unexpected argument",
+                "unrecognized option",
+            ] {
+                assert!(
+                    !combined.contains(pattern),
+                    "{name} hit an imessage-exporter option compatibility error: {combined}"
+                );
+            }
+
+            assert!(
+                combined.contains("Manifest.plist") || combined.contains("Manifest.db"),
+                "{name} did not reach backup validation. Output was: {combined}"
+            );
+            println!("  ok {name}");
+        }
+
+        let _ = fs::remove_dir_all(&missing_backup);
+        let _ = fs::remove_dir_all(&missing_output);
     }
 }

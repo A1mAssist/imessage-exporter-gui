@@ -70,6 +70,7 @@ for (const path of [
   "scripts/render-preview.ps1",
   "scripts/serve-dist.mjs",
   "scripts/smoke-mock-ui.mjs",
+  "scripts/smoke-exporter-cli.ps1",
   "scripts/smoke-installed-windows.ps1",
   "scripts/verify.ps1",
   "app-icon.png",
@@ -109,6 +110,7 @@ check("app renders first-run OOBE dialog", dialogs.includes("function Onboarding
 check("app dialogs support Escape, focus trap, and focus restore", dialogs.includes("useDialogKeyboard") && commonUi.includes('event.key === "Escape"') && commonUi.includes('event.key !== "Tab"') && commonUi.includes("getFocusableDialogElements") && app.includes("aboutTriggerRef") && app.includes("onboardingTriggerRef"));
 check("app keeps preferences compact in topbar", shellPanels.includes("topbar-utilities") && shellPanels.includes("设置向导") && !app.includes("preference-controls"));
 check("app exposes About and diagnostics dialog", dialogs.includes("function AboutDialog") && dialogs.includes("关于与诊断") && dialogs.includes("支持摘要") && dialogs.includes("buildSupportSnapshot"));
+check("app exposes environment details dialog", dialogs.includes("function EnvironmentDialog") && dialogs.includes("运行环境详情") && app.includes("showEnvironmentDetails") && shellPanels.includes("onOpenDetails"));
 check("app exposes updater controls", app.includes("checkForUpdates") && app.includes("installUpdate") && dialogs.includes("下载并安装") && dialogs.includes("update-progress"));
 check("app renders export engine setup card", workspaceSteps.includes("function EngineSetupCard") && workspaceSteps.includes("导出引擎设置") && workspaceSteps.includes("打开下载页") && workspaceSteps.includes("重新检测"));
 check("app remounts shell on language changes", app.includes('key={language}'));
@@ -127,7 +129,7 @@ check("app shows startup readiness checks", workspaceSteps.includes("function Re
 check("app blocks diagnostics for incomplete backups", workspaceSteps.includes("sourceDiagnosticsBlockers") && workspaceSteps.includes("备份目录需要同时包含 Manifest.db 和 Info.plist") && workspaceSteps.includes("source-blockers"));
 check("app renders diagnostic detail text", commonUi.includes("DiagnosticFinding") && commonUi.includes("status.detail"));
 check("app summarizes export before running", workspaceSteps.includes("function ExportReview") && workspaceSteps.includes("导出前复核") && workspaceSteps.includes("exportReviewNotes"));
-check("app persists only non-sensitive settings", app.includes("loadPersistedExportConfig(defaultExportConfig)") && app.includes("persistExportConfig(config)") && shellPanels.includes("不保存备份密码"));
+check("app persists only non-sensitive settings", app.includes("loadPersistedExportConfig(defaultExportConfig)") && app.includes("persistExportConfig(config)") && dialogs.includes("不保存备份密码"));
 check("app exposes password clearing controls", workspaceSteps.includes("清除密码") && workspaceSteps.includes("任务结束后自动清除密码") && app.includes("autoClearPasswordRef"));
 check("app validates saved manual backup path on startup", app.includes("validateBackupPath(config.backupPath)") && app.includes("candidate.encrypted ?? current.encrypted"));
 check("app disables HTML-only print mode for TXT", workspaceSteps.includes('format === "txt" ? { format, noLazy: false }') && workspaceSteps.includes('disabled={config.format !== "html"}'));
@@ -186,6 +188,7 @@ check("package exposes cross-platform release packaging script", Boolean(pkg.scr
 check("package exposes Windows packaging script", Boolean(pkg.scripts?.["package:windows"]));
 check("package exposes updater manifest script", Boolean(pkg.scripts?.["manifest:updater"]));
 check("package exposes installed Windows smoke script", Boolean(pkg.scripts?.["smoke:installed-windows"]));
+check("package exposes real exporter CLI smoke script", Boolean(pkg.scripts?.["smoke:exporter-cli"]));
 check("package exposes one-command verify script", Boolean(pkg.scripts?.verify));
 check("package exposes offline verify script", Boolean(pkg.scripts?.["verify:offline"]));
 check("package uses Vite runner config loader", ["dev", "dev:mock", "build", "preview", "test"].every((name) => pkg.scripts?.[name]?.includes("--configLoader runner")));
@@ -221,6 +224,8 @@ check("styles include export review panel", styles.includes(".review-panel") && 
 check("styles include conversation picker", styles.includes(".conversation-picker") && styles.includes(".conversation-picker-tools") && styles.includes(".conversation-picker-warning") && styles.includes(".manual-conversation-filter") && styles.includes(".text-button"));
 check("styles use workspace navigation naming", styles.includes(".workspace-nav") && styles.includes(".workspace-nav-button") && !styles.includes(".step-list") && !styles.includes(".step-button"));
 check("styles keep selected option cards symmetric", !styles.includes("inset 0 -3px 0") && styles.includes(".segment-grid button.selected:hover") && styles.includes(".preset-grid button.selected:hover"));
+check("app puts environment panel before workspace navigation", app.indexOf("<EnvironmentPanel") > app.indexOf('<div className="brand">') && app.indexOf("<EnvironmentPanel") < app.indexOf('<nav className="workspace-nav"'));
+check("styles keep environment panel compact without sidebar scrolling", styles.includes("body:has(.app-shell)") && styles.includes("height: 100vh") && styles.includes(".sidebar") && styles.includes("overflow: hidden") && styles.includes(".workspace") && styles.includes("overflow: auto") && !styles.includes("max-height: calc(100vh - 124px)") && !styles.includes(".sidebar::-webkit-scrollbar"));
 check("styles include settings persistence status", styles.includes(".settings-save-line"));
 check("styles include environment fix list", styles.includes(".env-fix-list") && styles.includes(".env-fix-item"));
 check("styles include resource link pills", styles.includes(".resource-links") && styles.includes("border-radius: 999px"));
@@ -229,6 +234,10 @@ check("styles include export summary panel", styles.includes(".export-summary-pa
 check("styles include generated archive, preset, log, report, and empty-state polish", styles.includes(".inline-actions") && styles.includes(".preset-grid") && styles.includes(".log-tools") && styles.includes(".report-buffer") && styles.includes(".backup-empty-guidance"));
 
 const cli = read("src-tauri/src/cli.rs");
+const diagnosticsArgsStart = cli.indexOf("pub fn diagnostics_args");
+const exportArgsStart = cli.indexOf("pub fn export_args");
+const diagnosticsArgsBody = diagnosticsArgsStart >= 0 && exportArgsStart > diagnosticsArgsStart ? cli.slice(diagnosticsArgsStart, exportArgsStart) : "";
+check("CLI keeps no-progress off diagnostics", diagnosticsArgsBody.includes('"-d".to_string()') && !diagnosticsArgsBody.includes("--no-progress"));
 check("CLI maps no-lazy to -l", cli.includes('args.push("-l".to_string())'));
 check("CLI only maps no-lazy for HTML", cli.includes("ExportFormat::Html") && cli.includes("ignores_print_friendly_mode_for_txt_exports"));
 check("CLI maps encrypted backup password", cli.includes('"--cleartext-password".to_string()'));
@@ -264,18 +273,30 @@ check("release packaging script rejects unsupported Linux bundles", packageRelea
 check("release packaging script respects Cargo target dir", packageRelease.includes("CARGO_TARGET_DIR") && packageRelease.includes("Get-BundleRoot"));
 check("release packaging script filters current app artifacts", packageRelease.includes("Get-ArtifactPrefix") && packageRelease.includes(".StartsWith($Prefix"));
 const packageWindows = read("scripts/package-windows.ps1");
+const verifyScript = read("scripts/verify.ps1");
 check("Windows packaging script collects installers", packageWindows.includes("dist-installers") && packageWindows.includes("SHA256SUMS.txt"));
 check("Windows packaging script collects updater artifacts", packageWindows.includes("latest.json") && packageWindows.includes("*.zip") && packageWindows.includes("*.sig"));
 check("Windows packaging script writes updater manifest", packageWindows.includes("create-updater-manifest.ps1") && packageWindows.includes("latest.json"));
 check("Windows packaging script runs native verification", packageWindows.includes("scripts\\verify.ps1") && packageWindows.includes("-Native"));
 check("Windows packaging script runs installed artifact smoke", packageWindows.includes("smoke-installed-windows.ps1") && packageWindows.includes("Installed artifact smoke test"));
+check("Windows packaging supports local unsigned installer smoke", verifyScript.includes("--no-sign") && packageWindows.includes("latest.json generation skipped"));
 check("Windows packaging script respects Cargo target dir", packageWindows.includes("CARGO_TARGET_DIR") && packageWindows.includes("Get-CargoTargetDir"));
 check("Windows packaging script filters current app installers", packageWindows.includes("Get-ArtifactPrefix") && packageWindows.includes(".StartsWith($Prefix"));
 const installedSmoke = read("scripts/smoke-installed-windows.ps1");
 check("installed smoke installs and launches NSIS artifact", installedSmoke.includes("/S") && installedSmoke.includes("/D=$InstallDir") && installedSmoke.includes("Start-Process") && installedSmoke.includes("Installed executable launched successfully"));
+const exporterCliSmoke = read("scripts/smoke-exporter-cli.ps1");
+check(
+  "real exporter CLI smoke runs backend-generated command matrix",
+  exporterCliSmoke.includes("IMESSAGE_EXPORTER_REAL_SMOKE_PATH") &&
+    exporterCliSmoke.includes("real_exporter_accepts_gui_generated_command_matrix") &&
+    cli.includes("GUI-generated command matrix") &&
+    cli.includes("requires --format") &&
+    cli.includes("Invalid command line options") &&
+    cli.includes("Manifest.plist") &&
+    verifyScript.includes("smoke-exporter-cli.ps1"),
+);
 const updaterManifestScript = read("scripts/create-updater-manifest.ps1");
 check("updater manifest script writes Tauri latest.json", updaterManifestScript.includes("platforms") && updaterManifestScript.includes("windows-$Arch-nsis") && updaterManifestScript.includes("signature") && updaterManifestScript.includes("releases/download"));
-const verifyScript = read("scripts/verify.ps1");
 check("native verification runs Rust tests", verifyScript.includes('Invoke-Step "Rust tests"') && verifyScript.includes("& $Cargo test"));
 
 const tauriConfig = read("src-tauri/tauri.conf.json");
