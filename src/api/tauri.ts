@@ -246,7 +246,7 @@ function mockEnvironment(exporterPath?: string): EnvironmentStatus {
 function mockAppDiagnostics(): AppDiagnostics {
   return {
     name: "iMessage Exporter GUI",
-    version: "0.1.0",
+    version: "0.1.1",
     identifier: "com.a1massist.imessage-exporter-gui",
     authors: "A1mAssist",
     description: "Desktop GUI for imessage-exporter",
@@ -258,11 +258,11 @@ function mockAppDiagnostics(): AppDiagnostics {
 
 function mockUpdateInfo(): Promise<UpdateInfo> {
   const params = new URLSearchParams(window.location.search);
-  if (!params.has("updateAvailable")) return Promise.resolve({ available: false, currentVersion: "0.1.0" });
+  if (!params.has("updateAvailable")) return Promise.resolve({ available: false, currentVersion: "0.1.1" });
   return Promise.resolve({
     available: true,
-    currentVersion: "0.1.0",
-    version: "0.1.1",
+    currentVersion: "0.1.1",
+    version: "0.1.2",
     date: "2026-06-14T00:00:00Z",
     body: "Mock update package for installer smoke and UI checks.",
   });

@@ -368,6 +368,7 @@ check("CI runs mock UI smoke", ci.includes("npm run smoke:mock-ui"));
 check("CI runs frontend production build", ci.includes("npm run build"));
 check("CI runs Rust format", ci.includes("cargo fmt --check"));
 check("CI activates MSVC shell for native Windows builds", ci.includes("ilammy/msvc-dev-cmd@v1") && ci.includes("arch: x64"));
+check("CI leaves signed Tauri packaging to release workflow", !ci.includes("npm run tauri build"));
 const release = read(".github/workflows/release.yml");
 check("release workflow uses Node 24-capable official actions", release.includes("actions/checkout@v6") && release.includes("actions/setup-node@v6") && release.includes("actions/upload-artifact@v6") && release.includes("actions/download-artifact@v7") && release.includes("node-version: 24"));
 check("release workflow packages Windows and macOS installers", release.includes("Release Installers") && release.includes("windows-latest") && release.includes("macos-latest") && !release.includes("ubuntu-22.04") && release.includes("scripts/package-release.ps1"));

@@ -55,5 +55,6 @@ jobs:
         working-directory: src-tauri
         run: cargo test
 
-      - name: Build Tauri app
-        run: npm run tauri build
+      - name: Rust check
+        working-directory: src-tauri
+        run: cargo check
