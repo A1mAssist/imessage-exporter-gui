@@ -15,7 +15,8 @@ import {
 } from "lucide-react";
 
 import { CopyButton, Fact, useDialogKeyboard } from "./CommonUi";
-import { ResourceLinks } from "./ShellPanels";
+import { EnvironmentFixList, ResourceLinks, settingsStateLabel } from "./ShellPanels";
+import type { SettingsSaveState } from "./ShellPanels";
 import type { AppDiagnostics, BackupCandidate, EnvironmentStatus, ExportConfig, UpdateInfo } from "../types";
 
 export type UpdateCheckState =
@@ -281,6 +282,128 @@ export function AboutDialog({
               <CopyButton label="复制摘要" value={snapshot} />
               <ResourceLinks onOpenResource={onOpenResource} />
             </div>
+          </section>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+export function EnvironmentDialog({
+  environment,
+  config,
+  settingsSaveState,
+  onChooseExporter,
+  onClearExporter,
+  onOpenExporterDownload,
+  onRefresh,
+  onClearSettings,
+  onOpenResource,
+  onCopy,
+  onClose,
+}: {
+  environment?: EnvironmentStatus;
+  config: ExportConfig;
+  settingsSaveState: SettingsSaveState;
+  onChooseExporter: () => void;
+  onClearExporter: () => void;
+  onOpenExporterDownload: () => void;
+  onRefresh: () => void;
+  onClearSettings: () => void;
+  onOpenResource: (file: "license" | "thirdPartyNotices") => void;
+  onCopy: (value: string) => void;
+  onClose: () => void;
+}) {
+  const dialogRef = useDialogKeyboard(onClose);
+  const configuredExporterPath = config.exporterPath?.trim() ?? "";
+  const effectiveExporterPath = configuredExporterPath || environment?.exporterPath || "未选择；会尝试从 PATH 检测";
+  const attachmentReady = Boolean(environment?.ffmpegAvailable && environment?.imagemagickAvailable);
+  const attachmentDetail = attachmentReady
+    ? "basic/full 附件转换依赖已经齐备。"
+    : "clone 可直接导出；basic/full 需要 ffmpeg 和 ImageMagick。";
+
+  return (
+    <div className="about-backdrop">
+      <section className="about-dialog environment-dialog" role="dialog" aria-modal="true" aria-labelledby="environment-title" tabIndex={-1} ref={dialogRef}>
+        <button className="icon-button about-close" type="button" onClick={onClose} aria-label="关闭运行环境详情">
+          <X size={16} />
+        </button>
+        <header className="about-header">
+          <span className="about-mark">
+            <TerminalSquare size={24} />
+          </span>
+          <div>
+            <span className="workspace-kicker">Environment</span>
+            <h2 id="environment-title">运行环境详情</h2>
+            <p>管理导出引擎、附件转换依赖和本机资源。侧栏只保留摘要，这里放完整处理入口。</p>
+          </div>
+        </header>
+
+        <div className="environment-detail-grid">
+          <section className="about-section environment-primary-section">
+            <div className="section-heading compact-heading">
+              <h3>导出引擎</h3>
+              <p>GUI 不内置 imessage-exporter；请选择本机已有的可执行文件，或打开下载页获取最新版。</p>
+            </div>
+            <div className="fact-list dense">
+              <Fact label="状态" value={environment?.exporterAvailable ? "可用" : "未找到"} />
+              <Fact label="版本" value={environment?.exporterVersion ?? "未检测到"} />
+              <Fact label="路径" value={effectiveExporterPath} />
+            </div>
+            <div className="panel-actions">
+              <button className="ghost-button" type="button" onClick={onChooseExporter}>
+                <FolderOpen size={15} />
+                选择导出引擎
+              </button>
+              <button className="ghost-button" type="button" onClick={onOpenExporterDownload}>
+                <ExternalLink size={15} />
+                下载导出引擎
+              </button>
+              {configuredExporterPath ? (
+                <button className="ghost-button" type="button" onClick={onClearExporter}>
+                  清除
+                </button>
+              ) : null}
+              <button className="ghost-button" type="button" onClick={onRefresh}>
+                <RefreshCcw size={15} />
+                重新检测
+              </button>
+            </div>
+          </section>
+
+          <section className="about-section">
+            <div className="section-heading compact-heading">
+              <h3>附件转换</h3>
+              <p>{attachmentDetail}</p>
+            </div>
+            <div className="fact-list dense">
+              <Fact label="ffmpeg" value={environment?.ffmpegAvailable ? "可用" : "未检测到"} />
+              <Fact label="ImageMagick" value={environment?.imagemagickAvailable ? "可用" : "未检测到"} />
+            </div>
+            {environment?.warnings.map((warning) => (
+              <p className="mini-warning" key={warning}>
+                <AlertCircle size={15} />
+                {warning}
+              </p>
+            ))}
+          </section>
+
+          <section className="about-section">
+            <EnvironmentFixList environment={environment} onCopy={onCopy} />
+          </section>
+
+          <section className="about-section environment-support-section">
+            <div className={`settings-save-line ${settingsSaveState}`}>
+              <AlertCircle size={15} />
+              <span>
+                <strong>{settingsStateLabel(settingsSaveState)}</strong>
+                <small>仅保存路径和导出选项，不保存备份密码。</small>
+              </span>
+              <button className="ghost-button" type="button" onClick={onClearSettings} disabled={settingsSaveState === "saving"}>
+                清除
+              </button>
+            </div>
+            <ResourceLinks onOpenResource={onOpenResource} />
           </section>
         </div>
       </section>

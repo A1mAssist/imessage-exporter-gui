@@ -19,6 +19,7 @@
     "package:release": "powershell -ExecutionPolicy Bypass -File scripts/package-release.ps1",
     "package:windows": "powershell -ExecutionPolicy Bypass -File scripts/package-windows.ps1",
     "smoke:installed-windows": "powershell -ExecutionPolicy Bypass -File scripts/smoke-installed-windows.ps1",
+    "smoke:exporter-cli": "powershell -ExecutionPolicy Bypass -File scripts/smoke-exporter-cli.ps1",
     "smoke:mock-ui": "node scripts/smoke-mock-ui.mjs",
     "test": "vitest run --configLoader runner",
     "tauri": "tauri",

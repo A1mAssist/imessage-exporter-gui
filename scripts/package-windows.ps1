@@ -89,7 +89,13 @@ try {
             Write-Host ("Copied {0}" -f $Artifact.Name)
         }
 
-        powershell -ExecutionPolicy Bypass -File (Join-Path $Root "scripts\create-updater-manifest.ps1") -ArtifactsDir $OutputDir
+        $CopiedSignature = Get-ChildItem -Path $OutputPath -Filter "*.sig" -File -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($CopiedSignature) {
+            powershell -ExecutionPolicy Bypass -File (Join-Path $Root "scripts\create-updater-manifest.ps1") -ArtifactsDir $OutputDir
+        }
+        else {
+            Write-Host "No updater signatures were produced; latest.json generation skipped for this local unsigned build."
+        }
 
         $ChecksumPath = Join-Path $OutputPath "SHA256SUMS.txt"
         Get-ChildItem -Path $OutputPath -File |

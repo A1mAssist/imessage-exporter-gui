@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   Clipboard,
   Database,
-  ExternalLink,
   FolderOpen,
   Info,
   Loader2,
@@ -86,29 +85,24 @@ export function TopBar({
 export function EnvironmentPanel({
   environment,
   loading,
-  settingsSaveState,
   exporterPath,
   onChooseExporter,
-  onClearExporter,
-  onOpenExporterDownload,
   onRefresh,
-  onClearSettings,
-  onOpenResource,
-  onCopy,
+  onOpenDetails,
+  detailsButtonRef,
 }: {
   environment?: EnvironmentStatus;
   loading: boolean;
-  settingsSaveState: SettingsSaveState;
   exporterPath?: string;
   onChooseExporter: () => void;
-  onClearExporter: () => void;
-  onOpenExporterDownload: () => void;
   onRefresh: () => void;
-  onClearSettings: () => void;
-  onOpenResource: (file: "license" | "thirdPartyNotices") => void;
-  onCopy: (value: string) => void;
+  onOpenDetails: () => void;
+  detailsButtonRef?: RefObject<HTMLButtonElement>;
 }) {
   const effectiveExporterPath = exporterPath?.trim() || environment?.exporterPath;
+  const attachmentReady = Boolean(environment?.ffmpegAvailable && environment?.imagemagickAvailable);
+  const attachmentPartial = Boolean(environment?.ffmpegAvailable || environment?.imagemagickAvailable);
+  const attachmentValue = attachmentReady ? "可用" : attachmentPartial ? "部分可用" : "未配置";
   return (
     <div className="env-panel">
       <div className="panel-title">
@@ -118,42 +112,18 @@ export function EnvironmentPanel({
         </button>
       </div>
       <StatusLine ok={environment?.exporterAvailable} label="导出引擎" value={environment?.exporterAvailable ? "可用" : "未找到"} />
-      <div className="engine-config">
-        <small title={effectiveExporterPath || "未选择；会尝试从 PATH 检测"}>{effectiveExporterPath ? compactPath(effectiveExporterPath) : "未选择；会尝试从 PATH 检测"}</small>
-        <p className="engine-help">GUI 不内置 imessage-exporter；请单独下载导出引擎，或选择本机已有的可执行文件。</p>
-        <div className="engine-actions">
-          <button className="ghost-button" type="button" onClick={onChooseExporter}>
-            <FolderOpen size={15} />
-            选择导出引擎
-          </button>
-          <button className="ghost-button" type="button" onClick={onOpenExporterDownload}>
-            <ExternalLink size={15} />
-            下载导出引擎
-          </button>
-          {exporterPath?.trim() ? (
-            <button className="ghost-button" type="button" onClick={onClearExporter}>
-              清除
-            </button>
-          ) : null}
-        </div>
-      </div>
-      <StatusLine ok={environment?.ffmpegAvailable} label="ffmpeg" value={environment?.ffmpegAvailable ? "可用" : "未检测到"} />
-      <StatusLine ok={environment?.imagemagickAvailable} label="ImageMagick" value={environment?.imagemagickAvailable ? "可用" : "未检测到"} />
-      {environment?.warnings.map((warning) => (
-        <p className="mini-warning" key={warning}>
-          {warning}
-        </p>
-      ))}
-      <EnvironmentFixList environment={environment} onCopy={onCopy} />
-      <ResourceLinks onOpenResource={onOpenResource} />
-      <div className={`settings-save-line ${settingsSaveState}`}>
-        <Info size={15} />
-        <span>
-          <strong>{settingsStateLabel(settingsSaveState)}</strong>
-          <small>仅保存路径和导出选项，不保存备份密码</small>
-        </span>
-        <button className="ghost-button" type="button" onClick={onClearSettings} disabled={settingsSaveState === "saving"}>
-          清除
+      <StatusLine ok={attachmentReady} label="附件转换" value={attachmentValue} />
+      <small className="env-path-line" title={effectiveExporterPath || "未选择；会尝试从 PATH 检测"}>
+        {effectiveExporterPath ? compactPath(effectiveExporterPath) : "未选择；会尝试从 PATH 检测"}
+      </small>
+      <div className="env-panel-actions">
+        <button className="ghost-button" type="button" onClick={onChooseExporter}>
+          <FolderOpen size={15} />
+          选择
+        </button>
+        <button className="ghost-button" type="button" onClick={onOpenDetails} ref={detailsButtonRef}>
+          <Info size={15} />
+          详情
         </button>
       </div>
     </div>
@@ -246,7 +216,7 @@ function ThemeToggle({ theme, onChange }: { theme: AppTheme; onChange: (theme: A
   );
 }
 
-function EnvironmentFixList({ environment, onCopy }: { environment?: EnvironmentStatus; onCopy: (value: string) => void }) {
+export function EnvironmentFixList({ environment, onCopy }: { environment?: EnvironmentStatus; onCopy: (value: string) => void }) {
   const fixes = environmentFixes(environment);
   if (!fixes.length) return null;
 
@@ -289,7 +259,7 @@ function environmentFixes(environment?: EnvironmentStatus): Array<{ label: strin
   return fixes;
 }
 
-function settingsStateLabel(state: SettingsSaveState): string {
+export function settingsStateLabel(state: SettingsSaveState): string {
   if (state === "saving") return "正在保存设置";
   if (state === "failed") return "设置保存失败";
   if (state === "cleared") return "已清除保存设置";

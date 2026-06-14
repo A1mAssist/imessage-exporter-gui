@@ -35,6 +35,10 @@ body {
     linear-gradient(180deg, #fbfcfd 0, var(--bg) 360px);
 }
 
+body:has(.app-shell) {
+  overflow: hidden;
+}
+
 :root[data-theme="dark"] {
   color-scheme: dark;
   --bg: #111820;
@@ -88,13 +92,17 @@ button:disabled {
 .app-shell {
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .sidebar {
   display: flex;
   flex-direction: column;
   gap: 26px;
+  min-height: 0;
+  overflow: hidden;
   padding: 28px 22px;
   border-right: 1px solid rgba(203, 215, 228, 0.9);
   background:
@@ -272,9 +280,8 @@ button:disabled {
 .env-panel {
   display: flex;
   flex-direction: column;
-  gap: 11px;
-  padding: 14px;
-  margin-top: auto;
+  gap: 10px;
+  padding: 12px;
   box-shadow: var(--shadow-tight);
 }
 
@@ -355,14 +362,8 @@ button:disabled {
   white-space: nowrap;
 }
 
-.engine-config {
-  display: grid;
-  gap: 8px;
-  padding: 10px 0 2px;
-  border-top: 1px solid var(--line);
-}
-
-.engine-config small {
+.env-path-line {
+  display: block;
   overflow: hidden;
   color: var(--muted);
   font-size: 11px;
@@ -371,20 +372,15 @@ button:disabled {
   white-space: nowrap;
 }
 
-.engine-help {
-  margin: 0;
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.35;
-}
-
-.engine-actions {
+.env-panel-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  padding-top: 2px;
 }
 
-.engine-actions .ghost-button {
+.env-panel-actions .ghost-button {
+  flex: 1;
   min-height: 28px;
   padding: 0 8px;
   font-size: 12px;
@@ -1293,6 +1289,40 @@ select:disabled {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface-strong);
+}
+
+.environment-dialog {
+  width: min(860px, 100%);
+}
+
+.environment-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+  gap: 12px;
+}
+
+.environment-primary-section {
+  grid-row: span 2;
+}
+
+.environment-support-section {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.environment-support-section .settings-save-line {
+  flex: 1 1 420px;
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.environment-support-section .resource-links {
+  justify-content: flex-end;
 }
 
 .compact-heading {
@@ -2564,8 +2594,15 @@ label span {
 }
 
 @media (max-width: 900px) {
+  body:has(.app-shell) {
+    overflow: auto;
+  }
+
   .app-shell {
     grid-template-columns: minmax(0, 1fr);
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
   }
 
   .sidebar {
@@ -2593,6 +2630,7 @@ label span {
   }
 
   .workspace {
+    overflow: visible;
     padding: 20px;
   }
 
@@ -2615,6 +2653,7 @@ label span {
   .diagnostic-grid,
   .diagnostic-summary-grid,
   .about-grid,
+  .environment-detail-grid,
   .engine-setup-steps,
   .date-range-field,
   .readiness-grid,
