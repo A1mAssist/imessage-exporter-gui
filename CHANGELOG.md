@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## v0.1.1 - 2026-06-14
+
+### Added
+- Added a conversation picker that scans the selected iOS backup, lists chats before filtering, and supports searching and sorting by recent activity or message count.
+- Added release packaging smoke coverage for installed Windows artifacts.
+
+### Changed
+- Reworked the workspace navigation labels so source, diagnostics, options, and results are presented as peer areas instead of numbered steps.
+- Replaced free-text date range fields with date picker controls.
+- Kept regular PR CI focused on unsigned checks while signed installer and updater packaging runs in the release workflow.
+
+### Fixed
+- Fixed selected option and preset buttons so their borders remain visually symmetric.
+- Improved dialog keyboard handling with Escape close, focus trapping, and focus restoration.
+
 ## v0.1.0 - 2026-06-13
 
 ### Added

@@ -11,12 +11,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
       - name: Setup Rust
@@ -55,5 +55,6 @@ jobs:
         working-directory: src-tauri
         run: cargo test
 
-      - name: Build Tauri app
-        run: npm run tauri build
+      - name: Rust check
+        working-directory: src-tauri
+        run: cargo check

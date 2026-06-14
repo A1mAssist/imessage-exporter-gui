@@ -1,9 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
+import { relaunch } from "@tauri-apps/plugin-process";
+import { check, type DownloadEvent, type Update } from "@tauri-apps/plugin-updater";
 import type {
+  AppDiagnostics,
   BackupCandidate,
   CommandPreview,
+  ConversationCandidate,
   EnvironmentStatus,
   ExportConfig,
   ExportFormat,
@@ -11,12 +15,14 @@ import type {
   JobEvent,
   JobStarted,
   SourceConfig,
+  UpdateInfo,
 } from "../types";
 
 type Unlisten = () => void;
 
 const mockListeners = new Set<(event: JobEvent) => void>();
 const mockTimers = new Map<string, number[]>();
+let pendingUpdate: Update | null = null;
 type MockLine = string | { kind: JobEvent["kind"]; text: string };
 
 function usingMockApi() {
@@ -30,9 +36,53 @@ export function getEnvironment(exporterPath?: string) {
   return invoke<EnvironmentStatus>("get_environment", { exporterPath });
 }
 
+export function getAppDiagnostics() {
+  if (usingMockApi()) return Promise.resolve(mockAppDiagnostics());
+  return invoke<AppDiagnostics>("get_app_diagnostics");
+}
+
+export async function checkForAppUpdate(): Promise<UpdateInfo> {
+  if (usingMockApi()) return mockUpdateInfo();
+  const update = await check({ timeout: 15000 });
+  pendingUpdate = update;
+  if (!update) return { available: false };
+  return {
+    available: true,
+    currentVersion: update.currentVersion,
+    version: update.version,
+    date: update.date,
+    body: update.body,
+  };
+}
+
+export async function installAvailableUpdate(onProgress?: (event: DownloadEvent) => void) {
+  if (usingMockApi()) {
+    await new Promise((resolve) => window.setTimeout(resolve, 500));
+    return;
+  }
+  if (!pendingUpdate) {
+    throw new Error("No update has been selected. Check for updates first.");
+  }
+  await pendingUpdate.downloadAndInstall(onProgress);
+  await pendingUpdate.close();
+  pendingUpdate = null;
+  await relaunch();
+}
+
 export function scanIosBackups() {
   if (usingMockApi()) return Promise.resolve(mockBackups());
   return invoke<BackupCandidate[]>("scan_ios_backups");
+}
+
+export function scanConversations(backupPath: string) {
+  if (usingMockApi()) {
+    try {
+      return Promise.resolve(mockConversations(backupPath));
+    } catch (err) {
+      return Promise.reject(err);
+    }
+  }
+  return invoke<ConversationCandidate[]>("scan_conversations", { backupPath });
 }
 
 export function validateBackupPath(path: string) {
@@ -193,6 +243,31 @@ function mockEnvironment(exporterPath?: string): EnvironmentStatus {
   };
 }
 
+function mockAppDiagnostics(): AppDiagnostics {
+  return {
+    name: "iMessage Exporter GUI",
+    version: "0.1.1",
+    identifier: "com.a1massist.imessage-exporter-gui",
+    authors: "A1mAssist",
+    description: "Desktop GUI for imessage-exporter",
+    os: "windows",
+    arch: "x86_64",
+    family: "windows",
+  };
+}
+
+function mockUpdateInfo(): Promise<UpdateInfo> {
+  const params = new URLSearchParams(window.location.search);
+  if (!params.has("updateAvailable")) return Promise.resolve({ available: false, currentVersion: "0.1.1" });
+  return Promise.resolve({
+    available: true,
+    currentVersion: "0.1.1",
+    version: "0.1.2",
+    date: "2026-06-14T00:00:00Z",
+    body: "Mock update package for installer smoke and UI checks.",
+  });
+}
+
 function mockBackups(): BackupCandidate[] {
   const params = new URLSearchParams(window.location.search);
   if (params.has("emptyBackups")) return [];
@@ -217,6 +292,45 @@ function mockBackups(): BackupCandidate[] {
       hasInfoPlist: false,
       encrypted: false,
       valid: false,
+    },
+  ];
+}
+
+function mockConversations(_backupPath: string): ConversationCandidate[] {
+  const params = new URLSearchParams(window.location.search);
+  if (params.has("conversationError")) throw new Error("无法读取 Messages 数据库，可能是备份已加密或数据库不可直接访问");
+  if (params.has("emptyConversations")) return [];
+
+  return [
+    {
+      id: "chat-42",
+      title: "家庭群",
+      subtitle: "+15551230001、+15551230002、mom@example.com",
+      filterValue: "chat-42",
+      service: "iMessage",
+      messageCount: 18432,
+      lastMessageAt: "2026-06-12T14:28:00Z",
+      isGroup: true,
+    },
+    {
+      id: "chat-17",
+      title: "Alex Chen",
+      subtitle: "+15551234567",
+      filterValue: "+15551234567",
+      service: "iMessage",
+      messageCount: 4280,
+      lastMessageAt: "2026-06-09T09:11:00Z",
+      isGroup: false,
+    },
+    {
+      id: "chat-8",
+      title: "Bank Alerts",
+      subtitle: "alerts@example.com",
+      filterValue: "alerts@example.com",
+      service: "SMS",
+      messageCount: 96,
+      lastMessageAt: "2026-05-30T18:45:00Z",
+      isGroup: false,
     },
   ];
 }

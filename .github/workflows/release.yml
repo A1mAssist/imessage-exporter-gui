@@ -30,12 +30,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
       - name: Setup Rust
@@ -51,10 +51,13 @@ jobs:
 
       - name: Package release artifacts
         shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: ./scripts/package-release.ps1 -BundleTarget "${{ matrix.bundles }}" -OutputDir "${{ matrix.output }}"
 
-      - name: Upload installer artifacts
-        uses: actions/upload-artifact@v4
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.output }}/*
@@ -66,11 +69,18 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           path: dist-release
           merge-multiple: true
+
+      - name: Create updater manifest
+        shell: pwsh
+        run: ./scripts/create-updater-manifest.ps1 -ArtifactsDir dist-release -OutputPath dist-release/latest.json -Tag "${{ github.ref_name }}"
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
