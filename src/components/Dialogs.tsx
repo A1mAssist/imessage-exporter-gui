@@ -258,6 +258,8 @@ export function AboutDialog({
             <div className="fact-list dense">
               <Fact label="状态" value={environment?.exporterAvailable ? "可用" : "未找到"} />
               <Fact label="版本" value={environment?.exporterVersion ?? "未检测到"} />
+              <Fact label="已验证版本" value={environment?.verifiedExporterVersion ?? "4.1.0"} />
+              <Fact label="兼容状态" value={exporterCompatibilityLabel(environment)} />
               <Fact label="路径" value={config.exporterPath?.trim() || environment?.exporterPath || "未选择；会检查 PATH"} />
             </div>
             <div className="panel-actions">
@@ -348,6 +350,8 @@ export function EnvironmentDialog({
             <div className="fact-list dense">
               <Fact label="状态" value={environment?.exporterAvailable ? "可用" : "未找到"} />
               <Fact label="版本" value={environment?.exporterVersion ?? "未检测到"} />
+              <Fact label="已验证版本" value={environment?.verifiedExporterVersion ?? "4.1.0"} />
+              <Fact label="兼容状态" value={exporterCompatibilityLabel(environment)} />
               <Fact label="路径" value={effectiveExporterPath} />
             </div>
             <div className="panel-actions">
@@ -459,10 +463,19 @@ function buildSupportSnapshot(
     `Updater: ${updateState.kind}${updateInfo?.version ? ` (${updateInfo.version})` : ""}`,
     `Exporter available: ${environment?.exporterAvailable ? "yes" : "no"}`,
     `Exporter version: ${environment?.exporterVersion ?? "unknown"}`,
+    `Verified exporter version: ${environment?.verifiedExporterVersion ?? "4.1.0"}`,
+    `Exporter version status: ${environment?.exporterVersionStatus ?? "unknown"}`,
     `Exporter path: ${config.exporterPath?.trim() || environment?.exporterPath || "PATH / not selected"}`,
     `ffmpeg available: ${environment?.ffmpegAvailable ? "yes" : "no"}`,
     `ImageMagick available: ${environment?.imagemagickAvailable ? "yes" : "no"}`,
     `Backup path set: ${config.backupPath.trim() ? "yes" : "no"}`,
     `Output path set: ${config.exportPath.trim() ? "yes" : "no"}`,
   ].join("\n");
+}
+
+function exporterCompatibilityLabel(environment?: EnvironmentStatus): string {
+  if (!environment?.exporterAvailable) return "未检测";
+  if (environment.exporterVersionStatus === "older") return "低于已验证版本";
+  if (environment.exporterVersionStatus === "unknown") return "版本不可识别";
+  return "已验证";
 }

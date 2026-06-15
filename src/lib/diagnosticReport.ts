@@ -24,6 +24,8 @@ export function buildDiagnosticReport(input: DiagnosticReportInput): string {
     "",
     "环境",
     `- 导出引擎: ${environment?.exporterAvailable ? environment.exporterVersion ?? environment.exporterPath ?? "可用" : "缺失"}`,
+    `- 已验证导出引擎版本: ${environment?.verifiedExporterVersion ?? "4.1.0"}`,
+    `- 导出引擎兼容状态: ${environment?.exporterVersionStatus ?? "unknown"}`,
     `- ffmpeg: ${environment?.ffmpegAvailable ? "可用" : "缺失"}`,
     `- ImageMagick: ${environment?.imagemagickAvailable ? "可用" : "缺失"}`,
     ...(environment?.warnings.length ? environment.warnings.map((warning) => `- warning: ${warning}`) : ["- warning: 无"]),

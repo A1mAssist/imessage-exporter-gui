@@ -6,6 +6,8 @@ pub struct EnvironmentStatus {
     pub exporter_available: bool,
     pub exporter_version: Option<String>,
     pub exporter_path: Option<String>,
+    pub verified_exporter_version: String,
+    pub exporter_version_status: String,
     pub ffmpeg_available: bool,
     pub imagemagick_available: bool,
     pub default_backup_roots: Vec<String>,

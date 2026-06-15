@@ -2,6 +2,7 @@ param(
     [string]$ExporterPath = ""
 )
 
+# CI pins imessage-exporter 4.1.0 and passes -ExporterPath so missing downloads fail the job.
 $ErrorActionPreference = "Stop"
 $Root = Resolve-Path (Join-Path $PSScriptRoot "..")
 

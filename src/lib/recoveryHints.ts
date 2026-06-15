@@ -40,6 +40,15 @@ export function recoveryHintForFailure(logs: LogLine[], outcomeMessage?: string)
     };
   }
 
+  if (matches(lower, ["requires --format", "invalid command line options", "invalid options", "unexpected argument", "unrecognized option"])) {
+    return {
+      category: "exporter",
+      title: "导出引擎参数不兼容",
+      detail: "imessage-exporter 拒绝了 GUI 生成的命令参数，通常是 GUI 或导出引擎版本不匹配。",
+      action: "更新 GUI 和 imessage-exporter 后重试；反馈问题时复制诊断报告。",
+    };
+  }
+
   if (matches(lower, ["exporter", "sidecar", "imessage-exporter not found", "program not found", "spawn", "enoent", "找不到 imessage-exporter"])) {
     return {
       category: "exporter",

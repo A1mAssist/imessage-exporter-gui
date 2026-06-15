@@ -27,6 +27,8 @@ export type EnvironmentStatus = {
   exporterAvailable: boolean;
   exporterVersion?: string;
   exporterPath?: string;
+  verifiedExporterVersion: string;
+  exporterVersionStatus: "verified" | "older" | "unknown";
   ffmpegAvailable: boolean;
   imagemagickAvailable: boolean;
   defaultBackupRoots: string[];

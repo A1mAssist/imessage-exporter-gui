@@ -11,6 +11,8 @@ use crate::{
     models::{BackupCandidate, EnvironmentStatus},
 };
 
+const VERIFIED_EXPORTER_VERSION: &str = "4.1.0";
+
 pub fn get_environment(configured_exporter_path: Option<&str>) -> EnvironmentStatus {
     let (exporter_path, exporter_error) = match cli::resolve_exporter_path(configured_exporter_path)
     {
@@ -21,6 +23,7 @@ pub fn get_environment(configured_exporter_path: Option<&str>) -> EnvironmentSta
     let exporter_version = exporter_path
         .as_ref()
         .and_then(|path| read_exporter_version(path));
+    let exporter_version_status = exporter_version_status(exporter_version.as_deref());
     let ffmpeg_available = command_available("ffmpeg");
     let imagemagick_available = command_available("magick");
     let default_backup_roots = default_backup_roots()
@@ -37,6 +40,14 @@ pub fn get_environment(configured_exporter_path: Option<&str>) -> EnvironmentSta
         if let Some(err) = exporter_error {
             warnings.push(err);
         }
+    } else if exporter_version_status == "older" {
+        warnings.push(format!(
+            "当前 imessage-exporter 版本低于已验证版本 {VERIFIED_EXPORTER_VERSION}；如果诊断或导出失败，请更新导出引擎。"
+        ));
+    } else if exporter_version_status == "unknown" {
+        warnings.push(format!(
+            "无法识别当前 imessage-exporter 版本；GUI 已验证版本为 {VERIFIED_EXPORTER_VERSION}。如果遇到参数错误，请更新 GUI 或导出引擎。"
+        ));
     }
     if !ffmpeg_available {
         warnings.push("未检测到 ffmpeg，basic/full 附件转换可能不可用。".to_string());
@@ -49,6 +60,8 @@ pub fn get_environment(configured_exporter_path: Option<&str>) -> EnvironmentSta
         exporter_available,
         exporter_version,
         exporter_path: exporter_path.map(|path| path.display().to_string()),
+        verified_exporter_version: VERIFIED_EXPORTER_VERSION.to_string(),
+        exporter_version_status: exporter_version_status.to_string(),
         ffmpeg_available,
         imagemagick_available,
         default_backup_roots,
@@ -156,4 +169,84 @@ fn read_exporter_version(path: &Path) -> Option<String> {
                 None
             }
         })
+}
+
+fn exporter_version_status(version: Option<&str>) -> &'static str {
+    let Some(version) = version.and_then(parse_version_triplet) else {
+        return "unknown";
+    };
+    let Some(verified) = parse_version_triplet(VERIFIED_EXPORTER_VERSION) else {
+        return "unknown";
+    };
+
+    if version >= verified {
+        "verified"
+    } else {
+        "older"
+    }
+}
+
+fn parse_version_triplet(value: &str) -> Option<(u32, u32, u32)> {
+    for token in value.split(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '.')) {
+        let mut parts = token.split('.');
+        let (Some(major), Some(minor), Some(patch), None) =
+            (parts.next(), parts.next(), parts.next(), parts.next())
+        else {
+            continue;
+        };
+        if major.is_empty()
+            || minor.is_empty()
+            || patch.is_empty()
+            || !major.chars().all(|ch| ch.is_ascii_digit())
+            || !minor.chars().all(|ch| ch.is_ascii_digit())
+            || !patch.chars().all(|ch| ch.is_ascii_digit())
+        {
+            continue;
+        }
+        return Some((
+            major.parse().ok()?,
+            minor.parse().ok()?,
+            patch.parse().ok()?,
+        ));
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{exporter_version_status, parse_version_triplet};
+
+    #[test]
+    fn parses_exporter_version_output() {
+        assert_eq!(
+            parse_version_triplet("iMessage Exporter 4.1.0"),
+            Some((4, 1, 0))
+        );
+        assert_eq!(
+            parse_version_triplet("imessage-exporter 4.2.3"),
+            Some((4, 2, 3))
+        );
+        assert_eq!(parse_version_triplet("imessage-exporter dev"), None);
+    }
+
+    #[test]
+    fn classifies_exporter_version_status() {
+        assert_eq!(
+            exporter_version_status(Some("iMessage Exporter 4.1.0")),
+            "verified"
+        );
+        assert_eq!(
+            exporter_version_status(Some("iMessage Exporter 4.2.0")),
+            "verified"
+        );
+        assert_eq!(
+            exporter_version_status(Some("iMessage Exporter 4.0.9")),
+            "older"
+        );
+        assert_eq!(
+            exporter_version_status(Some("imessage-exporter dev")),
+            "unknown"
+        );
+        assert_eq!(exporter_version_status(None), "unknown");
+    }
 }

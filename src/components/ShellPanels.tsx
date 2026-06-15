@@ -103,6 +103,8 @@ export function EnvironmentPanel({
   const attachmentReady = Boolean(environment?.ffmpegAvailable && environment?.imagemagickAvailable);
   const attachmentPartial = Boolean(environment?.ffmpegAvailable || environment?.imagemagickAvailable);
   const attachmentValue = attachmentReady ? "可用" : attachmentPartial ? "部分可用" : "未配置";
+  const versionHint = exporterVersionHint(environment);
+  const versionTone = environment?.exporterVersionStatus === "verified" ? "ok" : "warn";
   return (
     <div className="env-panel">
       <div className="panel-title">
@@ -116,6 +118,11 @@ export function EnvironmentPanel({
       <small className="env-path-line" title={effectiveExporterPath || "未选择；会尝试从 PATH 检测"}>
         {effectiveExporterPath ? compactPath(effectiveExporterPath) : "未选择；会尝试从 PATH 检测"}
       </small>
+      {versionHint ? (
+        <small className={`env-version-line ${versionTone}`} title={versionHint}>
+          {versionHint}
+        </small>
+      ) : null}
       <div className="env-panel-actions">
         <button className="ghost-button" type="button" onClick={onChooseExporter}>
           <FolderOpen size={15} />
@@ -264,6 +271,15 @@ export function settingsStateLabel(state: SettingsSaveState): string {
   if (state === "failed") return "设置保存失败";
   if (state === "cleared") return "已清除保存设置";
   return "设置已保存";
+}
+
+function exporterVersionHint(environment?: EnvironmentStatus): string | undefined {
+  if (!environment?.exporterAvailable) return undefined;
+  const verified = environment.verifiedExporterVersion;
+  const current = environment.exporterVersion ?? "未识别";
+  if (environment.exporterVersionStatus === "older") return `低于已验证 ${verified} · 当前 ${current}`;
+  if (environment.exporterVersionStatus === "unknown") return `已验证 ${verified} · 当前版本未识别`;
+  return `已验证 ${verified} · 当前 ${current}`;
 }
 
 function StatusLine({ ok, label, value }: { ok?: boolean; label: string; value: string }) {

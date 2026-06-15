@@ -55,6 +55,18 @@ jobs:
         working-directory: src-tauri
         run: cargo test
 
+      - name: Download imessage-exporter 4.1.0
+        shell: pwsh
+        run: |
+          $url = "https://github.com/ReagentX/imessage-exporter/releases/download/4.1.0/imessage-exporter-x86_64-pc-windows-gnu.exe"
+          $out = Join-Path $env:RUNNER_TEMP "imessage-exporter-x86_64-pc-windows-gnu.exe"
+          Invoke-WebRequest -Uri $url -OutFile $out
+          "IMESSAGE_EXPORTER_CI_PATH=$out" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Real exporter CLI compatibility smoke
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File scripts/smoke-exporter-cli.ps1 -ExporterPath "$env:IMESSAGE_EXPORTER_CI_PATH"
+
       - name: Rust check
         working-directory: src-tauri
         run: cargo check

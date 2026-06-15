@@ -111,6 +111,15 @@ check("app dialogs support Escape, focus trap, and focus restore", dialogs.inclu
 check("app keeps preferences compact in topbar", shellPanels.includes("topbar-utilities") && shellPanels.includes("设置向导") && !app.includes("preference-controls"));
 check("app exposes About and diagnostics dialog", dialogs.includes("function AboutDialog") && dialogs.includes("关于与诊断") && dialogs.includes("支持摘要") && dialogs.includes("buildSupportSnapshot"));
 check("app exposes environment details dialog", dialogs.includes("function EnvironmentDialog") && dialogs.includes("运行环境详情") && app.includes("showEnvironmentDetails") && shellPanels.includes("onOpenDetails"));
+check(
+  "app shows verified exporter version compatibility state",
+  read("src-tauri/src/models.rs").includes("verified_exporter_version") &&
+    read("src-tauri/src/models.rs").includes("exporter_version_status") &&
+    shellPanels.includes("已验证") &&
+    dialogs.includes("兼容状态") &&
+    dialogs.includes("Verified exporter version") &&
+    read("src/api/tauri.ts").includes("verifiedExporterVersion"),
+);
 check("app exposes updater controls", app.includes("checkForUpdates") && app.includes("installUpdate") && dialogs.includes("下载并安装") && dialogs.includes("update-progress"));
 check("app renders export engine setup card", workspaceSteps.includes("function EngineSetupCard") && workspaceSteps.includes("导出引擎设置") && workspaceSteps.includes("打开下载页") && workspaceSteps.includes("重新检测"));
 check("app remounts shell on language changes", app.includes('key={language}'));
@@ -177,6 +186,13 @@ check("export summary parses result status, counts, duration, and output path", 
 check("archive path helper creates timestamped output folders", read("src/lib/archivePath.ts").includes("Messages Export") && read("src/lib/archivePath.ts").includes("timestampedArchiveSequence") && read("src/lib/archivePath.test.ts").includes("startSuffix"));
 check("export presets preserve source secrets", read("src/lib/exportPresets.ts").includes("quickArchive") && read("src/lib/exportPresets.test.ts").includes("does not overwrite source path"));
 check("recovery hints classify known failure modes", read("src/lib/recoveryHints.ts").includes("备份密码可能不正确") && read("src/lib/recoveryHints.test.ts").includes("classifies known failure modes"));
+check(
+  "recovery hints classify exporter option compatibility failures",
+  read("src/lib/recoveryHints.ts").includes("导出引擎参数不兼容") &&
+    read("src/lib/recoveryHints.ts").includes("requires --format") &&
+    read("src/lib/recoveryHints.ts").includes("unexpected argument") &&
+    read("src/lib/recoveryHints.test.ts").includes("classifies exporter option compatibility failures"),
+);
 check("diagnostic report builder redacts secrets", read("src/lib/diagnosticReport.ts").includes("redactSensitiveText") && read("src/lib/diagnosticReport.test.ts").includes("not.toContain"));
 
 const pkg = JSON.parse(read("package.json"));
@@ -386,6 +402,13 @@ const ci = read(".github/workflows/ci.yml");
 check("CI uses Node 24-capable official actions", ci.includes("actions/checkout@v6") && ci.includes("actions/setup-node@v6") && ci.includes("node-version: 24"));
 check("CI runs npm audit", ci.includes("npm audit"));
 check("CI runs mock UI smoke", ci.includes("npm run smoke:mock-ui"));
+check(
+  "CI downloads pinned real exporter and runs compatibility smoke",
+  ci.includes("https://github.com/ReagentX/imessage-exporter/releases/download/4.1.0/imessage-exporter-x86_64-pc-windows-gnu.exe") &&
+    ci.includes("IMESSAGE_EXPORTER_CI_PATH") &&
+    ci.includes("smoke-exporter-cli.ps1") &&
+    ci.includes("-ExporterPath"),
+);
 check("CI runs frontend production build", ci.includes("npm run build"));
 check("CI runs Rust format", ci.includes("cargo fmt --check"));
 check("CI activates MSVC shell for native Windows builds", ci.includes("ilammy/msvc-dev-cmd@v1") && ci.includes("arch: x64"));

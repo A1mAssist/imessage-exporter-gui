@@ -93,6 +93,17 @@ Current limits:
 - The output folder cannot be the backup folder itself or inside the backup folder.
 - Current installers are unsigned and intended for small-scale testing.
 
+## Development Verification
+
+The real exporter compatibility smoke uses the Rust backend's actual `diagnostics_args` and `export_args` builders, then runs the generated 25-case command matrix against `imessage-exporter`.
+
+```powershell
+npm run smoke:exporter-cli
+powershell -ExecutionPolicy Bypass -File scripts/smoke-exporter-cli.ps1 -ExporterPath C:\Users\18366\Downloads\imessage-exporter-x86_64-pc-windows-gnu.exe
+```
+
+If `-ExporterPath` is provided and the file is missing, the smoke fails. Without an explicit path, local machines that do not have the exporter installed skip the real smoke. GitHub CI on Windows downloads the pinned `imessage-exporter 4.1.0` executable and runs this smoke as part of the required `windows` job.
+
 ## License
 
 GPL-3.0-only. See [LICENSE](./LICENSE) and [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).

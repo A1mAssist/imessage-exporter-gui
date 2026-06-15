@@ -231,6 +231,8 @@ function mockEnvironment(exporterPath?: string): EnvironmentStatus {
     exporterAvailable: !missingExporter,
     exporterVersion: missingExporter ? undefined : "imessage-exporter 4.1.0",
     exporterPath: missingExporter ? undefined : resolvedExporterPath,
+    verifiedExporterVersion: "4.1.0",
+    exporterVersionStatus: missingExporter ? "unknown" : "verified",
     ffmpegAvailable: false,
     imagemagickAvailable: false,
     defaultBackupRoots: [

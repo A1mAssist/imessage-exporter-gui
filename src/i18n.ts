@@ -51,9 +51,17 @@ const en: Record<string, string> = {
   "部分可用": "Partially available",
   "未配置": "Not configured",
   "未检测到": "Not detected",
+  "已验证版本": "Verified version",
+  "兼容状态": "Compatibility",
+  "低于已验证版本": "Below verified version",
+  "版本不可识别": "Version unrecognized",
+  "已验证": "Verified",
+  "未检测": "Not checked",
   "环境": "Environment",
   "路径": "Path",
   "名称": "Name",
+  "已验证导出引擎版本": "Verified Export Engine Version",
+  "导出引擎兼容状态": "Export Engine Compatibility",
   "密码状态": "Password Status",
   "未确认或缺失": "Not confirmed or missing",
   "未输入": "Not entered",
@@ -85,6 +93,9 @@ const en: Record<string, string> = {
   "缺少导出引擎": "Export engine missing",
   "GUI 没能启动 imessage-exporter。": "The GUI could not start imessage-exporter.",
   "下载 imessage-exporter，或在运行环境面板里选择本机已有的 imessage-exporter 可执行文件。": "Download imessage-exporter, or choose an existing imessage-exporter executable in the Environment panel.",
+  "导出引擎参数不兼容": "Export engine arguments are incompatible",
+  "imessage-exporter 拒绝了 GUI 生成的命令参数，通常是 GUI 或导出引擎版本不匹配。": "imessage-exporter rejected the GUI-generated command arguments. This usually means the GUI and export engine versions do not match.",
+  "更新 GUI 和 imessage-exporter 后重试；反馈问题时复制诊断报告。": "Update the GUI and imessage-exporter, then retry. Copy the diagnostic report when reporting the issue.",
   "安装 basic/full 附件转换器": "Install basic/full attachment converters",
   "复制": "Copy",
   "正在保存设置": "Saving settings",
@@ -463,6 +474,15 @@ export function translateText(language: AppLanguage, text: string): string {
     const stateText = state === "运行中" ? "running" : state === "完成" ? "complete" : state === "已取消" ? "cancelled" : "failed";
     return withCode[3] ? `${action} ${stateText}, code ${withCode[3]}` : `${action} ${stateText}`;
   }
+
+  const versionVerified = text.match(/^已验证 (.+) · 当前 (.+)$/);
+  if (versionVerified) return `Verified ${versionVerified[1]} · Current ${versionVerified[2]}`;
+
+  const versionOlder = text.match(/^低于已验证 (.+) · 当前 (.+)$/);
+  if (versionOlder) return `Below verified ${versionOlder[1]} · Current ${versionOlder[2]}`;
+
+  const versionUnknown = text.match(/^已验证 (.+) · 当前版本未识别$/);
+  if (versionUnknown) return `Verified ${versionUnknown[1]} · Current version unknown`;
 
   const conversationScanFailure = text.match(/^无法读取会话列表：(.+)。仍可手动输入联系人、手机号或聊天标识继续导出。$/);
   if (conversationScanFailure) {

@@ -93,6 +93,17 @@ macOS: ~/Library/Application Support/MobileSync/Backup
 - 导出目录不能是备份目录本身，也不能位于备份目录内部。
 - 当前安装包未签名，安装时可能出现系统安全提示。
 
+## 开发验证
+
+真实 exporter 兼容性 smoke 会调用 Rust 后端实际使用的 `diagnostics_args` 和 `export_args`，再把 GUI 生成的 25 组命令矩阵交给 `imessage-exporter` 本体解析。
+
+```powershell
+npm run smoke:exporter-cli
+powershell -ExecutionPolicy Bypass -File scripts/smoke-exporter-cli.ps1 -ExporterPath C:\Users\18366\Downloads\imessage-exporter-x86_64-pc-windows-gnu.exe
+```
+
+显式传入 `-ExporterPath` 时，如果文件不存在，smoke 会失败；未传显式路径时，未安装 exporter 的本地开发机会跳过真实本体 smoke。GitHub CI 的 Windows job 会下载固定的 `imessage-exporter 4.1.0` 可执行文件，并把这项 smoke 作为必过检查。
+
 ## 许可证
 
 GPL-3.0-only。见 [LICENSE](./LICENSE) 和 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。
