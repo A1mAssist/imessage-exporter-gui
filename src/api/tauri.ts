@@ -31,9 +31,9 @@ function usingMockApi() {
   return params.has("mock") || !("__TAURI_INTERNALS__" in window);
 }
 
-export function getEnvironment(exporterPath?: string) {
-  if (usingMockApi()) return Promise.resolve(mockEnvironment(exporterPath));
-  return invoke<EnvironmentStatus>("get_environment", { exporterPath });
+export function getEnvironment() {
+  if (usingMockApi()) return Promise.resolve(mockEnvironment());
+  return invoke<EnvironmentStatus>("get_environment");
 }
 
 export function getAppDiagnostics() {
@@ -186,19 +186,6 @@ export async function pickDirectory(defaultPath?: string, purpose: "backup" | "e
   return typeof selected === "string" ? selected : undefined;
 }
 
-export async function pickExporterFile(defaultPath?: string): Promise<string | undefined> {
-  if (usingMockApi()) {
-    return defaultPath || "C:\\Users\\A1mAssist\\Tools\\imessage-exporter.exe";
-  }
-
-  const selected = await open({
-    directory: false,
-    multiple: false,
-    defaultPath,
-  });
-  return typeof selected === "string" ? selected : undefined;
-}
-
 function mockExportPathStatus(path: string): ExportPathStatus {
   const params = new URLSearchParams(window.location.search);
   const normalized = path.replace(/\\/g, "/").toLowerCase();
@@ -223,25 +210,20 @@ function mockExportPathStatus(path: string): ExportPathStatus {
   };
 }
 
-function mockEnvironment(exporterPath?: string): EnvironmentStatus {
-  const params = new URLSearchParams(window.location.search);
-  const missingExporter = params.has("missingExporter");
-  const resolvedExporterPath = exporterPath?.trim() || "C:\\Users\\A1mAssist\\Tools\\imessage-exporter.exe";
+function mockEnvironment(): EnvironmentStatus {
   return {
-    exporterAvailable: !missingExporter,
-    exporterVersion: missingExporter ? undefined : "imessage-exporter 4.1.0",
-    exporterPath: missingExporter ? undefined : resolvedExporterPath,
-    verifiedExporterVersion: "4.1.0",
-    exporterVersionStatus: missingExporter ? "unknown" : "verified",
+    exporterAvailable: true,
+    exporterVersion: "built-in imessage-exporter 4.1.0 + JSONL",
+    exporterPath: undefined,
+    verifiedExporterVersion: "4.1.0 + JSONL",
+    exporterVersionStatus: "verified",
     ffmpegAvailable: false,
     imagemagickAvailable: false,
     defaultBackupRoots: [
       "C:\\Users\\A1mAssist\\Apple\\MobileSync\\Backup",
       "C:\\Users\\A1mAssist\\AppData\\Roaming\\Apple Computer\\MobileSync\\Backup",
     ],
-    warnings: [
-      missingExporter ? "Mock 模式：模拟导出引擎缺失，诊断和导出会被禁用。" : "Mock 模式：未调用真实导出引擎。basic/full 附件转换仍会显示依赖提示。",
-    ],
+    warnings: ["Mock 模式：未调用真实内置导出引擎。basic/full 附件转换仍会显示依赖提示。"],
   };
 }
 
@@ -412,7 +394,7 @@ function mockFailureScenario(): { code: number; lines: MockLine[] } | undefined 
   if (fail === "exporter") {
     return {
       code: 127,
-      lines: [{ kind: "stderr", text: "failed to spawn exporter: imessage-exporter not found (ENOENT)." }],
+      lines: [{ kind: "stderr", text: "Invalid command line options: unexpected argument --legacy-flag." }],
     };
   }
   if (fail === "converter") {
@@ -483,9 +465,9 @@ function mockPreview(config: ExportConfig): CommandPreview {
   if (config.ignoreDiskWarning) args.push("-b");
 
   return {
-    executable: "imessage-exporter",
+    executable: "built-in imessage-exporter",
     args,
-    redacted: ["imessage-exporter", ...args.map(quote)].join(" "),
+    redacted: ["built-in imessage-exporter", ...args.map(quote)].join(" "),
   };
 }
 

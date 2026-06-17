@@ -2,6 +2,7 @@ mod app;
 mod cli;
 mod commands;
 mod conversations;
+mod engine;
 mod environment;
 mod jobs;
 mod models;

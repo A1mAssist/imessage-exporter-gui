@@ -22,6 +22,7 @@ export const defaultExportConfig: ExportConfig = {
 export const exportFormats: Array<{ value: ExportFormat; label: string; description: string }> = [
   { value: "html", label: "HTML", description: "保留更多富文本和附件引用，适合归档与打印。" },
   { value: "txt", label: "TXT", description: "纯文本输出，更轻量，适合检索和长期保存。" },
+  { value: "jsonl", label: "JSONL", description: "逐行结构化 JSON，适合检索、分析和二次处理。" },
 ];
 
 export const copyMethods: Array<{ value: CopyMethod; label: string; description: string }> = [

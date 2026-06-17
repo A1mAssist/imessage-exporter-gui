@@ -1,10 +1,10 @@
 use std::{
     collections::HashMap,
-    io::{BufRead, BufReader},
-    process::{Child, Command, Stdio},
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
     thread,
-    time::Duration,
 };
 
 use tauri::{AppHandle, Emitter};
@@ -12,8 +12,8 @@ use uuid::Uuid;
 
 use crate::{
     app::now_millis,
-    cli,
-    models::{JobEvent, JobEventKind, JobStarted},
+    engine,
+    models::{CommandPreview, JobEvent, JobEventKind, JobStarted},
 };
 
 trait JobEventSink: Clone + Send + 'static {
@@ -70,24 +70,24 @@ impl LogRedactor {
 
 #[derive(Default)]
 pub struct JobRegistry {
-    inner: Arc<Mutex<HashMap<String, Arc<Mutex<Child>>>>>,
+    inner: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
 }
 
 impl JobRegistry {
-    pub fn spawn(
+    pub fn spawn_engine(
         &self,
         app: AppHandle,
-        executable: std::path::PathBuf,
-        args: Vec<String>,
+        preview: CommandPreview,
+        options: imessage_exporter::Options,
     ) -> Result<JobStarted, String> {
-        self.spawn_with_sink(TauriJobEventSink { app }, executable, args)
+        self.spawn_engine_with_sink(TauriJobEventSink { app }, preview, options)
     }
 
-    fn spawn_with_sink<S: JobEventSink>(
+    fn spawn_engine_with_sink<S: JobEventSink>(
         &self,
         sink: S,
-        executable: std::path::PathBuf,
-        args: Vec<String>,
+        preview: CommandPreview,
+        options: imessage_exporter::Options,
     ) -> Result<JobStarted, String> {
         let mut guard = self
             .inner
@@ -98,50 +98,19 @@ impl JobRegistry {
             return Err("A diagnostic or export job is already running".to_string());
         }
 
-        let preview = cli::preview(executable.display().to_string(), &args);
-        let redactor = LogRedactor::from_args(&args);
-        let mut child = Command::new(&executable)
-            .args(&args)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|err| format!("Failed to start imessage-exporter: {err}"))?;
-
-        let stdout = child.stdout.take();
-        let stderr = child.stderr.take();
+        let redactor = LogRedactor::from_args(&preview.args);
         let job_id = Uuid::new_v4().to_string();
-        let child = Arc::new(Mutex::new(child));
-
-        guard.insert(job_id.clone(), Arc::clone(&child));
+        let cancel_flag = Arc::new(AtomicBool::new(false));
+        guard.insert(job_id.clone(), Arc::clone(&cancel_flag));
         drop(guard);
 
-        let mut readers = Vec::new();
-        if let Some(stdout) = stdout {
-            readers.push(spawn_reader(
-                sink.clone(),
-                redactor.clone(),
-                job_id.clone(),
-                JobEventKind::Stdout,
-                stdout,
-            ));
-        }
-        if let Some(stderr) = stderr {
-            readers.push(spawn_reader(
-                sink.clone(),
-                redactor.clone(),
-                job_id.clone(),
-                JobEventKind::Stderr,
-                stderr,
-            ));
-        }
-
-        self.spawn_waiter(sink, redactor, job_id.clone(), child, readers);
+        self.spawn_engine_runner(sink, redactor, job_id.clone(), cancel_flag, options);
 
         Ok(JobStarted { job_id, preview })
     }
 
     pub fn cancel(&self, job_id: &str) -> Result<(), String> {
-        let child = {
+        let cancel_flag = {
             let guard = self
                 .inner
                 .lock()
@@ -152,64 +121,69 @@ impl JobRegistry {
                 .ok_or_else(|| "No running job found".to_string())?
         };
 
-        let mut child = child
-            .lock()
-            .map_err(|_| "Job state is poisoned".to_string())?;
-        child
-            .kill()
-            .map_err(|err| format!("Failed to cancel job: {err}"))?;
+        cancel_flag.store(true, Ordering::SeqCst);
         Ok(())
     }
 
-    fn spawn_waiter<S: JobEventSink>(
+    fn spawn_engine_runner<S: JobEventSink>(
         &self,
         sink: S,
         redactor: LogRedactor,
         job_id: String,
-        child: Arc<Mutex<Child>>,
-        readers: Vec<thread::JoinHandle<()>>,
+        cancel_flag: Arc<AtomicBool>,
+        options: imessage_exporter::Options,
     ) {
         let registry = ArcJobRegistry {
             inner: Arc::clone(&self.inner),
         };
-        let mut readers = Some(readers);
-        thread::spawn(move || loop {
-            let status = {
-                let Ok(mut child) = child.lock() else {
+
+        thread::spawn(move || {
+            emit_event(
+                &sink,
+                &redactor,
+                &job_id,
+                JobEventKind::Stderr,
+                Some(format!("Starting {}...", engine::ENGINE_LABEL)),
+                None,
+            );
+
+            let log_sink = sink.clone();
+            let log_redactor = redactor.clone();
+            let log_job_id = job_id.clone();
+            let result = engine::run_with_logger(options, move |stream, line| {
+                let kind = match stream {
+                    imessage_exporter::LogStream::Stdout => JobEventKind::Stdout,
+                    imessage_exporter::LogStream::Stderr => JobEventKind::Stderr,
+                };
+                emit_event(
+                    &log_sink,
+                    &log_redactor,
+                    &log_job_id,
+                    kind,
+                    Some(line),
+                    None,
+                );
+            });
+            let was_cancelled = cancel_flag.load(Ordering::SeqCst);
+
+            match result {
+                Ok(()) if was_cancelled => {
                     emit_event(
                         &sink,
                         &redactor,
                         &job_id,
                         JobEventKind::Error,
-                        Some("Job state is poisoned".to_string()),
+                        Some(
+                            "Job cancellation was requested. The built-in exporter finished before cooperative cancellation was available."
+                                .to_string(),
+                        ),
                         None,
                     );
-                    registry.remove(&job_id);
-                    return;
-                };
-                match child.try_wait() {
-                    Ok(Some(status)) => Some(Ok(status.code().unwrap_or(-1))),
-                    Ok(None) => None,
-                    Err(err) => Some(Err(err.to_string())),
                 }
-            };
-
-            match status {
-                Some(Ok(code)) => {
-                    wait_for_readers(readers.take());
-                    emit_event(
-                        &sink,
-                        &redactor,
-                        &job_id,
-                        JobEventKind::Exit,
-                        None,
-                        Some(code),
-                    );
-                    registry.remove(&job_id);
-                    return;
+                Ok(()) => {
+                    emit_event(&sink, &redactor, &job_id, JobEventKind::Exit, None, Some(0));
                 }
-                Some(Err(err)) => {
-                    wait_for_readers(readers.take());
+                Err(err) => {
                     emit_event(
                         &sink,
                         &redactor,
@@ -218,17 +192,16 @@ impl JobRegistry {
                         Some(err),
                         None,
                     );
-                    registry.remove(&job_id);
-                    return;
                 }
-                None => thread::sleep(Duration::from_millis(150)),
             }
+
+            registry.remove(&job_id);
         });
     }
 }
 
 struct ArcJobRegistry {
-    inner: Arc<Mutex<HashMap<String, Arc<Mutex<Child>>>>>,
+    inner: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
 }
 
 impl ArcJobRegistry {
@@ -236,40 +209,6 @@ impl ArcJobRegistry {
         if let Ok(mut guard) = self.inner.lock() {
             guard.remove(job_id);
         }
-    }
-}
-
-fn spawn_reader<S: JobEventSink, T: std::io::Read + Send + 'static>(
-    sink: S,
-    redactor: LogRedactor,
-    job_id: String,
-    kind: JobEventKind,
-    stream: T,
-) -> thread::JoinHandle<()> {
-    thread::spawn(move || {
-        let reader = BufReader::new(stream);
-        for line in reader.lines() {
-            match line {
-                Ok(text) => emit_event(&sink, &redactor, &job_id, kind.clone(), Some(text), None),
-                Err(err) => {
-                    emit_event(
-                        &sink,
-                        &redactor,
-                        &job_id,
-                        JobEventKind::Error,
-                        Some(err.to_string()),
-                        None,
-                    );
-                    break;
-                }
-            }
-        }
-    })
-}
-
-fn wait_for_readers(readers: Option<Vec<thread::JoinHandle<()>>>) {
-    for reader in readers.unwrap_or_default() {
-        let _ = reader.join();
     }
 }
 
@@ -293,9 +232,9 @@ fn emit_event<S: JobEventSink>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::JobEvent;
+    use crate::{cli, engine, models::SourceConfig};
     use std::{
-        path::PathBuf,
+        sync::atomic::AtomicBool,
         sync::mpsc::{self, Receiver, Sender},
         time::{Duration, Instant},
     };
@@ -316,20 +255,6 @@ mod tests {
         (TestSink { sender }, receiver)
     }
 
-    fn shell_command(script: &str) -> (PathBuf, Vec<String>) {
-        if cfg!(windows) {
-            (
-                PathBuf::from("cmd.exe"),
-                vec!["/C".to_string(), script.to_string()],
-            )
-        } else {
-            (
-                PathBuf::from("sh"),
-                vec!["-c".to_string(), script.to_string()],
-            )
-        }
-    }
-
     fn collect_until_terminal(receiver: &Receiver<JobEvent>, job_id: &str) -> Vec<JobEvent> {
         let deadline = Instant::now() + Duration::from_secs(8);
         let mut events = Vec::new();
@@ -342,7 +267,6 @@ mod tests {
                         event.kind == JobEventKind::Exit || event.kind == JobEventKind::Error;
                     events.push(event);
                     if terminal {
-                        drain_job_events(receiver, job_id, &mut events);
                         return events;
                     }
                 }
@@ -355,85 +279,83 @@ mod tests {
         panic!("timed out waiting for terminal event for job {job_id}");
     }
 
-    fn drain_job_events(receiver: &Receiver<JobEvent>, job_id: &str, events: &mut Vec<JobEvent>) {
-        let deadline = Instant::now() + Duration::from_millis(750);
-        while Instant::now() < deadline {
-            let remaining = deadline.saturating_duration_since(Instant::now());
-            match receiver.recv_timeout(remaining.min(Duration::from_millis(50))) {
-                Ok(event) if event.job_id == job_id => events.push(event),
-                Ok(_) => {}
-                Err(mpsc::RecvTimeoutError::Timeout) => {}
-                Err(mpsc::RecvTimeoutError::Disconnected) => break,
-            }
+    fn missing_backup_source() -> SourceConfig {
+        SourceConfig {
+            kind: crate::models::SourceKind::IosBackup,
+            backup_path: std::env::temp_dir()
+                .join(format!("imessage-exporter-gui-missing-{}", Uuid::new_v4()))
+                .display()
+                .to_string(),
+            exporter_path: None,
+            encrypted: false,
+            cleartext_password: None,
         }
     }
 
     #[test]
-    fn streams_stdout_stderr_and_exit_code() {
+    fn engine_job_emits_start_log_and_error() {
         let registry = JobRegistry::default();
         let (sink, receiver) = test_sink();
-        let (executable, args) = stream_command();
-
-        let job = registry.spawn_with_sink(sink, executable, args).unwrap();
-        let events = collect_until_terminal(&receiver, &job.job_id);
-
-        assert!(events.iter().any(|event| {
-            event.kind == JobEventKind::Stdout && event.text.as_deref() == Some("stdout-line")
-        }));
-        assert!(events.iter().any(|event| {
-            event.kind == JobEventKind::Stderr && event.text.as_deref() == Some("stderr-line")
-        }));
-        assert!(events
-            .iter()
-            .any(|event| event.kind == JobEventKind::Exit && event.code == Some(7)));
-    }
-
-    #[test]
-    fn rejects_second_active_job() {
-        let registry = JobRegistry::default();
-        let (sink, receiver) = test_sink();
-        let (executable, args) = long_running_command();
+        let source = missing_backup_source();
+        let preview = cli::preview(
+            engine::ENGINE_LABEL,
+            &[
+                "-d".to_string(),
+                "-p".to_string(),
+                source.backup_path.clone(),
+            ],
+        );
+        let options = engine::diagnostics_options(&source).unwrap();
 
         let job = registry
-            .spawn_with_sink(sink.clone(), executable, args)
+            .spawn_engine_with_sink(sink, preview, options)
             .unwrap();
+        let events = collect_until_terminal(&receiver, &job.job_id);
 
-        let (second_executable, second_args) = shell_command("echo second");
+        assert!(events.iter().any(|event| {
+            event.kind == JobEventKind::Stderr
+                && event
+                    .text
+                    .as_deref()
+                    .is_some_and(|text| text.contains(engine::ENGINE_LABEL))
+        }));
+        assert!(events.iter().any(|event| event.kind == JobEventKind::Error));
+    }
+
+    #[test]
+    fn rejects_second_active_engine_job() {
+        let registry = JobRegistry::default();
+        registry
+            .inner
+            .lock()
+            .unwrap()
+            .insert("active-job".to_string(), Arc::new(AtomicBool::new(false)));
+        let (sink, _receiver) = test_sink();
+        let preview = cli::preview(engine::ENGINE_LABEL, &[]);
+        let source = missing_backup_source();
+        let options = engine::diagnostics_options(&source).unwrap();
         let error = registry
-            .spawn_with_sink(sink, second_executable, second_args)
+            .spawn_engine_with_sink(sink, preview, options)
             .unwrap_err();
         assert_eq!(error, "A diagnostic or export job is already running");
-
-        registry.cancel(&job.job_id).unwrap();
-        let events = collect_until_terminal(&receiver, &job.job_id);
-        assert!(events
-            .iter()
-            .any(|event| event.kind == JobEventKind::Exit || event.kind == JobEventKind::Error));
     }
 
     #[test]
-    fn cancellation_emits_terminal_event() {
+    fn redacts_cleartext_password_from_engine_events() {
         let registry = JobRegistry::default();
         let (sink, receiver) = test_sink();
-        let (executable, args) = long_running_command();
+        let mut source = missing_backup_source();
+        source.encrypted = true;
+        source.cleartext_password = Some("super-secret".to_string());
+        let preview = cli::preview(
+            engine::ENGINE_LABEL,
+            &cli::diagnostics_args(&source).unwrap(),
+        );
+        let options = engine::diagnostics_options(&source).unwrap();
 
-        let job = registry.spawn_with_sink(sink, executable, args).unwrap();
-        registry.cancel(&job.job_id).unwrap();
-
-        let events = collect_until_terminal(&receiver, &job.job_id);
-        assert!(events
-            .iter()
-            .any(|event| event.kind == JobEventKind::Exit || event.kind == JobEventKind::Error));
-    }
-
-    #[test]
-    fn redacts_cleartext_password_from_output_events() {
-        let registry = JobRegistry::default();
-        let (sink, receiver) = test_sink();
-        let secret = "super-secret";
-        let (executable, args) = password_echo_command(secret);
-
-        let job = registry.spawn_with_sink(sink, executable, args).unwrap();
+        let job = registry
+            .spawn_engine_with_sink(sink, preview, options)
+            .unwrap();
         let events = collect_until_terminal(&receiver, &job.job_id);
         let output = events
             .iter()
@@ -441,58 +363,6 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
 
-        assert!(!output.contains(secret));
-        assert!(output.contains("[redacted]"));
-    }
-
-    fn long_running_command() -> (PathBuf, Vec<String>) {
-        if cfg!(windows) {
-            (
-                PathBuf::from("powershell.exe"),
-                vec![
-                    "-NoProfile".to_string(),
-                    "-Command".to_string(),
-                    "Start-Sleep -Seconds 5".to_string(),
-                ],
-            )
-        } else {
-            shell_command("sleep 5")
-        }
-    }
-
-    fn stream_command() -> (PathBuf, Vec<String>) {
-        if cfg!(windows) {
-            (
-                PathBuf::from("powershell.exe"),
-                vec![
-                    "-NoProfile".to_string(),
-                    "-Command".to_string(),
-                    "Write-Output 'stdout-line'; [Console]::Error.WriteLine('stderr-line'); exit 7"
-                        .to_string(),
-                ],
-            )
-        } else {
-            shell_command("echo stdout-line && echo stderr-line 1>&2 && exit 7")
-        }
-    }
-
-    fn password_echo_command(secret: &str) -> (PathBuf, Vec<String>) {
-        if cfg!(windows) {
-            (
-                PathBuf::from("powershell.exe"),
-                vec![
-                    "-NoProfile".to_string(),
-                    "-Command".to_string(),
-                    format!("Write-Output '{secret}'; [Console]::Error.WriteLine('{secret}')"),
-                    "--cleartext-password".to_string(),
-                    secret.to_string(),
-                ],
-            )
-        } else {
-            let (executable, mut args) =
-                shell_command(&format!("echo {secret}; echo {secret} 1>&2"));
-            args.extend(["--cleartext-password".to_string(), secret.to_string()]);
-            (executable, args)
-        }
+        assert!(!output.contains("super-secret"));
     }
 }

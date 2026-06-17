@@ -4,9 +4,9 @@
 
 - Project: https://github.com/ReagentX/imessage-exporter
 - License: GPL-3.0-only
-- Purpose: external command-line export engine
+- Purpose: built-in Rust export engine
 
-This GUI does not redistribute the `imessage-exporter` executable. It detects `imessage-exporter` on `PATH` or invokes an executable selected by the user. Source code and releases for the upstream project are available at the project URL above.
+This app vendors the upstream Rust source under `src-tauri/vendor/imessage-exporter` and links it into the desktop app. Source code and releases for the upstream project are available at the project URL above.
 
 ## Converter Tools
 

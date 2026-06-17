@@ -136,8 +136,8 @@ try {
 
   await assertSavedManualBackupIsValidated(browser);
   console.log("smoke: saved manual backup passed");
-  await assertMissingExporterBlocksExport(browser);
-  console.log("smoke: missing exporter passed");
+  await assertBuiltInExporterStatus(browser);
+  console.log("smoke: built-in exporter status passed");
   await assertTxtResultsExposeTxtAction(browser);
   console.log("smoke: txt result passed");
   await assertGeneratedArchiveDirectory(browser);
@@ -354,9 +354,9 @@ async function assertNoUnexpectedCjk(page, label) {
 
 async function assertFirstRunGuide(page) {
   const text = await page.locator(".first-run-guide").textContent();
-  if (!text?.includes("首次导出清单")) throw new Error("First-run checklist was not rendered");
-  for (const expected of ["准备导出引擎", "选择 iOS 备份", "运行诊断"]) {
-    if (!text.includes(expected)) throw new Error(`First-run checklist did not include ${expected}`);
+  if (!text?.includes("首次导出路线")) throw new Error("First-run route was not rendered");
+  for (const expected of ["内置导出引擎", "选择 iOS 备份", "运行诊断"]) {
+    if (!text.includes(expected)) throw new Error(`First-run route did not include ${expected}`);
   }
 }
 
@@ -599,19 +599,19 @@ async function assertSavedManualBackupIsValidated(browser) {
   await page.close();
 }
 
-async function assertMissingExporterBlocksExport(browser) {
+async function assertBuiltInExporterStatus(browser) {
   const page = await browser.newPage({ viewport: { width: 1120, height: 900 }, deviceScaleFactor: 1 });
-  await page.goto(`${baseUrl}&missingExporter=1`, { waitUntil: "networkidle" });
+  await page.goto(baseUrl, { waitUntil: "networkidle" });
   await dismissOnboardingIfPresent(page);
   await page.getByRole("button", { name: /^选项$/ }).click();
 
   const text = await page.locator(".app-shell").textContent();
-  if (!text?.includes("缺少 imessage-exporter 导出引擎")) {
-    throw new Error("Missing exporter export blocker was not shown");
+  if (!text?.includes("内置可用") && !text?.includes("built-in imessage-exporter")) {
+    throw new Error("Built-in exporter status was not shown");
   }
   const startButton = page.getByRole("button", { name: /^开始导出$/ });
-  if (!(await startButton.isDisabled())) {
-    throw new Error("Export should be disabled when the exporter is missing");
+  if ((await startButton.isDisabled()) && text?.includes("缺少 imessage-exporter 导出引擎")) {
+    throw new Error("Built-in exporter should not create a missing-exporter blocker");
   }
   await page.close();
 }

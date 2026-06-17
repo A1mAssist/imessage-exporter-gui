@@ -154,4 +154,4 @@ Write-Host "  1. Restart the terminal if Node, Rust, or Build Tools were install
 Write-Host "  2. npm install"
 Write-Host "  3. .\scripts\verify.ps1 -Native"
 Write-Host "  4. npm run tauri dev"
-Write-Host "  5. Install imessage-exporter separately, or choose its executable inside the GUI."
+Write-Host "  5. imessage-exporter is built into the app; install optional converters only if you need basic/full attachment conversion."

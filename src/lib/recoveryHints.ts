@@ -44,17 +44,17 @@ export function recoveryHintForFailure(logs: LogLine[], outcomeMessage?: string)
     return {
       category: "exporter",
       title: "导出引擎参数不兼容",
-      detail: "imessage-exporter 拒绝了 GUI 生成的命令参数，通常是 GUI 或导出引擎版本不匹配。",
-      action: "更新 GUI 和 imessage-exporter 后重试；反馈问题时复制诊断报告。",
+      detail: "内置 imessage-exporter 拒绝了 GUI 生成的命令参数，通常是 GUI 后端与内置引擎源码不同步。",
+      action: "更新 GUI 后重试；反馈问题时复制诊断报告。",
     };
   }
 
-  if (matches(lower, ["exporter", "sidecar", "imessage-exporter not found", "program not found", "spawn", "enoent", "找不到 imessage-exporter"])) {
+  if (matches(lower, ["sidecar", "imessage-exporter not found", "program not found", "spawn", "enoent", "找不到 imessage-exporter"])) {
     return {
       category: "exporter",
-      title: "缺少导出引擎",
-      detail: "GUI 没能启动 imessage-exporter。",
-      action: "下载 imessage-exporter，或在运行环境面板里选择本机已有的 imessage-exporter 可执行文件。",
+      title: "内置导出引擎未能启动",
+      detail: "GUI 没能调用内置 imessage-exporter 引擎。",
+      action: "重启应用后再试；反馈问题时复制诊断报告。",
     };
   }
 

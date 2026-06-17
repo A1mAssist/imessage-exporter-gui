@@ -84,8 +84,6 @@ export function SourceStep({
   loadingEnvironment,
   diagnosticsSucceeded,
   onChooseBackup,
-  onChooseExporter,
-  onOpenExporterDownload,
   onSelectBackup,
   onChange,
   onClearPassword,
@@ -99,8 +97,6 @@ export function SourceStep({
   loadingEnvironment: boolean;
   diagnosticsSucceeded: boolean;
   onChooseBackup: () => void;
-  onChooseExporter: () => void;
-  onOpenExporterDownload: () => void;
   onSelectBackup: (backup: BackupCandidate) => void;
   onChange: (patch: Partial<ExportConfig>) => void;
   onClearPassword: () => void;
@@ -120,18 +116,13 @@ export function SourceStep({
         environment={environment}
         diagnosticsSucceeded={diagnosticsSucceeded}
         diagnosticsBlockers={diagnosticsBlockers}
-        onChooseExporter={onChooseExporter}
-        onOpenExporterDownload={onOpenExporterDownload}
         onChooseBackup={onChooseBackup}
         onRunDiagnostics={onRunDiagnostics}
       />
 
       <EngineSetupCard
-        config={config}
         environment={environment}
         loading={loadingEnvironment}
-        onOpenExporterDownload={onOpenExporterDownload}
-        onChooseExporter={onChooseExporter}
         onRefreshEnvironment={onRefreshEnvironment}
       />
 
@@ -223,7 +214,7 @@ export function SourceStep({
               </label>
               <p className="warning-text">
                 <ShieldAlert size={15} />
-                密码会临时传给 CLI，命令预览和日志会脱敏，但系统进程列表仍可能短暂看到。
+                密码只在本次任务中传给内置导出引擎，命令预览和日志会脱敏。
               </p>
             </div>
           ) : null}
@@ -256,8 +247,6 @@ function FirstRunGuide({
   environment,
   diagnosticsSucceeded,
   diagnosticsBlockers,
-  onChooseExporter,
-  onOpenExporterDownload,
   onChooseBackup,
   onRunDiagnostics,
 }: {
@@ -266,8 +255,6 @@ function FirstRunGuide({
   environment?: EnvironmentStatus;
   diagnosticsSucceeded: boolean;
   diagnosticsBlockers: string[];
-  onChooseExporter: () => void;
-  onOpenExporterDownload: () => void;
   onChooseBackup: () => void;
   onRunDiagnostics: () => void;
 }) {
@@ -277,41 +264,35 @@ function FirstRunGuide({
   const canRunDiagnostics = diagnosticsBlockers.length === 0;
   const items: Array<{ label: string; detail: string; done: boolean; actions: ReactNode }> = [
     {
-      label: "准备导出引擎",
-      detail: engineReady ? "已检测到 imessage-exporter，可以继续。" : "先下载 imessage-exporter，然后在这里选择可执行文件。",
+      label: "内置导出引擎",
+      detail: engineReady ? environment?.exporterVersion ?? "内置 imessage-exporter 已就绪" : "正在读取引擎状态",
       done: engineReady,
       actions: (
-        <>
-          <button className="ghost-button" type="button" onClick={onOpenExporterDownload}>
-            <ExternalLink size={15} />
-            下载
-          </button>
-          <button className="ghost-button" type="button" onClick={onChooseExporter}>
-            <FolderOpen size={15} />
-            选择
-          </button>
-        </>
+        <span className="engine-inline-status">
+          <CheckCircle2 size={15} />
+          已内置
+        </span>
       ),
     },
     {
       label: "选择 iOS 备份",
-      detail: backupReady ? backup?.displayName ?? "备份目录已就绪。" : "选择包含 Manifest.db 和 Info.plist 的本机 iOS 备份根目录。",
+      detail: backupReady ? backup?.displayName ?? "备份目录已就绪" : "选择包含 Manifest.db 和 Info.plist 的 iOS 备份根目录",
       done: backupReady && passwordReady,
       actions: (
         <button className="ghost-button" type="button" onClick={onChooseBackup}>
           <Database size={15} />
-          选择备份
+          选择
         </button>
       ),
     },
     {
       label: "运行诊断",
-      detail: diagnosticsSucceeded ? "诊断已通过，可以继续设置导出选项。" : "确认数据库、附件、联系人和可选转换器状态。",
+      detail: diagnosticsSucceeded ? "诊断已通过，可以继续设置导出选项" : "确认数据库、附件、联系人和转换器状态",
       done: diagnosticsSucceeded,
       actions: (
         <button className="ghost-button" type="button" onClick={onRunDiagnostics} disabled={!canRunDiagnostics}>
           <Search size={15} />
-          运行诊断
+          运行
         </button>
       ),
     },
@@ -321,8 +302,8 @@ function FirstRunGuide({
     <section className="content-band first-run-guide" aria-label="首次导出路线">
       <div className="section-heading">
         <div>
-          <h2>首次导出清单</h2>
-          <p>按顺序完成这三项，就能进入导出选项。</p>
+          <h2>首次导出路线</h2>
+          <p>按这个顺序准备备份、确认诊断，再进入导出选项。</p>
         </div>
       </div>
       <div className="first-run-grid">
@@ -342,36 +323,29 @@ function FirstRunGuide({
 }
 
 function EngineSetupCard({
-  config,
   environment,
   loading,
-  onOpenExporterDownload,
-  onChooseExporter,
   onRefreshEnvironment,
 }: {
-  config: ExportConfig;
   environment?: EnvironmentStatus;
   loading: boolean;
-  onOpenExporterDownload: () => void;
-  onChooseExporter: () => void;
   onRefreshEnvironment: () => void;
 }) {
-  const selectedPath = config.exporterPath?.trim() || environment?.exporterPath;
   const ready = Boolean(environment?.exporterAvailable);
   const engineItems = [
-    { label: "获取方式", done: ready || Boolean(selectedPath), detail: ready || selectedPath ? "已使用本机可执行文件" : "需要下载或选择 imessage-exporter.exe", icon: <Download size={15} /> },
-    { label: "当前位置", done: Boolean(selectedPath), detail: selectedPath ? compactPath(selectedPath) : "未选择；会尝试从 PATH 检测", icon: <FolderOpen size={15} /> },
-    { label: "可用状态", done: ready, detail: ready ? environment?.exporterVersion ?? "检测通过" : "尚未检测到可用版本", icon: <CheckCircle2 size={15} /> },
+    { label: "模式", done: ready, detail: "应用内置 imessage-exporter，无需选择外部 exe", icon: <TerminalSquare size={15} /> },
+    { label: "版本", done: ready, detail: environment?.exporterVersion ?? "正在检测", icon: <Info size={15} /> },
+    { label: "兼容性", done: ready, detail: ready ? "已验证内置 Rust 引擎" : "等待环境检测完成", icon: <CheckCircle2 size={15} /> },
   ];
 
   return (
-    <section className="content-band engine-setup-card" aria-label="导出引擎设置">
+    <section className="content-band engine-setup-card" aria-label="内置导出引擎">
       <div className="section-heading">
         <div>
-          <h2>导出引擎设置</h2>
-          <p>{ready ? "已检测到 imessage-exporter，诊断和导出可以继续运行。" : "GUI 不内置 imessage-exporter；需要先下载或选择本机已有的可执行文件。"}</p>
+          <h2>内置导出引擎</h2>
+          <p>GUI 已直接集成 imessage-exporter 源码，命令预览仅用于核对参数。</p>
         </div>
-        <Badge tone={ready ? "ok" : "warn"}>{ready ? "已就绪" : "需要设置"}</Badge>
+        <Badge tone={ready ? "ok" : "warn"}>{ready ? "已就绪" : "检测中"}</Badge>
       </div>
       <div className="engine-setup-steps">
         {engineItems.map((item) => (
@@ -385,14 +359,6 @@ function EngineSetupCard({
         ))}
       </div>
       <div className="panel-actions">
-        <button className="ghost-button" type="button" onClick={onOpenExporterDownload}>
-          <ExternalLink size={15} />
-          打开下载页
-        </button>
-        <button className="ghost-button" type="button" onClick={onChooseExporter}>
-          <FolderOpen size={15} />
-          选择导出引擎
-        </button>
         <button className="ghost-button" type="button" onClick={onRefreshEnvironment} disabled={loading}>
           {loading ? <Loader2 className="spin" size={15} /> : <RefreshCcw size={15} />}
           重新检测
@@ -405,7 +371,7 @@ function EngineSetupCard({
 export function sourceDiagnosticsBlockers(config: ExportConfig, backup?: BackupCandidate, environment?: EnvironmentStatus): string[] {
   const blockers: string[] = [];
 
-  if (!environment?.exporterAvailable) blockers.push("缺少 imessage-exporter 导出引擎，暂时不能运行诊断。");
+  if (!environment?.exporterAvailable) blockers.push("内置导出引擎暂未就绪，暂时不能运行诊断。");
   blockers.push(...sourceSelectionBlockers(config, backup));
   if (config.encrypted && !config.cleartextPassword?.trim()) blockers.push("加密备份需要输入密码。");
 
@@ -451,7 +417,7 @@ function ReadinessBand({
         ? "正在检查"
         : environment?.exporterAvailable
           ? environment.exporterVersion ?? environment.exporterPath ?? "已就绪"
-          : "未找到导出引擎，请下载或选择 imessage-exporter",
+          : "内置导出引擎暂未就绪，请重新检测环境",
       tone: loading ? "neutral" : environment?.exporterAvailable ? "ok" : "error",
       icon: loading ? <Loader2 className="spin" size={17} /> : environment?.exporterAvailable ? <CheckCircle2 size={17} /> : <AlertCircle size={17} />,
     },
@@ -602,8 +568,6 @@ export function DiagnosticsStep({
   onRunDiagnostics,
   onCancel,
   onNext,
-  onChooseExporter,
-  onOpenExporterDownload,
   onChooseBackup,
   onBackToSource,
 }: {
@@ -621,8 +585,6 @@ export function DiagnosticsStep({
   onRunDiagnostics: () => void;
   onCancel: () => void;
   onNext: () => void;
-  onChooseExporter: () => void;
-  onOpenExporterDownload: () => void;
   onChooseBackup: () => void;
   onBackToSource: () => void;
 }) {
@@ -661,8 +623,6 @@ export function DiagnosticsStep({
         context="diagnostics"
         logs={logs}
         actions={{
-          onChooseExporter,
-          onOpenExporterDownload,
           onChooseBackup,
           onBackToSource,
           onRetry: onRunDiagnostics,
@@ -763,7 +723,7 @@ export function OptionsStep({
           label="格式"
           value={config.format}
           options={exportFormats}
-          onChange={(format) => onChange(format === "txt" ? { format, noLazy: false } : { format })}
+          onChange={(format) => onChange(format === "html" ? { format } : { format, noLazy: false })}
         />
         <SegmentedControl
           label="附件"
@@ -1038,8 +998,6 @@ export function RunStep({
   onCancel,
   onBackToOptions,
   onBackToSource,
-  onChooseExporter,
-  onOpenExporterDownload,
   onOpenOutput,
   onOpenFirstResult,
 }: {
@@ -1056,8 +1014,6 @@ export function RunStep({
   onCancel: () => void;
   onBackToOptions: () => void;
   onBackToSource: () => void;
-  onChooseExporter: () => void;
-  onOpenExporterDownload: () => void;
   onOpenOutput: () => void;
   onOpenFirstResult: () => void;
 }) {
@@ -1099,8 +1055,6 @@ export function RunStep({
         context="export"
         logs={logs}
         actions={{
-          onChooseExporter,
-          onOpenExporterDownload,
           onBackToSource,
           onBackToOptions,
           onRetry: onStart,
@@ -1109,7 +1063,7 @@ export function RunStep({
       <div className="result-actions">
         <button className="secondary-button" type="button" onClick={onOpenFirstResult} disabled={!exportPath.trim() || running || outcome.kind !== "succeeded"}>
           <ExternalLink size={17} />
-          {format === "html" ? "打开首个 HTML" : "打开首个 TXT"}
+          {`打开首个 ${resultFileLabel(format)}`}
         </button>
         <CopyButton label="复制路径" value={exportPath} disabled={!exportPath.trim()} title={exportPath ? `复制结果路径: ${exportPath}` : "复制结果路径"} />
       </div>
@@ -1167,3 +1121,8 @@ function ExportSummaryPanel({ summary }: { summary: ExportSummary }) {
   );
 }
 
+function resultFileLabel(format: ExportConfig["format"]): string {
+  if (format === "jsonl") return "JSONL";
+  if (format === "txt") return "TXT";
+  return "HTML";
+}

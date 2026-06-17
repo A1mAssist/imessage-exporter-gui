@@ -125,6 +125,7 @@ pub struct ExportConfig {
 pub enum ExportFormat {
     Html,
     Txt,
+    Jsonl,
 }
 
 impl ExportFormat {
@@ -132,6 +133,7 @@ impl ExportFormat {
         match self {
             ExportFormat::Html => "html",
             ExportFormat::Txt => "txt",
+            ExportFormat::Jsonl => "jsonl",
         }
     }
 }

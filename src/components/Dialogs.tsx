@@ -4,8 +4,6 @@ import {
   CheckCircle2,
   Database,
   Download,
-  ExternalLink,
-  FolderOpen,
   Loader2,
   MessageSquareText,
   RefreshCcw,
@@ -34,8 +32,6 @@ export function OnboardingDialog({
   environment,
   diagnosticsSucceeded,
   diagnosticsBlockers,
-  onChooseExporter,
-  onOpenExporterDownload,
   onChooseBackup,
   onRunDiagnostics,
   onClose,
@@ -46,8 +42,6 @@ export function OnboardingDialog({
   environment?: EnvironmentStatus;
   diagnosticsSucceeded: boolean;
   diagnosticsBlockers: string[];
-  onChooseExporter: () => void;
-  onOpenExporterDownload: () => void;
   onChooseBackup: () => void;
   onRunDiagnostics: () => void;
   onClose: () => void;
@@ -61,7 +55,7 @@ export function OnboardingDialog({
   const items: Array<{ label: string; detail: string; done: boolean; icon: ReactNode }> = [
     {
       label: "准备导出引擎",
-      detail: engineReady ? "已检测到 imessage-exporter，可以继续。" : "GUI 不内置导出引擎，请先下载或选择本机可执行文件。",
+      detail: engineReady ? "内置 imessage-exporter 已就绪，可以继续。" : "导出引擎状态尚未就绪，请刷新环境后重试。",
       done: engineReady,
       icon: <TerminalSquare size={17} />,
     },
@@ -108,14 +102,6 @@ export function OnboardingDialog({
           ))}
         </div>
         <div className="oobe-actions" aria-label="首次设置操作">
-          <button className="ghost-button" type="button" onClick={onOpenExporterDownload}>
-            <ExternalLink size={15} />
-            下载导出引擎
-          </button>
-          <button className="ghost-button" type="button" onClick={onChooseExporter}>
-            <FolderOpen size={15} />
-            选择导出引擎
-          </button>
           <button className="ghost-button" type="button" onClick={onChooseBackup}>
             <Database size={15} />
             选择备份
@@ -153,8 +139,6 @@ export function AboutDialog({
   updateState,
   onCheckUpdates,
   onInstallUpdate,
-  onOpenExporterDownload,
-  onChooseExporter,
   onOpenResource,
   onClose,
 }: {
@@ -164,8 +148,6 @@ export function AboutDialog({
   updateState: UpdateCheckState;
   onCheckUpdates: () => void;
   onInstallUpdate: () => void;
-  onOpenExporterDownload: () => void;
-  onChooseExporter: () => void;
   onOpenResource: (file: "license" | "thirdPartyNotices") => void;
   onClose: () => void;
 }) {
@@ -239,16 +221,16 @@ export function AboutDialog({
           <section className="about-section engine-setup-section">
             <div className="section-heading compact-heading">
               <h3>导出引擎</h3>
-              <p>{environment?.exporterAvailable ? "已检测到 imessage-exporter，诊断和导出可以继续运行。" : "未检测到 imessage-exporter；可以下载新版或选择本机已有文件。"}</p>
+              <p>{environment?.exporterAvailable ? "内置 imessage-exporter 已集成到应用内，诊断和导出可以继续运行。" : "导出引擎信息暂不可用，请稍后重试。"}</p>
             </div>
             <div className="engine-setup-steps">
               <span className={environment?.exporterAvailable ? "done" : ""}>
                 <strong>{environment?.exporterAvailable ? <CheckCircle2 size={16} /> : <Download size={15} />}</strong>
-                获取 imessage-exporter
+                内置引擎
               </span>
-              <span className={config.exporterPath?.trim() || environment?.exporterPath ? "done" : ""}>
-                <strong>{config.exporterPath?.trim() || environment?.exporterPath ? <CheckCircle2 size={16} /> : <FolderOpen size={15} />}</strong>
-                可执行文件位置
+              <span className={environment?.exporterAvailable ? "done" : ""}>
+                <strong>{environment?.exporterAvailable ? <CheckCircle2 size={16} /> : <RefreshCcw size={15} />}</strong>
+                兼容性检查
               </span>
               <span className={environment?.exporterAvailable ? "done" : ""}>
                 <strong>{environment?.exporterAvailable ? <CheckCircle2 size={16} /> : <RefreshCcw size={15} />}</strong>
@@ -260,17 +242,6 @@ export function AboutDialog({
               <Fact label="版本" value={environment?.exporterVersion ?? "未检测到"} />
               <Fact label="已验证版本" value={environment?.verifiedExporterVersion ?? "4.1.0"} />
               <Fact label="兼容状态" value={exporterCompatibilityLabel(environment)} />
-              <Fact label="路径" value={config.exporterPath?.trim() || environment?.exporterPath || "未选择；会检查 PATH"} />
-            </div>
-            <div className="panel-actions">
-              <button className="ghost-button" type="button" onClick={onOpenExporterDownload}>
-                <ExternalLink size={15} />
-                打开下载页
-              </button>
-              <button className="ghost-button" type="button" onClick={onChooseExporter}>
-                <FolderOpen size={15} />
-                选择导出引擎
-              </button>
             </div>
           </section>
 
@@ -295,9 +266,6 @@ export function EnvironmentDialog({
   environment,
   config,
   settingsSaveState,
-  onChooseExporter,
-  onClearExporter,
-  onOpenExporterDownload,
   onRefresh,
   onClearSettings,
   onOpenResource,
@@ -307,9 +275,6 @@ export function EnvironmentDialog({
   environment?: EnvironmentStatus;
   config: ExportConfig;
   settingsSaveState: SettingsSaveState;
-  onChooseExporter: () => void;
-  onClearExporter: () => void;
-  onOpenExporterDownload: () => void;
   onRefresh: () => void;
   onClearSettings: () => void;
   onOpenResource: (file: "license" | "thirdPartyNotices") => void;
@@ -317,8 +282,6 @@ export function EnvironmentDialog({
   onClose: () => void;
 }) {
   const dialogRef = useDialogKeyboard(onClose);
-  const configuredExporterPath = config.exporterPath?.trim() ?? "";
-  const effectiveExporterPath = configuredExporterPath || environment?.exporterPath || "未选择；会尝试从 PATH 检测";
   const attachmentReady = Boolean(environment?.ffmpegAvailable && environment?.imagemagickAvailable);
   const attachmentDetail = attachmentReady
     ? "basic/full 附件转换依赖已经齐备。"
@@ -345,29 +308,15 @@ export function EnvironmentDialog({
           <section className="about-section environment-primary-section">
             <div className="section-heading compact-heading">
               <h3>导出引擎</h3>
-              <p>GUI 不内置 imessage-exporter；请选择本机已有的可执行文件，或打开下载页获取最新版。</p>
+              <p>导出引擎已内置到应用内，环境页只展示版本与兼容性状态。</p>
             </div>
             <div className="fact-list dense">
               <Fact label="状态" value={environment?.exporterAvailable ? "可用" : "未找到"} />
               <Fact label="版本" value={environment?.exporterVersion ?? "未检测到"} />
               <Fact label="已验证版本" value={environment?.verifiedExporterVersion ?? "4.1.0"} />
               <Fact label="兼容状态" value={exporterCompatibilityLabel(environment)} />
-              <Fact label="路径" value={effectiveExporterPath} />
             </div>
             <div className="panel-actions">
-              <button className="ghost-button" type="button" onClick={onChooseExporter}>
-                <FolderOpen size={15} />
-                选择导出引擎
-              </button>
-              <button className="ghost-button" type="button" onClick={onOpenExporterDownload}>
-                <ExternalLink size={15} />
-                下载导出引擎
-              </button>
-              {configuredExporterPath ? (
-                <button className="ghost-button" type="button" onClick={onClearExporter}>
-                  清除
-                </button>
-              ) : null}
               <button className="ghost-button" type="button" onClick={onRefresh}>
                 <RefreshCcw size={15} />
                 重新检测
@@ -465,7 +414,7 @@ function buildSupportSnapshot(
     `Exporter version: ${environment?.exporterVersion ?? "unknown"}`,
     `Verified exporter version: ${environment?.verifiedExporterVersion ?? "4.1.0"}`,
     `Exporter version status: ${environment?.exporterVersionStatus ?? "unknown"}`,
-    `Exporter path: ${config.exporterPath?.trim() || environment?.exporterPath || "PATH / not selected"}`,
+    `Exporter path: ${config.exporterPath?.trim() || environment?.exporterPath || "built-in / not applicable"}`,
     `ffmpeg available: ${environment?.ffmpegAvailable ? "yes" : "no"}`,
     `ImageMagick available: ${environment?.imagemagickAvailable ? "yes" : "no"}`,
     `Backup path set: ${config.backupPath.trim() ? "yes" : "no"}`,

@@ -9,7 +9,6 @@ type PersistedExportSettings = Omit<ExportConfig, "cleartextPassword"> & {
 const persistedKeys: Array<keyof Omit<ExportConfig, "cleartextPassword">> = [
   "kind",
   "backupPath",
-  "exporterPath",
   "encrypted",
   "exportPath",
   "format",
@@ -85,6 +84,7 @@ function sanitizeLoadedConfig(config: ExportConfig): ExportConfig {
   return {
     ...config,
     kind: "iosBackup",
+    exporterPath: "",
     cleartextPassword: "",
     noLazy: config.format === "html" ? config.noLazy : false,
     customName: config.useCallerId ? "" : config.customName,

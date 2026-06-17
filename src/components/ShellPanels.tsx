@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   Clipboard,
   Database,
-  FolderOpen,
   Info,
   Loader2,
   Monitor,
@@ -20,8 +19,6 @@ import type { BackupCandidate, EnvironmentStatus } from "../types";
 
 export type SettingsSaveState = "saved" | "saving" | "failed" | "cleared";
 export type AppTheme = "system" | "light" | "dark";
-
-const exporterDownloadUrl = "https://github.com/ReagentX/imessage-exporter/releases/latest";
 
 export function TopBar({
   activeSectionLabel,
@@ -85,21 +82,16 @@ export function TopBar({
 export function EnvironmentPanel({
   environment,
   loading,
-  exporterPath,
-  onChooseExporter,
   onRefresh,
   onOpenDetails,
   detailsButtonRef,
 }: {
   environment?: EnvironmentStatus;
   loading: boolean;
-  exporterPath?: string;
-  onChooseExporter: () => void;
   onRefresh: () => void;
   onOpenDetails: () => void;
   detailsButtonRef?: RefObject<HTMLButtonElement>;
 }) {
-  const effectiveExporterPath = exporterPath?.trim() || environment?.exporterPath;
   const attachmentReady = Boolean(environment?.ffmpegAvailable && environment?.imagemagickAvailable);
   const attachmentPartial = Boolean(environment?.ffmpegAvailable || environment?.imagemagickAvailable);
   const attachmentValue = attachmentReady ? "可用" : attachmentPartial ? "部分可用" : "未配置";
@@ -113,21 +105,14 @@ export function EnvironmentPanel({
           {loading ? <Loader2 className="spin" size={16} /> : <RefreshCcw size={16} />}
         </button>
       </div>
-      <StatusLine ok={environment?.exporterAvailable} label="导出引擎" value={environment?.exporterAvailable ? "可用" : "未找到"} />
+      <StatusLine ok={environment?.exporterAvailable} label="导出引擎" value={environment?.exporterAvailable ? "内置可用" : "未就绪"} />
       <StatusLine ok={attachmentReady} label="附件转换" value={attachmentValue} />
-      <small className="env-path-line" title={effectiveExporterPath || "未选择；会尝试从 PATH 检测"}>
-        {effectiveExporterPath ? compactPath(effectiveExporterPath) : "未选择；会尝试从 PATH 检测"}
-      </small>
       {versionHint ? (
         <small className={`env-version-line ${versionTone}`} title={versionHint}>
           {versionHint}
         </small>
       ) : null}
       <div className="env-panel-actions">
-        <button className="ghost-button" type="button" onClick={onChooseExporter}>
-          <FolderOpen size={15} />
-          选择
-        </button>
         <button className="ghost-button" type="button" onClick={onOpenDetails} ref={detailsButtonRef}>
           <Info size={15} />
           详情
@@ -249,13 +234,6 @@ export function EnvironmentFixList({ environment, onCopy }: { environment?: Envi
 function environmentFixes(environment?: EnvironmentStatus): Array<{ label: string; command: string }> {
   if (!environment) return [];
   const fixes: Array<{ label: string; command: string }> = [];
-
-  if (!environment.exporterAvailable) {
-    fixes.push({
-      label: "下载 imessage-exporter 后选择可执行文件",
-      command: exporterDownloadUrl,
-    });
-  }
   if (!environment.ffmpegAvailable || !environment.imagemagickAvailable) {
     fixes.push({
       label: "安装 basic/full 附件转换器",

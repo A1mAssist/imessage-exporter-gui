@@ -89,114 +89,53 @@ imessage-exporter -d -p <backup> -a iOS --no-progress
 - `src-tauri/src/cli.rs`
 - `scripts/sanity-check.mjs`
 
-## 4. 真实 exporter 本体验证
+## 4. 内置 exporter 矩阵验证
 
-### 4.1 为什么要加真实本体验证
+### 4.1 为什么要改成内置验证
 
-这次问题的教训是：mock 只能证明 GUI 流程和页面状态没明显坏掉，不能证明真实 `imessage-exporter` 接受 GUI 生成的参数。
+这次问题的教训是：mock 只能证明 GUI 流程和页面状态没明显坏掉，不能证明 GUI 后端参数和 Rust 引擎真正一致。
 
-因此本轮加入了新的验证目标：
+现在 `imessage-exporter` 已经作为 Rust 源码内置到 GUI 里，所以验证方式也改成：
 
-> GUI 后端会生成的每类命令，都必须交给真实 `imessage-exporter` 本体跑一遍，至少确认参数能被真实 CLI 正确解析，并进入备份校验阶段。
+> 直接在 Rust 单测里校验 GUI 后端生成的命令矩阵，确保诊断和导出参数映射与内置引擎一致。
 
-### 4.2 新增 smoke 脚本
+### 4.2 现在怎么测
 
-新增文件：
+新增/更新了：
 
-- `scripts/smoke-exporter-cli.ps1`
+- `src-tauri/src/cli.rs` 的命令矩阵测试
+- `scripts/sanity-check.mjs`
+- `scripts/verify.ps1`
+- GitHub CI 的 Windows job
 
-新增 npm script：
+验证策略是：
 
-```json
-"smoke:exporter-cli": "powershell -ExecutionPolicy Bypass -File scripts/smoke-exporter-cli.ps1"
-```
+- 调用同一套 `diagnostics_args()` 和 `export_args()`。
+- 覆盖 HTML、TXT、JSONL 三种格式。
+- 确认 TXT/JSONL 不会错误带上 HTML-only 的 `-l`。
+- 确认诊断模式不会再把 `--no-progress` 和缺少 `--format` 的组合发给引擎。
 
-该脚本负责：
+### 4.3 当前覆盖范围
 
-- 查找本地 `imessage-exporter` 可执行文件。
-- 优先使用传入的 `-ExporterPath`。
-- 其次使用环境变量 `IMESSAGE_EXPORTER_PATH`。
-- 再尝试 PATH 中的 `imessage-exporter`。
-- 最后尝试用户 Downloads 目录中最近的 `imessage-exporter*.exe`。
-- 找到 exporter 后，设置 `IMESSAGE_EXPORTER_REAL_SMOKE_PATH`。
-- 调用 Rust 后端测试 `real_exporter_accepts_gui_generated_command_matrix`。
-
-CI 中的 Windows job 会下载固定版本 `imessage-exporter 4.1.0`：
-
-```text
-https://github.com/ReagentX/imessage-exporter/releases/download/4.1.0/imessage-exporter-x86_64-pc-windows-gnu.exe
-```
-
-下载后的路径通过 `scripts/smoke-exporter-cli.ps1 -ExporterPath <path>` 传入。这样 PR 的必过 `windows` 检查不再只跑 mock，而是会用真实 exporter 本体验证 GUI 生成的 25 组命令矩阵。Release workflow 暂不改变；当前先把 PR CI 做成硬门槛。
-
-### 4.3 为什么矩阵放在 Rust 测试里
-
-最开始曾经在 PowerShell 脚本里手写参数矩阵，但这样有一个风险：脚本里手写的参数可能和真实 GUI 后端生成逻辑漂移。
-
-最终改成：
-
-- PowerShell 只负责定位 exporter 和启动测试。
-- 命令矩阵由 `src-tauri/src/cli.rs` 内部的真实后端逻辑生成。
-- 测试调用同一套 `diagnostics_args()` 和 `export_args()`。
-
-这样能保证测试的不是“脚本模仿出来的一组参数”，而是“GUI 后端实际会生成的参数”。
-
-### 4.4 当前真实 CLI 矩阵覆盖范围
-
-真实 exporter smoke 当前覆盖 25 个 GUI 生成命令组合：
+当前矩阵覆盖：
 
 1. 普通诊断
-2. 加密备份诊断，带 `--cleartext-password`
-3. HTML + disabled 附件策略
-4. HTML + disabled + no-lazy
-5. HTML + clone 附件策略
-6. HTML + clone + no-lazy
-7. HTML + basic 附件策略
-8. HTML + basic + no-lazy
-9. HTML + full 附件策略
-10. HTML + full + no-lazy
-11. TXT + disabled 附件策略
-12. TXT + clone 附件策略
-13. TXT + basic 附件策略
-14. TXT + full 附件策略
-15. 导出加密备份密码
-16. 仅开始日期
-17. 仅结束日期
-18. 开始日期 + 结束日期
-19. 会话筛选
-20. 自定义显示名称
-21. 使用 caller ID 显示
-22. 忽略磁盘空间警告
-23. 自定义名称组合选项
-24. caller ID 组合选项
-25. TXT 格式下确认不会错误传 HTML-only 的 `-l`
+2. 加密备份诊断
+3. HTML + 四种附件策略
+4. HTML + no-lazy
+5. TXT + 四种附件策略
+6. JSONL + 四种附件策略
+7. 加密导出
+8. 日期范围与会话筛选
+9. 自定义名称与 caller ID
+10. 忽略磁盘空间警告
+11. 组合参数
 
-### 4.5 验证策略说明
+### 4.4 为什么这样更稳
 
-真实 smoke 使用一个不存在的临时备份目录，不读取用户真实聊天数据。
+这样能保证测试的是“GUI 后端真实会生成的参数”，而不是脚本模仿出来的一组参数。
 
-预期行为不是完整导出成功，而是：
-
-- exporter 能正常解析 GUI 生成的参数。
-- 不出现 CLI 参数兼容性错误。
-- 命令继续执行到备份校验阶段。
-- 输出中出现 `Manifest.plist` 或 `Manifest.db` 相关校验错误。
-
-这样可以在不触碰真实用户数据的情况下验证参数兼容性。
-
-### 4.6 明确防止的错误
-
-真实 smoke 会拦截以下类型的问题：
-
-```text
-requires --format
-Invalid command line options
-Invalid options
-unexpected argument
-unrecognized option
-```
-
-这覆盖了本轮用户实际遇到的 `--no-progress` 兼容性问题，也能提前发现后续参数映射错误。
+同时也避免了“发布时还要额外下载一个外部 `imessage-exporter.exe` 才能验证”的旧流程。
 
 ## 5. 前端与体验改动概览
 
@@ -392,11 +331,12 @@ unrecognized option
 本轮本地已执行并通过：
 
 ```powershell
-npm run smoke:exporter-cli
 npm run check:static
+npm run test
 npm run build
 cargo fmt --check
 cargo test
+cargo check
 npm run package:windows
 ```
 
@@ -409,30 +349,19 @@ npm run package:windows
 - Mock UI smoke
 - Rust format
 - Rust metadata
-- 真实 exporter CLI compatibility smoke
+- 内置 exporter 命令矩阵测试
 - Rust tests
 - Rust check
 - Tauri Windows bundle
 - NSIS 安装包静默安装和启动 smoke
 
-### 7.2 本地真实 exporter smoke
-
-本地测试使用的 exporter：
-
-```text
-C:\Users\18366\Downloads\imessage-exporter-x86_64-pc-windows-gnu.exe
-```
-
-版本：
-
-```text
-iMessage Exporter 4.1.0
-```
+### 7.2 本地内置 exporter 矩阵
 
 结果：
 
-- GUI-generated command matrix：25 cases
-- 25/25 通过
+- GUI-generated command matrix：29 cases
+- 29/29 通过
+- 覆盖 HTML、TXT、JSONL
 - 未再出现 `requires --format`
 - 未出现无效命令行参数错误
 
@@ -615,11 +544,8 @@ GitHub release 中记录的主要 SHA256 digest：
 
 ### 10.3 验证与发布脚本
 
-- `scripts/smoke-exporter-cli.ps1`
-  - 新增真实 exporter CLI compatibility smoke。
-
 - `scripts/verify.ps1`
-  - 将真实 exporter smoke 接入验证链路。
+  - 将 Rust 测试、静态检查、前端构建和 mock UI smoke 接入验证链路。
   - 支持本地无签名 Tauri 构建。
 
 - `scripts/package-windows.ps1`
@@ -634,15 +560,15 @@ GitHub release 中记录的主要 SHA256 digest：
 
 ## 11. 当前已知限制
 
-### 11.1 真实 smoke 不做完整真实数据导出
+### 11.1 内置矩阵不做完整真实数据导出
 
-真实 exporter smoke 目前只验证命令行参数兼容性，不读取真实用户 iOS 备份，也不验证完整导出结果内容。
+内置 exporter 矩阵目前只验证 GUI 后端生成的诊断和导出参数兼容性，不读取真实用户 iOS 备份，也不验证完整导出结果内容。
 
 原因：
 
 - 真实 iOS 备份可能包含隐私数据。
 - CI 环境没有真实备份。
-- 参数兼容性问题可以通过缺失备份路径进入 Manifest 校验阶段来验证。
+- 参数兼容性问题可以通过 Rust 单测覆盖 `diagnostics_args` / `export_args` 的真实映射。
 
 后续如果要做端到端真实导出测试，建议准备脱敏的最小 iOS 备份 fixture。
 
@@ -668,15 +594,16 @@ GitHub release workflow 会生成签名和 `latest.json`。本地 `package:windo
 - 能打开首个结果文件。
 - 会话筛选能真的筛出目标会话。
 
-### 12.2 对 exporter 版本做兼容矩阵
+### 12.2 对内置 exporter 做版本同步记录
 
-当前真实验证使用 `iMessage Exporter 4.1.0`。建议后续记录和测试多个版本：
+当前内置源码基于 `iMessage Exporter 4.1.0`。建议后续记录 upstream 同步情况：
 
-- 当前推荐版本
-- 最低支持版本
-- 未来新版本
+- 当前内置版本
+- upstream 最新版本
+- 本地改动补丁
+- JSONL 扩展点
 
-可以在环境检测中提示用户当前 exporter 版本是否在已验证范围内。
+可以在环境检测中继续提示用户当前内置引擎版本和已验证版本。
 
 ### 12.3 增加 release 前 checklist
 
@@ -686,7 +613,7 @@ GitHub release workflow 会生成签名和 `latest.json`。本地 `package:windo
 npm run check:static
 npm run test
 npm run build
-npm run smoke:exporter-cli
+cargo test
 npm run package:windows
 ```
 
@@ -708,17 +635,17 @@ npm run package:windows
 - 权限不足识别。
 - 磁盘空间不足识别。
 - ffmpeg/ImageMagick 缺失提示。
-- exporter 版本过低提示。
+- 内置 exporter 同步落后提示。
 
 ## 13. 本轮结论
 
 `v0.1.1` 已完成重新发布。相比原先版本，当前版本最关键的变化是：
 
 - 修复了真实用户遇到的 exporter 参数兼容性错误。
-- 把真实 exporter 本体验证接入开发和打包流程。
-- 25 个 GUI 后端生成的命令组合已在 `iMessage Exporter 4.1.0` 上通过参数兼容性测试。
+- 把 exporter 源码内置进 GUI 后端，导出不再依赖外部 exe。
+- 29 个 GUI 后端生成的命令组合已在内置引擎矩阵中通过参数兼容性测试。
 - Windows 本地安装包已通过安装和启动 smoke。
 - GitHub Actions 已重新构建 Windows/macOS release 资产。
 - 旧 `v0.1.0` 已从 GitHub 删除。
 
-后续如果再出现“mock 正常但真实 exporter 失败”的问题，应优先把失败命令纳入 `real_exporter_accepts_gui_generated_command_matrix` 或更高阶的真实备份 fixture 测试中，而不是只在前端 mock 层修补表现。
+后续如果再出现“mock 正常但真实导出失败”的问题，应优先把失败命令纳入 `built_in_exporter_command_matrix_stays_compatible` 或更高阶的真实备份 fixture 测试中，而不是只在前端 mock 层修补表现。

@@ -2,9 +2,9 @@
 
 [English](./README.md)
 
-`iMessage Exporter GUI` 是 [`imessage-exporter`](https://github.com/ReagentX/imessage-exporter) 的桌面图形界面，用来把本机 iOS 备份里的短信/iMessage 导出为 HTML 或 TXT。
+`iMessage Exporter GUI` 是内置 [`imessage-exporter`](https://github.com/ReagentX/imessage-exporter) Rust 引擎的桌面图形应用，用来把本机 iOS 备份里的短信/iMessage 导出为 HTML、TXT 或 JSONL。
 
-它把常用导出流程做成了图形界面：选择 iOS 备份、配置导出引擎、检查备份状态、设置导出选项，然后一键导出并打开结果目录。
+它把常用导出流程做成了图形界面：选择 iOS 备份、检查备份状态、设置导出选项，然后一键导出并打开结果目录。
 
 ## 界面示例
 
@@ -31,21 +31,19 @@
 - Windows SmartScreen：点击“更多信息”，然后选择“仍要运行”。
 - macOS Gatekeeper：如果提示无法打开，可以右键 App 选择“打开”，或到“系统设置 -> 隐私与安全性”允许打开。
 
-GUI 安装包不内置 `imessage-exporter`。首次运行时，可以通过设置向导或“运行环境”面板打开上游下载页，然后选择它的可执行文件。安装版可以在“关于与诊断”面板里检查 GitHub Releases 更新；更新包会通过 updater 签名校验，但应用安装包本身目前仍未做代码签名。
+安装包已经内置 imessage-exporter Rust 引擎，用户不需要再单独下载或选择 `imessage-exporter.exe`。安装版可以在“关于与诊断”面板里检查 GitHub Releases 更新；更新包会通过 updater 签名校验，但应用安装包本身目前仍未做代码签名。
 
 ## 基本使用
 
-1. 下载或安装 [`imessage-exporter`](https://github.com/ReagentX/imessage-exporter/releases/latest)。
-2. 用 Apple Devices 或 iTunes 在本机创建 iPhone/iPad 备份。
-3. 打开 iMessage Exporter GUI。
-4. 如果系统没有在 `PATH` 里检测到 `imessage-exporter`，在“运行环境”面板选择它的可执行文件。
-5. 在“数据源”步骤选择或扫描本机 iOS 备份目录。
-6. 如果备份已加密，输入备份密码。
-7. 运行诊断，确认数据库、附件和可选转换工具状态。
-8. 选择导出格式、附件策略、日期范围和输出目录。
-9. 开始导出，等待完成后打开输出目录或第一个结果文件。
+1. 用 Apple Devices 或 iTunes 在本机创建 iPhone/iPad 备份。
+2. 打开 iMessage Exporter GUI。
+3. 在“数据源”步骤选择或扫描本机 iOS 备份目录。
+4. 如果备份已加密，输入备份密码。
+5. 运行诊断，确认数据库、附件和可选转换工具状态。
+6. 选择导出格式、附件策略、日期范围、会话筛选和输出目录。
+7. 开始导出，等待完成后打开输出目录或第一个结果文件。
 
-可以在“关于与诊断”面板里检查应用更新，并复制支持摘要；摘要会包含应用版本、平台、导出引擎路径和可选转换工具状态，便于反馈问题。
+可以在“关于与诊断”面板里检查应用更新，并复制支持摘要；摘要会包含应用版本、平台、内置引擎版本和可选转换工具状态，便于反馈问题。
 
 常见备份位置：
 
@@ -65,14 +63,14 @@ macOS: ~/Library/Application Support/MobileSync/Backup
 - 安装版支持通过 GitHub Releases 自动检查更新。
 - 自动扫描本机 iOS 备份，也支持手动选择备份目录。
 - 检查 `Manifest.db`、`Info.plist` 等备份关键文件。
-- 从 `PATH` 检测外部 `imessage-exporter` 导出引擎，也支持在界面里选择可执行文件。
-- HTML/TXT 导出，支持附件复制策略、日期范围、会话筛选和显示名选项。
+- 内置 `imessage-exporter` Rust 引擎，并保留命令预览便于核对参数。
+- HTML/TXT/JSONL 导出，支持附件复制策略、日期范围、会话筛选和显示名选项。
 - 输出目录检查，避免误写入备份目录或旧导出目录。
 - 一键生成带时间戳的导出目录，例如 `Messages Export 2026-06-12 0130`。
 - 导出日志实时显示，支持搜索、stdout/stderr/error 过滤和取消任务。
 - 诊断报告可复制或下载为 `.txt`。
 - 密码不会写入本地设置；日志和诊断报告会隐藏敏感信息。
-- 识别常见失败原因：备份密码错误、备份不完整、输出目录权限不足、导出引擎缺失、转换工具缺失。
+- 识别常见失败原因：备份密码错误、备份不完整、输出目录权限不足、引擎兼容性问题、转换工具缺失。
 - 可选检测 `ffmpeg` 和 ImageMagick，用于部分附件转换模式。
 
 当前限制：
@@ -80,7 +78,6 @@ macOS: ~/Library/Application Support/MobileSync/Backup
 - v1 只面向本机 iOS 备份导出。
 - 当前安装包只面向 Windows 和 macOS。
 - 暂不支持直接读取 macOS `chat.db`、越狱设备 `sms.db` 或独立附件目录。
-- GUI 安装包不内置 `imessage-exporter`；请单独安装，或在界面里选择它的可执行文件。
 - 暂不内置 `ffmpeg` 和 ImageMagick。
 - 暂无原生 PDF 导出；可以先导出 HTML，再用浏览器打印为 PDF。
 - 当前未做 Windows/macOS 代码签名，因此安装时可能有系统安全提示。
@@ -89,20 +86,23 @@ macOS: ~/Library/Application Support/MobileSync/Backup
 
 - 加密备份密码只保存在应用运行状态里，不写入本地设置。
 - 日志和诊断报告会隐藏密码。
-- 由于 upstream CLI 使用 `--cleartext-password` 参数，任务运行时密码仍可能短暂出现在系统进程列表里。
+- 内置 Rust 引擎只会在本次任务进程内接收密码，不再通过外部命令行传递。
 - 导出目录不能是备份目录本身，也不能位于备份目录内部。
 - 当前安装包未签名，安装时可能出现系统安全提示。
 
 ## 开发验证
 
-真实 exporter 兼容性 smoke 会调用 Rust 后端实际使用的 `diagnostics_args` 和 `export_args`，再把 GUI 生成的 25 组命令矩阵交给 `imessage-exporter` 本体解析。
+内置 exporter 兼容性检查放在 Rust 测试里。测试会调用后端实际使用的 `diagnostics_args` 和 `export_args`，验证包含 JSONL 在内的 GUI 命令矩阵，避免 CI 只覆盖 mock UI。
 
 ```powershell
-npm run smoke:exporter-cli
-powershell -ExecutionPolicy Bypass -File scripts/smoke-exporter-cli.ps1 -ExporterPath C:\Users\18366\Downloads\imessage-exporter-x86_64-pc-windows-gnu.exe
+npm run check:static
+npm test
+npm run build
+Push-Location src-tauri
+cargo test
+cargo check
+Pop-Location
 ```
-
-显式传入 `-ExporterPath` 时，如果文件不存在，smoke 会失败；未传显式路径时，未安装 exporter 的本地开发机会跳过真实本体 smoke。GitHub CI 的 Windows job 会下载固定的 `imessage-exporter 4.1.0` 可执行文件，并把这项 smoke 作为必过检查。
 
 ## 许可证
 

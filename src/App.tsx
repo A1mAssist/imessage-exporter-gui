@@ -36,9 +36,7 @@ import {
   openFirstResult,
   openPath,
   openResourceFile,
-  openUrl,
   pickDirectory,
-  pickExporterFile,
   previewExportCommand,
   runDiagnostics,
   scanConversations,
@@ -77,7 +75,6 @@ const workspaceSections: Array<{ id: WorkspaceSectionId; label: string; icon: ty
 ];
 
 const maxArchivePathAttempts = 50;
-const exporterDownloadUrl = "https://github.com/ReagentX/imessage-exporter/releases/latest";
 const onboardingStorageKey = "imessage-exporter-gui.oobe.dismissed.v1";
 
 type WorkspaceSectionAccess = { disabled: boolean; reason?: string };
@@ -248,11 +245,10 @@ export default function App() {
     () => ({
       kind: "iosBackup",
       backupPath: config.backupPath,
-      exporterPath: config.exporterPath,
       encrypted: config.encrypted,
       cleartextPassword: config.cleartextPassword,
     }),
-    [config.backupPath, config.exporterPath, config.encrypted, config.cleartextPassword],
+    [config.backupPath, config.encrypted, config.cleartextPassword],
   );
 
   const validationErrors = useMemo(() => validateExportConfig(config), [config]);
@@ -288,12 +284,11 @@ export default function App() {
     }
   }, [activeSectionId, sourceSelectionErrors.length, exportJob]);
 
-  async function refreshEnvironment(exporterPathOverride?: unknown) {
-    const nextExporterPath = typeof exporterPathOverride === "string" ? exporterPathOverride : config.exporterPath;
+  async function refreshEnvironment() {
     setLoading(true);
     setError(undefined);
     try {
-      const [env, candidates] = await Promise.all([getEnvironment(nextExporterPath), scanIosBackups()]);
+      const [env, candidates] = await Promise.all([getEnvironment(), scanIosBackups()]);
       setEnvironment(env);
       setBackups(candidates);
       const savedBackup = candidates.find((candidate) => sameConfigPath(candidate.path, config.backupPath));
@@ -319,27 +314,6 @@ export default function App() {
       setError(String(err));
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function chooseExporterPath() {
-    const selected = await pickExporterFile(config.exporterPath || environment?.exporterPath);
-    if (!selected) return;
-    updateConfig({ exporterPath: selected });
-    await refreshEnvironment(selected);
-  }
-
-  async function clearExporterPath() {
-    updateConfig({ exporterPath: "" });
-    await refreshEnvironment("");
-  }
-
-  async function openExporterDownload() {
-    setError(undefined);
-    try {
-      await openUrl(exporterDownloadUrl);
-    } catch (err) {
-      setError(String(err));
     }
   }
 
@@ -595,8 +569,6 @@ export default function App() {
         <EnvironmentPanel
           environment={environment}
           loading={loading}
-          exporterPath={config.exporterPath}
-          onChooseExporter={chooseExporterPath}
           onRefresh={() => refreshEnvironment()}
           onOpenDetails={openEnvironmentDetails}
           detailsButtonRef={environmentDetailsTriggerRef}
@@ -666,8 +638,6 @@ export default function App() {
             loadingEnvironment={loading}
             diagnosticsSucceeded={diagnosticsSucceeded}
             onChooseBackup={chooseBackupPath}
-            onChooseExporter={chooseExporterPath}
-            onOpenExporterDownload={openExporterDownload}
             onSelectBackup={applyBackup}
             onChange={updateConfig}
             onClearPassword={clearPassword}
@@ -692,8 +662,6 @@ export default function App() {
             onRunDiagnostics={startDiagnostics}
             onCancel={stopActiveJob}
             onNext={() => setActiveSectionId("options")}
-            onChooseExporter={chooseExporterPath}
-            onOpenExporterDownload={openExporterDownload}
             onChooseBackup={chooseBackupPath}
             onBackToSource={() => setActiveSectionId("source")}
           />
@@ -734,8 +702,6 @@ export default function App() {
             onCancel={stopActiveJob}
             onBackToOptions={() => setActiveSectionId("options")}
             onBackToSource={() => setActiveSectionId("source")}
-            onChooseExporter={chooseExporterPath}
-            onOpenExporterDownload={openExporterDownload}
             onOpenOutput={openOutputPath}
             onOpenFirstResult={openFirstResultFile}
           />
@@ -749,8 +715,6 @@ export default function App() {
           environment={environment}
           diagnosticsSucceeded={diagnosticsSucceeded}
           diagnosticsBlockers={sourceDiagnosticsBlockers(config, selectedBackup, environment)}
-          onChooseExporter={chooseExporterPath}
-          onOpenExporterDownload={openExporterDownload}
           onChooseBackup={chooseBackupPath}
           onRunDiagnostics={startDiagnostics}
           onClose={dismissOnboarding}
@@ -768,8 +732,6 @@ export default function App() {
           updateState={updateState}
           onCheckUpdates={checkForUpdates}
           onInstallUpdate={installUpdate}
-          onOpenExporterDownload={openExporterDownload}
-          onChooseExporter={chooseExporterPath}
           onOpenResource={(file) => openResourceFile(file).catch((err) => setError(String(err)))}
           onClose={closeAbout}
         />
@@ -779,9 +741,6 @@ export default function App() {
           environment={environment}
           config={config}
           settingsSaveState={settingsSaveState}
-          onChooseExporter={chooseExporterPath}
-          onClearExporter={clearExporterPath}
-          onOpenExporterDownload={openExporterDownload}
           onRefresh={() => refreshEnvironment()}
           onClearSettings={clearSavedSettings}
           onOpenResource={(file) => openResourceFile(file).catch((err) => setError(String(err)))}
@@ -809,8 +768,8 @@ async function nextAvailableArchivePath(stem: string, startSuffix: number, gener
 }
 
 function environmentExportBlockers(environment?: EnvironmentStatus): string[] {
-  if (!environment || environment.exporterAvailable) return [];
-  return ["缺少 imessage-exporter 导出引擎，暂时不能开始导出。"];
+  if (!environment) return [];
+  return [];
 }
 
 function workspaceSectionAccessMap(

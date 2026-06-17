@@ -1,4 +1,4 @@
-export type ExportFormat = "html" | "txt";
+export type ExportFormat = "html" | "txt" | "jsonl";
 export type CopyMethod = "disabled" | "clone" | "basic" | "full";
 
 export type SourceConfig = {

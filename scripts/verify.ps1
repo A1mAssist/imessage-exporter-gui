@@ -159,10 +159,6 @@ try {
             Pop-Location
         }
     }
-    Invoke-Step "Real imessage-exporter CLI compatibility smoke" {
-        & powershell -ExecutionPolicy Bypass -File (Join-Path $Root "scripts\smoke-exporter-cli.ps1")
-    }
-
     if ($Native) {
         Invoke-Step "Rust tests" {
             Push-Location (Join-Path $Root "src-tauri")

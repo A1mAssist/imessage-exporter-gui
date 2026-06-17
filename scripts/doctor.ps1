@@ -118,7 +118,6 @@ Test-Tool -Name "cargo" -Required
 Test-Tool -Name "rustc" -Required
 Test-Tool -Name "link" -Args @("/?") -Required
 Test-WindowsSdkLibs
-Test-Tool -Name "imessage-exporter"
 Test-Tool -Name "ffmpeg"
 Test-Tool -Name "magick"
 
@@ -156,7 +155,7 @@ else {
 if ($MissingOptional.Count -gt 0) {
     $UniqueOptional = $MissingOptional | Select-Object -Unique
     Write-Host ("  Optional tool(s) missing: {0}" -f ($UniqueOptional -join ", "))
-    Write-Host "  Install imessage-exporter or choose its executable in the GUI before running exports."
+    Write-Host "  imessage-exporter is built into the app; install only optional converters if needed."
     Write-Host "  Install ffmpeg/ImageMagick only if you need basic/full attachment conversion:"
     Write-Host "    .\scripts\setup-windows.ps1 -Install -InstallOptionalTools"
 }

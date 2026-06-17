@@ -7,7 +7,7 @@ use std::{
 use tauri::{AppHandle, Manager, State};
 
 use crate::{
-    cli, environment,
+    cli, engine, environment,
     jobs::JobRegistry,
     models::{
         AppDiagnostics, BackupCandidate, CommandPreview, ConversationCandidate, EnvironmentStatus,
@@ -16,8 +16,8 @@ use crate::{
 };
 
 #[tauri::command]
-pub fn get_environment(exporter_path: Option<String>) -> EnvironmentStatus {
-    environment::get_environment(exporter_path.as_deref())
+pub fn get_environment() -> EnvironmentStatus {
+    environment::get_environment()
 }
 
 #[tauri::command]
@@ -61,9 +61,10 @@ pub fn run_diagnostics(
     registry: State<'_, JobRegistry>,
     source: SourceConfig,
 ) -> Result<JobStarted, String> {
-    let exporter = require_exporter(source.exporter_path.as_deref())?;
     let args = cli::diagnostics_args(&source)?;
-    registry.spawn(app, exporter, args)
+    let preview = cli::preview(engine::ENGINE_LABEL, &args);
+    let options = engine::diagnostics_options(&source)?;
+    registry.spawn_engine(app, preview, options)
 }
 
 #[tauri::command]
@@ -72,9 +73,10 @@ pub fn start_export(
     registry: State<'_, JobRegistry>,
     config: ExportConfig,
 ) -> Result<JobStarted, String> {
-    let exporter = require_exporter(config.exporter_path.as_deref())?;
     let args = cli::export_args(&config)?;
-    registry.spawn(app, exporter, args)
+    let preview = cli::preview(engine::ENGINE_LABEL, &args);
+    let options = engine::export_options(&config)?;
+    registry.spawn_engine(app, preview, options)
 }
 
 #[tauri::command]
@@ -146,13 +148,8 @@ fn resolve_resource_file(app: &AppHandle, file_name: &str) -> Result<PathBuf, St
 
 #[tauri::command]
 pub fn preview_export_command(config: ExportConfig) -> Result<CommandPreview, String> {
-    let exporter = cli::resolve_exporter_path(config.exporter_path.as_deref())?;
     let args = cli::export_args(&config)?;
-    Ok(cli::preview(exporter.display().to_string(), &args))
-}
-
-fn require_exporter(configured_path: Option<&str>) -> Result<std::path::PathBuf, String> {
-    cli::resolve_exporter_path(configured_path)
+    Ok(cli::preview(engine::ENGINE_LABEL, &args))
 }
 
 fn open_path_native(path: PathBuf) -> std::io::Result<()> {
@@ -195,6 +192,7 @@ fn find_first_result_file(root: &Path, format: &ExportFormat) -> Option<PathBuf>
     match format {
         ExportFormat::Html => find_first_file_with_extensions(root, &["html", "htm"]),
         ExportFormat::Txt => find_first_file_with_extensions(root, &["txt"]),
+        ExportFormat::Jsonl => find_first_file_with_extensions(root, &["jsonl"]),
     }
 }
 

@@ -7,7 +7,6 @@ import {
   Clipboard,
   Database,
   Download,
-  ExternalLink,
   FolderOpen,
   RefreshCcw,
   Search,
@@ -21,8 +20,6 @@ import type { CommandPreview, JobEvent, LogLine } from "../types";
 export type JobOutcome = { kind: "idle" | "running" | "succeeded" | "failed" | "cancelled"; code?: number; message?: string };
 
 export type RecoveryActions = {
-  onChooseExporter?: () => void;
-  onOpenExporterDownload?: () => void;
   onChooseBackup?: () => void;
   onBackToSource?: () => void;
   onBackToOptions?: () => void;
@@ -168,16 +165,16 @@ function RecoveryActionRow({ hint, actions }: { hint?: ReturnType<typeof recover
   if (hint.category === "exporter") {
     return (
       <span className="recovery-actions">
-        {actions.onOpenExporterDownload ? (
-          <button className="ghost-button" type="button" onClick={actions.onOpenExporterDownload}>
-            <ExternalLink size={15} />
-            下载导出引擎
+        {actions.onBackToOptions ? (
+          <button className="ghost-button" type="button" onClick={actions.onBackToOptions}>
+            <Settings2 size={15} />
+            回到选项
           </button>
         ) : null}
-        {actions.onChooseExporter ? (
-          <button className="ghost-button" type="button" onClick={actions.onChooseExporter}>
-            <FolderOpen size={15} />
-            选择导出引擎
+        {actions.onRetry ? (
+          <button className="ghost-button" type="button" onClick={actions.onRetry}>
+            <RefreshCcw size={15} />
+            重试
           </button>
         ) : null}
       </span>
