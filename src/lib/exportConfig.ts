@@ -57,7 +57,7 @@ export function validateExportConfig(config: ExportConfig): string[] {
     }
   }
   if (config.encrypted && !config.cleartextPassword?.trim()) errors.push("加密备份需要输入密码。");
-  if (config.customName?.trim() && config.useCallerId) errors.push("自定义显示名和 Caller ID 只能选择一个。");
+  if (config.customName?.trim() && config.useCallerId) errors.push("我的显示名和 Caller ID 只能选择一个。");
   if (!validDate(config.startDate)) errors.push("开始日期必须是 YYYY-MM-DD。");
   if (!validDate(config.endDate)) errors.push("结束日期必须是 YYYY-MM-DD。");
   if (validDate(config.startDate) && validDate(config.endDate) && reversedDateRange(config.startDate, config.endDate)) {

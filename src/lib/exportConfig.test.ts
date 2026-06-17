@@ -69,6 +69,18 @@ describe("export config helpers", () => {
     expect(normalized.noLazy).toBe(false);
   });
 
+  it("prevents conflicting self-name options", () => {
+    expect(
+      validateExportConfig({
+        ...defaultExportConfig,
+        backupPath: "C:/Backup",
+        exportPath: "C:/Out",
+        customName: "Me",
+        useCallerId: true,
+      }),
+    ).toContain("我的显示名和 Caller ID 只能选择一个。");
+  });
+
   it("rejects an end date before the start date", () => {
     expect(
       validateExportConfig({

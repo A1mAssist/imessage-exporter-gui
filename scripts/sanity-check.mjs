@@ -126,6 +126,7 @@ check("app shows built-in exporter status line", shellPanels.includes('label="�
 check("app renders diagnostic summary panel", workspaceSteps.includes("function DiagnosticSummaryPanel") && workspaceSteps.includes("诊断摘要") && workspaceSteps.includes("附件转换"));
 check("app renders recovery action buttons", commonUi.includes("function RecoveryActionRow") && commonUi.includes("回到数据源") && commonUi.includes("回到选项") && !commonUi.includes("下载导出引擎"));
 check("app exposes generated archive directory action", workspaceSteps.includes("新建归档目录") && app.includes("timestampedArchiveSequence") && workspaceSteps.includes("生成带时间戳的新文件夹"));
+check("app names single-conversation archive folders", app.includes("archiveLabelForConversation") && read("src/lib/archivePath.ts").includes("sanitizePathSegment") && read("src/lib/archivePath.test.ts").includes("Family_旅行_2026"));
 check("app increments generated archive directory collisions", app.includes("nextAvailableArchivePath") && app.includes("无法生成未占用的归档目录"));
 check("app wires export presets", workspaceSteps.includes("exportPresets.map") && workspaceSteps.includes("onApplyPreset") && app.includes("applyExportPreset"));
 check("app shows recovery hints for failed jobs", commonUi.includes("recoveryHintForFailure") && commonUi.includes("hint?.action") && commonUi.includes("job-outcome-notice"));
@@ -136,7 +137,7 @@ check("app shows first-use backup empty guidance", workspaceSteps.includes("没�
 check("app shows startup readiness checks", workspaceSteps.includes("function ReadinessBand") && workspaceSteps.includes("就绪检查") && workspaceSteps.includes("导出引擎"));
 check("app blocks diagnostics for incomplete backups", workspaceSteps.includes("sourceDiagnosticsBlockers") && workspaceSteps.includes("备份目录需要同时包含 Manifest.db 和 Info.plist") && workspaceSteps.includes("source-blockers"));
 check("app renders diagnostic detail text", commonUi.includes("DiagnosticFinding") && commonUi.includes("status.detail"));
-check("app summarizes export before running", workspaceSteps.includes("function ExportReview") && workspaceSteps.includes("导出前复核") && workspaceSteps.includes("exportReviewNotes"));
+check("app summarizes export before running", workspaceSteps.includes("function ExportReview") && workspaceSteps.includes("导出前复核") && workspaceSteps.includes("exportReviewNotes") && workspaceSteps.includes("结果文件"));
 check("app persists only non-sensitive settings", app.includes("loadPersistedExportConfig(defaultExportConfig)") && app.includes("persistExportConfig(config)") && dialogs.includes("不保存备份密码"));
 check("app exposes password clearing controls", workspaceSteps.includes("清除密码") && workspaceSteps.includes("任务结束后自动清除密码") && app.includes("autoClearPasswordRef"));
 check("app validates saved manual backup path on startup", app.includes("validateBackupPath(config.backupPath)") && app.includes("candidate.encrypted ?? current.encrypted"));
@@ -177,6 +178,7 @@ check("frontend rejects impossible dates", exportConfig.includes("Date.UTC") && 
 check("frontend uses date picker controls", workspaceSteps.includes("DateRangeField") && exportOptionFields.includes("function DateRangeField") && exportOptionFields.includes('type="date"') && exportOptionFields.includes("清除日期"));
 check("frontend lists conversations before manual filtering", workspaceSteps.includes("ConversationPicker") && app.includes("scanConversations") && exportOptionFields.includes("function ConversationPicker") && exportOptionFields.includes("会话列表不可用") && exportOptionFields.includes("手动输入筛选值"));
 check("frontend can search and sort conversations", exportOptionFields.includes("搜索会话") && exportOptionFields.includes("消息最多") && exportOptionFields.includes("最近消息") && exportOptionFields.includes("filterAndSortConversations"));
+check("frontend clarifies self display name vs result filenames", workspaceSteps.includes("我的显示名") && workspaceSteps.includes("只影响导出内容里自己的名字") && !workspaceSteps.includes("自定义显示名"));
 check("frontend normalizes no-lazy for TXT", exportConfig.includes('noLazy: config.format === "html" ? config.noLazy : false') && read("src/lib/exportConfig.test.ts").includes("drops HTML-only no-lazy mode for TXT exports"));
 const diagnosticParser = read("src/lib/diagnostics.ts");
 check("diagnostics parser scopes warnings to relevant lines", diagnosticParser.includes("relevant") && diagnosticParser.includes("hasWarning(line.lower)") && read("src/lib/diagnostics.test.ts").includes("keeps converter warnings from contaminating other sections"));

@@ -657,8 +657,11 @@ async function assertConversationPicker(page) {
     throw new Error("Conversation picker did not update the command preview");
   }
   const reviewText = await page.locator(".review-panel").textContent();
-  if (!reviewText?.includes("+15551234567")) {
+  if (!reviewText?.includes("Alex Chen")) {
     throw new Error("Conversation picker selection was not reflected in the review panel");
+  }
+  if (!reviewText.includes("结果文件") || !reviewText.includes("Alex Chen")) {
+    throw new Error("Export review did not explain conversation-based result filenames");
   }
 }
 
@@ -728,17 +731,18 @@ async function assertGeneratedArchiveDirectory(browser) {
   const secret = "archive-password";
   const page = await openOptionsPage(browser, `${baseUrl}&archiveCollision=1`, secret);
   await assertOutputDirectoryWarning(page);
+  await page.getByLabel("会话筛选").selectOption("chat-42");
 
   await page.getByRole("button", { name: "新建归档目录" }).click();
-  await page.waitForFunction(() => /Messages Export \d{4}-\d{2}-\d{2} \d{4} \(2\)/.test(document.querySelector(".path-field input")?.value ?? ""));
+  await page.waitForFunction(() => /家庭群 - Messages Export \d{4}-\d{2}-\d{2} \d{4} \(2\)/.test(document.querySelector(".path-field input")?.value ?? ""));
   const generatedPath = await page.locator(".path-field input").inputValue();
-  if (!/Messages Export \d{4}-\d{2}-\d{2} \d{4} \(2\)/.test(generatedPath)) {
-    throw new Error(`Generated archive directory did not skip the occupied timestamped path: ${generatedPath}`);
+  if (!/家庭群 - Messages Export \d{4}-\d{2}-\d{2} \d{4} \(2\)/.test(generatedPath)) {
+    throw new Error(`Generated archive directory did not use the selected conversation title: ${generatedPath}`);
   }
   await page.getByRole("button", { name: "新建归档目录" }).click();
-  await page.waitForFunction(() => /Messages Export \d{4}-\d{2}-\d{2} \d{4} \(3\)/.test(document.querySelector(".path-field input")?.value ?? ""));
+  await page.waitForFunction(() => /家庭群 - Messages Export \d{4}-\d{2}-\d{2} \d{4} \(3\)/.test(document.querySelector(".path-field input")?.value ?? ""));
   const regeneratedPath = await page.locator(".path-field input").inputValue();
-  if (!/Messages Export \d{4}-\d{2}-\d{2} \d{4} \(3\)/.test(regeneratedPath)) {
+  if (!/家庭群 - Messages Export \d{4}-\d{2}-\d{2} \d{4} \(3\)/.test(regeneratedPath)) {
     throw new Error(`Repeated archive generation did not increment the suffix: ${regeneratedPath}`);
   }
   await page.getByText("目录当前不存在", { exact: false }).waitFor({ timeout: 5000 });

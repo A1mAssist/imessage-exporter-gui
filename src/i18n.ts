@@ -297,22 +297,23 @@ const en: Record<string, string> = {
   "群聊": "Group chat",
   "单聊": "Direct chat",
   "联系人、手机号或聊天标识": "Contact, phone number, or chat identifier",
-  "自定义显示名": "Custom Display Name",
-  "留空使用默认联系人解析": "Leave blank to use default contact parsing",
+  "我的显示名": "My Display Name",
+  "只影响导出内容里自己的名字": "Only changes how your own name appears in exported content",
   "HTML 打印友好模式": "HTML print-friendly mode",
-  "使用 Caller ID 作为显示名": "Use Caller ID as display name",
+  "用 Caller ID 显示我自己": "Show me as Caller ID",
   "忽略磁盘空间警告": "Ignore disk space warnings",
   "开始导出": "Start Export",
   "来源": "Source",
   "日期": "Date",
   "会话": "Conversation",
-  "显示名": "Display Name",
+  "结果文件": "Result File",
+  "我的名字": "My Name",
   "全部会话": "All conversations",
   "导出前复核": "Pre-export Review",
   "确认这次任务会读取哪里、写到哪里，以及哪些选项会影响结果。": "Confirm what this task reads, where it writes, and which options affect the result.",
   "导出风险提示": "Export risk notes",
   "使用 Caller ID": "Use Caller ID",
-  "默认联系人解析": "Default contact parsing",
+  "默认解析": "Default parsing",
   "加密备份密码只保存在内存中，但运行时仍可能短暂出现在系统进程列表。": "The encrypted backup password is kept only in memory, but it may briefly appear in the system process list while running.",
   "输出目录已有内容，继续导出前请确认旧文件可以保留。": "The output folder already has files. Confirm old files can stay before continuing.",
   "basic/full 附件转换依赖 ffmpeg 和 ImageMagick，当前环境不完整。": "basic/full attachment conversion requires ffmpeg and ImageMagick, and the current environment is incomplete.",
@@ -489,6 +490,18 @@ export function translateText(language: AppLanguage, text: string): string {
 
   const conversationFilterCount = text.match(/^已筛出 (.+) 个会话。$/);
   if (conversationFilterCount) return `${conversationFilterCount[1]} conversation(s) shown.`;
+
+  const labeledArchiveFolder = text.match(/^生成带“(.+)”和时间戳的新文件夹。$/);
+  if (labeledArchiveFolder) return `Generate a timestamped folder named with "${labeledArchiveFolder[1]}".`;
+
+  const selectedResultName = text.match(/^以“(.+)”命名(\.[a-z0-9]+)$/i);
+  if (selectedResultName) return `Named with "${selectedResultName[1]}"${selectedResultName[2]}`;
+
+  const filteredResultName = text.match(/^按匹配会话命名(\.[a-z0-9]+)$/i);
+  if (filteredResultName) return `Named from the matched conversation${filteredResultName[1]}`;
+
+  const conversationResultName = text.match(/^按联系人或群聊命名(\.[a-z0-9]+)$/i);
+  if (conversationResultName) return `Named by contact or group chat${conversationResultName[1]}`;
 
   const recentConversation = text.match(/^最近 (.+)$/);
   if (recentConversation) return `Recent ${recentConversation[1]}`;

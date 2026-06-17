@@ -682,6 +682,8 @@ export function OptionsStep({
   onApplyPreset: (presetId: ExportPresetId) => void;
   onStart: () => void;
 }) {
+  const selectedConversation = selectedConversationForFilter(config.conversationFilter, conversations);
+
   return (
     <div className="page">
       <Header eyebrow="导出设置" title="设置导出选项" description="选择输出格式、附件复制策略、日期范围和会话筛选。" />
@@ -716,7 +718,7 @@ export function OptionsStep({
             <Archive size={15} />
             新建归档目录
           </button>
-          <small>生成带时间戳的新文件夹，避免导出结果混入旧目录。</small>
+          <small>{selectedConversation ? `生成带“${selectedConversation.title}”和时间戳的新文件夹。` : "生成带时间戳的新文件夹，避免导出结果混入旧目录。"}</small>
         </div>
         <ExportPathNotice status={exportPathStatus} checking={checkingExportPath} />
         <SegmentedControl
@@ -752,12 +754,12 @@ export function OptionsStep({
           onChange={(conversationFilter) => onChange({ conversationFilter })}
         />
         <label>
-          <span>自定义显示名</span>
+          <span>我的显示名</span>
           <input
             value={config.customName ?? ""}
             disabled={config.useCallerId}
             onChange={(event) => onChange({ customName: event.target.value })}
-            placeholder="留空使用默认联系人解析"
+            placeholder="只影响导出内容里自己的名字"
           />
         </label>
       </section>
@@ -774,7 +776,7 @@ export function OptionsStep({
         </label>
         <label className="checkbox-row">
           <input type="checkbox" checked={Boolean(config.useCallerId)} onChange={(event) => onChange({ useCallerId: event.target.checked, customName: "" })} />
-          <span>使用 Caller ID 作为显示名</span>
+          <span>用 Caller ID 显示我自己</span>
         </label>
         <label className="checkbox-row">
           <input type="checkbox" checked={Boolean(config.ignoreDiskWarning)} onChange={(event) => onChange({ ignoreDiskWarning: event.target.checked })} />
@@ -782,7 +784,7 @@ export function OptionsStep({
         </label>
       </section>
 
-      <ExportReview config={config} environment={environment} exportPathStatus={exportPathStatus} />
+      <ExportReview config={config} environment={environment} exportPathStatus={exportPathStatus} selectedConversation={selectedConversation} />
 
       {preview ? <CommandBox preview={preview} /> : null}
       {errors.map((message) => (
@@ -801,12 +803,15 @@ function ExportReview({
   config,
   environment,
   exportPathStatus,
+  selectedConversation,
 }: {
   config: ExportConfig;
   environment?: EnvironmentStatus;
   exportPathStatus?: ExportPathStatus;
+  selectedConversation?: ConversationCandidate;
 }) {
   const notes = exportReviewNotes(config, environment, exportPathStatus);
+  const conversationName = conversationExportName(config.conversationFilter, selectedConversation);
   const items: Array<{ label: string; value: string; icon: ReactNode }> = [
     {
       label: "来源",
@@ -830,11 +835,16 @@ function ExportReview({
     },
     {
       label: "会话",
-      value: config.conversationFilter?.trim() || "全部会话",
+      value: conversationName,
       icon: <MessagesSquare size={17} />,
     },
     {
-      label: "显示名",
+      label: "结果文件",
+      value: resultFilenameLabel(config, selectedConversation),
+      icon: <FileArchive size={17} />,
+    },
+    {
+      label: "我的名字",
       value: displayNameLabel(config),
       icon: <UserRound size={17} />,
     },
@@ -885,7 +895,25 @@ function dateRangeLabel(config: ExportConfig): string {
 function displayNameLabel(config: ExportConfig): string {
   if (config.useCallerId) return "使用 Caller ID";
   if (config.customName?.trim()) return config.customName.trim();
-  return "默认联系人解析";
+  return "默认解析";
+}
+
+function selectedConversationForFilter(conversationFilter?: string, conversations: ConversationCandidate[] = []): ConversationCandidate | undefined {
+  const filter = conversationFilter?.trim();
+  if (!filter) return undefined;
+  return conversations.find((conversation) => conversation.filterValue === filter);
+}
+
+function conversationExportName(conversationFilter?: string, selectedConversation?: ConversationCandidate): string {
+  if (selectedConversation) return selectedConversation.title;
+  return conversationFilter?.trim() || "全部会话";
+}
+
+function resultFilenameLabel(config: ExportConfig, selectedConversation?: ConversationCandidate): string {
+  const extension = config.format === "jsonl" ? ".jsonl" : config.format === "txt" ? ".txt" : ".html";
+  if (selectedConversation) return `以“${selectedConversation.title}”命名${extension}`;
+  if (config.conversationFilter?.trim()) return `按匹配会话命名${extension}`;
+  return `按联系人或群聊命名${extension}`;
 }
 
 function exportReviewNotes(

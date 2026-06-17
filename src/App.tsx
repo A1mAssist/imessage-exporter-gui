@@ -363,6 +363,7 @@ export default function App() {
     const sequence = timestampedArchiveSequence({
       exportPath: config.exportPath,
       backupPath: config.backupPath,
+      label: archiveLabelForConversation(config.conversationFilter, conversations),
     });
 
     try {
@@ -752,6 +753,12 @@ export default function App() {
   );
 }
 
+function archiveLabelForConversation(conversationFilter?: string, conversations: ConversationCandidate[] = []): string | undefined {
+  const filter = conversationFilter?.trim();
+  if (!filter) return undefined;
+  const selected = conversations.find((conversation) => conversation.filterValue === filter);
+  return selected?.title || filter;
+}
 
 async function nextAvailableArchivePath(stem: string, startSuffix: number, generatedPaths: Set<string>): Promise<string> {
   for (let attempt = 0; attempt < maxArchivePathAttempts; attempt += 1) {
