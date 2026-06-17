@@ -64,7 +64,14 @@ Because the local build was unsigned, `latest.json` was intentionally skipped lo
 
 Branch: `codex/ci-exporter-compat-smoke`
 
-The earlier built-in engine commit passed CI. After the `0.2.0` version bump is pushed, CI must pass again on the release candidate commit before tagging.
+Commit: `9b55ba4fe2c2ca29451d78766dd6f0a0c870da5d`
+
+GitHub Actions run:
+
+- Workflow: `CI`
+- Job: `windows`
+- Status: success
+- URL: <https://github.com/A1mAssist/imessage-exporter-gui/actions/runs/27693448160>
 
 ## Release Checklist
 
