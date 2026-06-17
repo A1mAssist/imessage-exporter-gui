@@ -155,7 +155,7 @@ check("API opens bundled resource files", api.includes("openResourceFile") && ap
 check("API opens first result file by format", api.includes("openFirstResult") && api.includes('"open_first_result"'));
 check("API exposes app diagnostics and updater flow", api.includes("getAppDiagnostics") && api.includes("checkForAppUpdate") && api.includes("installAvailableUpdate") && api.includes("@tauri-apps/plugin-updater") && api.includes("@tauri-apps/plugin-process"));
 check("API exposes conversation scanning", api.includes("scanConversations") && api.includes('"scan_conversations"') && api.includes("mockConversations"));
-check("mock API supports updater availability", api.includes("mockUpdateInfo") && api.includes("updateAvailable") && api.includes("0.1.1"));
+check("mock API supports updater availability", api.includes("mockUpdateInfo") && api.includes("updateAvailable") && api.includes("0.2.0"));
 check("mock API only maps no-lazy for HTML", api.includes('config.format === "html" && config.noLazy'));
 check("mock API supports generated archive paths", api.includes("looksLikeGeneratedArchive") && api.includes("archiveCollision") && api.includes("messages export \\d{4}-\\d{2}-\\d{2} \\d{4}"));
 check("mock API supports failure and empty-backup scenarios", api.includes('params.get("fail")') && api.includes('fail === "password"') && api.includes("emptyBackups"));
