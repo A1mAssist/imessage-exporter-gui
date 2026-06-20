@@ -90,6 +90,24 @@ function Test-Tool {
     }
 }
 
+function Test-Linker {
+    $Command = Resolve-Tool -Name "link"
+    if (-not $Command) {
+        Write-Host "[MISSING] link not found"
+        $script:MissingRequired.Add("link")
+        return
+    }
+
+    $Output = & $Command 2>&1
+    $Version = $Output | Where-Object { $_ -match "Incremental Linker Version" } | Select-Object -First 1
+    if ($Version) {
+        Write-Host ("[ok] link: {0}" -f $Version)
+    }
+    else {
+        Write-Host ("[ok] link: {0}" -f $Command)
+    }
+}
+
 function Test-WindowsSdkLibs {
     $Candidates = @(
         "C:\Program Files (x86)\Windows Kits\10\Lib\*\um\x64\kernel32.lib",
@@ -116,9 +134,9 @@ Test-Tool -Name "node" -Required
 Test-Tool -Name "npm" -Required
 Test-Tool -Name "cargo" -Required
 Test-Tool -Name "rustc" -Required
-Test-Tool -Name "link" -Args @("/?") -Required
+Test-Linker
 Test-WindowsSdkLibs
-Test-Tool -Name "ffmpeg"
+Test-Tool -Name "ffmpeg" -Args @("-version")
 Test-Tool -Name "magick"
 
 Write-Host ""

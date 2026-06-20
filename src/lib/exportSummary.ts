@@ -52,7 +52,7 @@ function statusLabel(status: ExportSummaryStatus, code?: number): string {
   if (status === "succeeded") return "导出完成";
   if (status === "cancelled") return "导出已取消";
   if (status === "failed") return code === undefined ? "导出失败" : `导出失败，代码 ${code}`;
-  return "等待导出";
+  return "导出前预览";
 }
 
 function summaryDetail(status: ExportSummaryStatus, logText: string, message?: string): string {
@@ -60,7 +60,7 @@ function summaryDetail(status: ExportSummaryStatus, logText: string, message?: s
   if (status === "succeeded") return latestMeaningfulLine(logText) ?? "任务已成功结束。";
   if (status === "cancelled") return "任务已停止，已保留当前日志。";
   if (status === "failed") return message || latestMeaningfulLine(logText) || "请查看日志中的错误信息。";
-  return "开始导出后会在这里汇总结论。";
+  return "开始前先确认设置和输出位置。";
 }
 
 function parseOutputPath(logText: string): string | undefined {
@@ -102,7 +102,7 @@ function nextStep(status: ExportSummaryStatus, format: ExportFormat): string {
   if (status === "failed") return "按失败提示修正后重新导出。";
   if (status === "cancelled") return "调整选项后可重新导出。";
   if (status === "running") return "保持窗口打开，必要时可取消任务。";
-  return "开始导出后会显示下一步。";
+  return "确认无误后开始导出。";
 }
 
 function resultFormatLabel(format: ExportFormat): string {

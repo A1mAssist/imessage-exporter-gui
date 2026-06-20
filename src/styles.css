@@ -372,20 +372,6 @@ button:disabled {
   white-space: nowrap;
 }
 
-.env-version-line {
-  display: block;
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 800;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.env-version-line.warn {
-  color: #9a6a08;
-}
-
 .env-panel-actions {
   display: flex;
   flex-wrap: wrap;
@@ -578,14 +564,14 @@ button:disabled {
 
 .quick-stats {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
 .quick-stat {
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr);
-  align-items: center;
+  align-items: start;
   gap: 9px;
   min-height: 62px;
   padding: 10px;
@@ -608,19 +594,23 @@ button:disabled {
 .quick-stat small,
 .quick-stat strong {
   display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .quick-stat small {
   color: var(--muted);
   font-size: 12px;
+  line-height: 1.3;
 }
 
 .quick-stat strong {
   margin-top: 2px;
   font-size: 13px;
+  line-height: 1.35;
 }
 
 .quick-stat.ok .quick-stat-icon {
@@ -670,6 +660,33 @@ button:disabled {
   border: 1px solid #f0d492;
   background: #fff8e7;
   color: #7a5414;
+}
+
+.notice.update {
+  justify-content: space-between;
+  border: 1px solid #b9dde2;
+  background: #eef9fa;
+  color: var(--accent-ink);
+}
+
+.notice.update > span {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.notice-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.notice-actions .icon-button {
+  width: 30px;
+  height: 30px;
 }
 
 .job-outcome-notice {
@@ -932,6 +949,14 @@ button:disabled {
 .summary-next-step small {
   margin-top: 2px;
   line-height: 1.4;
+}
+
+.summary-next-step.pending {
+  background: #edf9fa;
+}
+
+.summary-next-step.pending svg {
+  color: var(--accent-ink);
 }
 
 .toolbar {
@@ -1408,74 +1433,6 @@ select:disabled {
   font-size: 13px;
 }
 
-.engine-setup-card {
-  display: grid;
-  gap: 14px;
-  border-color: rgba(12, 123, 131, 0.24);
-}
-
-.engine-setup-steps {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.engine-setup-steps span {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
-  align-items: start;
-  gap: 8px;
-  min-width: 0;
-  padding: 10px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: #fbfdfe;
-  color: #334155;
-  font-size: 12px;
-  font-weight: 800;
-  line-height: 1.35;
-}
-
-.engine-setup-steps span.done {
-  border-color: #bde7cb;
-  background: #f0fbf4;
-  color: #176b3a;
-}
-
-.engine-setup-steps strong {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 7px;
-  background: #eef2f6;
-  color: #526075;
-  font-size: 13px;
-  font-style: normal;
-  font-weight: 900;
-}
-
-.engine-setup-steps span.done strong {
-  background: #dff5e8;
-  color: var(--green);
-}
-
-.engine-setup-steps em {
-  min-width: 0;
-  font-style: normal;
-}
-
-.engine-setup-steps small {
-  display: block;
-  margin-top: 3px;
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .support-section {
   grid-column: 1 / -1;
 }
@@ -1518,7 +1475,7 @@ select:disabled {
 
 .readiness-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -1559,6 +1516,7 @@ select:disabled {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .readiness-item.ok .readiness-icon {
@@ -1765,7 +1723,7 @@ label span {
 
 .diagnostic-summary-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -2075,12 +2033,15 @@ label span {
 }
 
 .command-box {
+  min-width: 0;
   padding: 16px;
   box-shadow: var(--shadow-tight);
 }
 
 .command-box code {
   display: block;
+  box-sizing: border-box;
+  max-width: 100%;
   overflow: auto;
   padding: 12px;
   border-radius: 7px;
@@ -2219,9 +2180,9 @@ label span {
   gap: 12px;
 }
 
-.run-empty-state h2 {
+.run-empty-state h3 {
   margin: 0;
-  font-size: 18px;
+  font-size: 17px;
 }
 
 .run-empty-state p {
@@ -2238,6 +2199,187 @@ label span {
   border-radius: 8px;
   background: var(--accent-soft);
   color: var(--accent-ink);
+}
+
+.run-preflight-summary {
+  display: grid;
+  gap: 12px;
+}
+
+.preflight-hero {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid rgba(158, 212, 216, 0.85);
+  border-radius: 8px;
+  background: #edf9fa;
+  color: var(--accent-ink);
+}
+
+.preflight-hero h3,
+.preflight-hero p {
+  margin: 0;
+}
+
+.preflight-hero h3 {
+  font-size: 17px;
+}
+
+.preflight-hero p {
+  margin-top: 4px;
+  color: #335f65;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.preflight-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.preflight-fact {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  min-height: 60px;
+  padding: 9px;
+  border: 1px solid #dce3ec;
+  border-radius: 7px;
+  background: var(--surface);
+}
+
+.preflight-fact small,
+.preflight-fact strong {
+  display: block;
+  min-width: 0;
+}
+
+.preflight-fact small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.preflight-fact strong {
+  margin-top: 2px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.preflight-checklist {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.preflight-check {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #dce3ec;
+  border-radius: 7px;
+  background: var(--surface);
+}
+
+.preflight-check > span {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+
+.preflight-check strong,
+.preflight-check small {
+  display: block;
+  min-width: 0;
+}
+
+.preflight-check strong {
+  font-size: 13px;
+}
+
+.preflight-check small {
+  margin-top: 3px;
+  color: var(--muted);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.export-preflight {
+  display: grid;
+  gap: 16px;
+}
+
+.export-preflight .section-heading {
+  margin-bottom: 0;
+}
+
+.export-preflight-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.export-preflight-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: 14px;
+}
+
+.preflight-card {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.preflight-card.summary-card {
+  background: #f8fcfd;
+}
+
+.preflight-card.next-step-card {
+  grid-column: 1 / -1;
+}
+
+.preflight-card-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.preflight-card .command-box,
+.preflight-card .export-summary-panel,
+.preflight-card .log-panel {
+  width: 100%;
+  min-width: 0;
+}
+
+.preflight-card .command-box {
+  padding: 12px;
+  box-shadow: none;
+}
+
+.preflight-card .command-box code {
+  max-width: 100%;
 }
 
 .result-strip {
@@ -2413,10 +2555,11 @@ label span {
 :root[data-theme="dark"] .first-run-item,
 :root[data-theme="dark"] .oobe-step,
 :root[data-theme="dark"] .about-section,
-:root[data-theme="dark"] .engine-setup-steps span,
 :root[data-theme="dark"] .diagnostic-summary-item,
 :root[data-theme="dark"] .review-item,
 :root[data-theme="dark"] .summary-item,
+:root[data-theme="dark"] .preflight-fact,
+:root[data-theme="dark"] .preflight-check,
 :root[data-theme="dark"] .diagnostic-tile,
 :root[data-theme="dark"] .segment-grid button,
 :root[data-theme="dark"] .preset-grid button,
@@ -2469,10 +2612,11 @@ label span {
 :root[data-theme="dark"] .first-run-item,
 :root[data-theme="dark"] .oobe-step,
 :root[data-theme="dark"] .about-section,
-:root[data-theme="dark"] .engine-setup-steps span,
 :root[data-theme="dark"] .diagnostic-summary-item,
 :root[data-theme="dark"] .review-item,
-:root[data-theme="dark"] .summary-item {
+:root[data-theme="dark"] .summary-item,
+:root[data-theme="dark"] .preflight-fact,
+:root[data-theme="dark"] .preflight-check {
   background: var(--surface-strong);
 }
 
@@ -2509,7 +2653,6 @@ label span {
 :root[data-theme="dark"] .path-inspection.ok,
 :root[data-theme="dark"] .first-run-item.done,
 :root[data-theme="dark"] .oobe-step.done,
-:root[data-theme="dark"] .engine-setup-steps span.done,
 :root[data-theme="dark"] .diagnostic-summary-item.ok .diagnostic-summary-icon,
 :root[data-theme="dark"] .result-strip.success {
   border-color: rgba(105, 210, 139, 0.5);
@@ -2519,10 +2662,16 @@ label span {
 
 :root[data-theme="dark"] .result-strip.running,
 :root[data-theme="dark"] .log-filters button.selected,
+:root[data-theme="dark"] .notice.update,
+:root[data-theme="dark"] .preflight-hero,
 :root[data-theme="dark"] .summary-next-step {
   border-color: rgba(66, 184, 189, 0.62);
   background: var(--accent-soft);
   color: var(--accent-ink);
+}
+
+:root[data-theme="dark"] .preflight-hero p {
+  color: #9ce3e5;
 }
 
 :root[data-theme="dark"] .diagnostic-summary-item.error .diagnostic-summary-icon {
@@ -2536,19 +2685,8 @@ label span {
   background: #0c1218;
 }
 
-:root[data-theme="dark"] .update-progress span,
-:root[data-theme="dark"] .engine-setup-steps span {
+:root[data-theme="dark"] .update-progress span {
   color: var(--ink);
-}
-
-:root[data-theme="dark"] .engine-setup-steps strong {
-  background: #25313d;
-  color: #b8c6d1;
-}
-
-:root[data-theme="dark"] .engine-setup-steps span.done strong {
-  background: #21432d;
-  color: #91e5aa;
 }
 
 :root[data-theme="dark"] .primary-button {
@@ -2594,6 +2732,7 @@ label span {
   .readiness-grid,
   .review-grid,
   .summary-grid,
+  .preflight-facts,
   .preset-grid,
   .segment-grid,
   .quick-stats {
@@ -2668,11 +2807,12 @@ label span {
   .diagnostic-summary-grid,
   .about-grid,
   .environment-detail-grid,
-  .engine-setup-steps,
   .date-range-field,
   .readiness-grid,
   .review-grid,
   .summary-grid,
+  .preflight-facts,
+  .preflight-checklist,
   .preset-grid,
   .segment-grid {
     grid-template-columns: 1fr;
@@ -2699,6 +2839,30 @@ label span {
   .panel-actions {
     justify-content: flex-start;
     width: 100%;
+  }
+
+  .notice.update {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .notice-actions {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .export-preflight-actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .export-preflight-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .preflight-card.next-step-card {
+    grid-column: auto;
   }
 
   .primary-button,

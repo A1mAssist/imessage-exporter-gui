@@ -48,10 +48,10 @@
 
         <div class="env-panel">
           <div class="panel-title"><span>运行环境</span><button class="icon-button" type="button">↻</button></div>
-          <div class="status-line"><span class="preview-icon">!</span><span>imessage-exporter</span><strong>待构建</strong></div>
-          <div class="status-line"><span class="preview-icon">!</span><span>ffmpeg</span><strong>未检测到</strong></div>
-          <div class="status-line"><span class="preview-icon">!</span><span>ImageMagick</span><strong>未检测到</strong></div>
-          <p class="mini-warning">正式运行前请先构建 sidecar；未安装转换器时建议使用 clone 附件策略。</p>
+          <div class="status-line ok"><span class="preview-icon">✓</span><span>内置引擎</span><strong>4.1.0 + JSONL</strong></div>
+          <div class="status-line ok"><span class="preview-icon">✓</span><span>ffmpeg</span><strong>已检测</strong></div>
+          <div class="status-line ok"><span class="preview-icon">✓</span><span>ImageMagick</span><strong>已检测</strong></div>
+          <p class="mini-warning">导出引擎已内置；附件转换器是可选工具，缺失时仍可使用 clone 策略。</p>
         </div>
       </aside>
 
@@ -64,7 +64,7 @@
           <div class="quick-stats" aria-label="当前导出状态">
             <div class="quick-stat ok"><span class="quick-stat-icon"><span class="preview-icon">D</span></span><span><small>备份</small><strong>A1mAssist 的 iPhone</strong></span></div>
             <div class="quick-stat ok"><span class="quick-stat-icon"><span class="preview-icon">O</span></span><span><small>输出</small><strong>C:/.../Messages Export</strong></span></div>
-            <div class="quick-stat warn"><span class="quick-stat-icon"><span class="preview-icon">T</span></span><span><small>Sidecar</small><strong>待构建</strong></span></div>
+            <div class="quick-stat ok"><span class="quick-stat-icon"><span class="preview-icon">E</span></span><span><small>引擎</small><strong>内置可用</strong></span></div>
             <div class="quick-stat neutral"><span class="quick-stat-icon"><span class="preview-icon">I</span></span><span><small>任务</small><strong>空闲</strong></span></div>
           </div>
         </header>
@@ -120,7 +120,7 @@
               <label class="checkbox-row"><input type="checkbox" checked readonly /><span>这是加密 iOS 备份</span></label>
               <div class="password-block">
                 <label><span>备份密码</span><input type="password" value="preview-password" readonly /></label>
-                <p class="warning-text"><span class="preview-icon">!</span>密码会临时传给 CLI，命令预览和日志会脱敏。</p>
+                <p class="warning-text"><span class="preview-icon">!</span>密码只在本次任务进程内传给内置引擎；预览、日志和报告会脱敏。</p>
               </div>
             </div>
           </section>
@@ -136,8 +136,8 @@
           </section>
 
           <section class="command-box">
-            <div class="section-heading"><h2>命令预览</h2><p>密码和敏感值已脱敏。</p></div>
-            <code>imessage-exporter -p C:\...\Backup -a iOS -o C:\...\MessagesExport -f html -c clone --no-progress --cleartext-password [redacted]</code>
+            <div class="section-heading"><h2>导出前总览</h2><p>真实导出会在点击开始时再次校验路径、日期和输出目录。</p></div>
+            <code>内置 imessage-exporter · HTML · clone 附件策略 · 输出 C:\...\Messages Export · 密码 [redacted]</code>
           </section>
 
           <footer class="footer-actions">

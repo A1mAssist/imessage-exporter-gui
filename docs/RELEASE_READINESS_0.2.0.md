@@ -1,6 +1,6 @@
 # iMessage Exporter GUI 0.2.0 Release Readiness
 
-Date: 2026-06-17
+Date: 2026-06-20
 
 ## Summary
 
@@ -18,7 +18,7 @@ The GUI now vendors the upstream Rust source under `src-tauri/vendor/imessage-ex
 
 ## Local Verification
 
-The following checks passed on Windows before marking this candidate release-ready:
+The following checks passed on Windows after restoring this source handoff:
 
 ```powershell
 npm run check:static
@@ -54,11 +54,13 @@ Local unsigned artifacts were produced under `dist-installers`:
 SHA256:
 
 ```text
-a2ec34179cba18d818868e0a66219354ece487a126abfd434547d370fb3074fa  iMessage Exporter GUI_0.2.0_x64_zh-CN.msi
-7c641d6cf18575edf3485412dab60c12152ab2ab4330a5ed62c8fc01ef82b194  iMessage Exporter GUI_0.2.0_x64-setup.exe
+bf89f55eec965b46cf025814e604b8bdb851c0321bb39cecaec5ecf42b1c2e1e  iMessage Exporter GUI_0.2.0_x64_zh-CN.msi
+6b13c10ead98961f647068c14a1f8b59bda0016b999429712f745d46a20e42a7  iMessage Exporter GUI_0.2.0_x64-setup.exe
 ```
 
 Because the local build was unsigned, `latest.json` was intentionally skipped locally. The GitHub release workflow should produce signed updater artifacts when signing secrets are available.
+
+Handoff restore note: the source-only package excluded `node_modules`, `src-tauri/target`, `dist`, `dist-installers`, and `preview/`. Git history was restored from `origin/codex/ci-exporter-compat-smoke`; the tracked preview files were restored from Git, and mock smoke regenerated the `preview/react-mock-*.png` screenshots.
 
 ## CI Evidence
 

@@ -4,7 +4,6 @@ import {
   CheckCircle2,
   Database,
   Download,
-  Loader2,
   MessageSquareText,
   RefreshCcw,
   Search,
@@ -24,12 +23,11 @@ export type UpdateCheckState =
   | { kind: "available"; info: UpdateInfo }
   | { kind: "installing"; info: UpdateInfo; downloadedBytes: number; contentLength?: number }
   | { kind: "installed"; info: UpdateInfo }
-  | { kind: "failed"; message: string };
+  | { kind: "failed"; message: string; source: "check" | "install" };
 
 export function OnboardingDialog({
   backup,
   config,
-  environment,
   diagnosticsSucceeded,
   diagnosticsBlockers,
   onChooseBackup,
@@ -39,7 +37,6 @@ export function OnboardingDialog({
 }: {
   backup?: BackupCandidate;
   config: ExportConfig;
-  environment?: EnvironmentStatus;
   diagnosticsSucceeded: boolean;
   diagnosticsBlockers: string[];
   onChooseBackup: () => void;
@@ -47,18 +44,11 @@ export function OnboardingDialog({
   onClose: () => void;
   onStart: () => void;
 }) {
-  const engineReady = Boolean(environment?.exporterAvailable);
   const backupReady = Boolean(config.backupPath.trim() && backup?.valid);
   const passwordReady = !config.encrypted || Boolean(config.cleartextPassword?.trim());
   const canRunDiagnostics = diagnosticsBlockers.length === 0;
   const dialogRef = useDialogKeyboard(onClose);
   const items: Array<{ label: string; detail: string; done: boolean; icon: ReactNode }> = [
-    {
-      label: "准备导出引擎",
-      detail: engineReady ? "内置 imessage-exporter 已就绪，可以继续。" : "导出引擎状态尚未就绪，请刷新环境后重试。",
-      done: engineReady,
-      icon: <TerminalSquare size={17} />,
-    },
     {
       label: "选择 iOS 备份",
       detail: backupReady ? backup?.displayName ?? "备份目录已就绪。" : "选择 Apple Devices 或 iTunes 创建的本机 iOS 备份根目录。",
@@ -137,7 +127,6 @@ export function AboutDialog({
   environment,
   config,
   updateState,
-  onCheckUpdates,
   onInstallUpdate,
   onOpenResource,
   onClose,
@@ -146,14 +135,13 @@ export function AboutDialog({
   environment?: EnvironmentStatus;
   config: ExportConfig;
   updateState: UpdateCheckState;
-  onCheckUpdates: () => void;
   onInstallUpdate: () => void;
   onOpenResource: (file: "license" | "thirdPartyNotices") => void;
   onClose: () => void;
 }) {
   const currentVersion = appDiagnostics?.version ?? updateInfoFromState(updateState)?.currentVersion ?? "unknown";
   const snapshot = buildSupportSnapshot(appDiagnostics, environment, config, updateState);
-  const updateBusy = updateState.kind === "checking" || updateState.kind === "installing";
+  const shouldShowUpdateSection = shouldShowAboutUpdateSection(updateState);
   const dialogRef = useDialogKeyboard(onClose);
 
   return (
@@ -187,55 +175,39 @@ export function AboutDialog({
             </div>
           </section>
 
-          <section className="about-section update-section">
-            <div className="section-heading compact-heading">
-              <h3>自动更新</h3>
-              <p>{updateStatusText(updateState, currentVersion)}</p>
-            </div>
-            {updateState.kind === "installing" ? (
-              <div className="update-progress" aria-label="更新下载进度">
-                <span>{updateProgressText(updateState)}</span>
-                <progress value={updateState.downloadedBytes} max={updateState.contentLength ?? updateState.downloadedBytes + 1} />
+          {shouldShowUpdateSection ? (
+            <section className="about-section update-section">
+              <div className="section-heading compact-heading">
+                <h3>自动更新</h3>
+                <p>{updateStatusText(updateState, currentVersion)}</p>
               </div>
-            ) : null}
-            {updateState.kind === "failed" ? (
-              <p className="mini-warning">
-                <AlertCircle size={15} />
-                {updateState.message}
-              </p>
-            ) : null}
-            <div className="panel-actions">
-              <button className="ghost-button" type="button" onClick={onCheckUpdates} disabled={updateBusy}>
-                {updateState.kind === "checking" ? <Loader2 className="spin" size={15} /> : <RefreshCcw size={15} />}
-                检查更新
-              </button>
-              {updateState.kind === "available" ? (
-                <button className="primary-button compact" type="button" onClick={onInstallUpdate}>
-                  <Download size={15} />
-                  下载并安装
-                </button>
+              {updateState.kind === "installing" ? (
+                <div className="update-progress" aria-label="更新下载进度">
+                  <span>{updateProgressText(updateState)}</span>
+                  <progress value={updateState.downloadedBytes} max={updateState.contentLength ?? updateState.downloadedBytes + 1} />
+                </div>
               ) : null}
-            </div>
-          </section>
+              {updateState.kind === "failed" ? (
+                <p className="mini-warning">
+                  <AlertCircle size={15} />
+                  {updateState.message}
+                </p>
+              ) : null}
+              {updateState.kind === "available" ? (
+                <div className="panel-actions">
+                  <button className="primary-button compact" type="button" onClick={onInstallUpdate}>
+                    <Download size={15} />
+                    下载并安装
+                  </button>
+                </div>
+              ) : null}
+            </section>
+          ) : null}
 
           <section className="about-section engine-setup-section">
             <div className="section-heading compact-heading">
               <h3>导出引擎</h3>
               <p>{environment?.exporterAvailable ? "内置 imessage-exporter 已集成到应用内，诊断和导出可以继续运行。" : "导出引擎信息暂不可用，请稍后重试。"}</p>
-            </div>
-            <div className="engine-setup-steps">
-              <span className={environment?.exporterAvailable ? "done" : ""}>
-                <strong>{environment?.exporterAvailable ? <CheckCircle2 size={16} /> : <Download size={15} />}</strong>
-                内置引擎
-              </span>
-              <span className={environment?.exporterAvailable ? "done" : ""}>
-                <strong>{environment?.exporterAvailable ? <CheckCircle2 size={16} /> : <RefreshCcw size={15} />}</strong>
-                兼容性检查
-              </span>
-              <span className={environment?.exporterAvailable ? "done" : ""}>
-                <strong>{environment?.exporterAvailable ? <CheckCircle2 size={16} /> : <RefreshCcw size={15} />}</strong>
-                可用性检测
-              </span>
             </div>
             <div className="fact-list dense">
               <Fact label="状态" value={environment?.exporterAvailable ? "可用" : "未找到"} />
@@ -376,14 +348,17 @@ function formatPlatform(appDiagnostics?: AppDiagnostics): string {
   return `${appDiagnostics.os} / ${appDiagnostics.arch}`;
 }
 
+function shouldShowAboutUpdateSection(state: UpdateCheckState): boolean {
+  if (state.kind === "available" || state.kind === "installing" || state.kind === "installed") return true;
+  return state.kind === "failed" && state.source === "install";
+}
+
 function updateStatusText(state: UpdateCheckState, currentVersion: string): string {
-  if (state.kind === "checking") return "正在连接 GitHub Release 检查新版本。";
   if (state.kind === "available") return `发现新版本 ${state.info.version ?? "unknown"}，当前版本 ${state.info.currentVersion ?? currentVersion}。`;
   if (state.kind === "installing") return `正在下载 ${state.info.version ?? "更新包"}，安装后会重启应用。`;
   if (state.kind === "installed") return "更新已安装，应用正在重启。";
-  if (state.kind === "failed") return "更新检查失败。可以稍后重试，或从 GitHub Releases 手动下载。";
-  if (state.kind === "current") return `当前已是最新版本 ${state.info.currentVersion ?? currentVersion}。`;
-  return "手动检查 GitHub Releases 上是否有新版本。";
+  if (state.kind === "failed") return "更新安装失败，请稍后重新打开应用再试。";
+  return "启动时会自动检查更新；只有发现新版本时才会提示。";
 }
 
 function updateProgressText(state: Extract<UpdateCheckState, { kind: "installing" }>): string {

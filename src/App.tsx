@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import {
   AlertCircle,
   CheckCircle2,
   Database,
+  Download,
   FileArchive,
   MessageSquareText,
   Search,
   Settings2,
+  X,
 } from "lucide-react";
 
 import { terminalOutcome } from "./components/CommonUi";
@@ -95,13 +98,16 @@ export default function App() {
   const [conversations, setConversations] = useState<ConversationCandidate[]>([]);
   const [loadingConversations, setLoadingConversations] = useState(false);
   const [conversationError, setConversationError] = useState<string>();
-  const [logs, setLogs] = useState<LogLine[]>([]);
+  const [diagnosticLogs, setDiagnosticLogs] = useState<LogLine[]>([]);
+  const [exportLogs, setExportLogs] = useState<LogLine[]>([]);
   const [diagnosticJob, setDiagnosticJob] = useState<JobStarted>();
   const [exportJob, setExportJob] = useState<JobStarted>();
   const [diagnosticsSucceeded, setDiagnosticsSucceeded] = useState(false);
   const [runningJobId, setRunningJobId] = useState<string>();
-  const [lastExitCode, setLastExitCode] = useState<number>();
-  const [jobOutcome, setJobOutcome] = useState<JobOutcome>({ kind: "idle" });
+  const [diagnosticExitCode, setDiagnosticExitCode] = useState<number>();
+  const [exportExitCode, setExportExitCode] = useState<number>();
+  const [diagnosticOutcome, setDiagnosticOutcome] = useState<JobOutcome>({ kind: "idle" });
+  const [exportOutcome, setExportOutcome] = useState<JobOutcome>({ kind: "idle" });
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [settingsSaveState, setSettingsSaveState] = useState<SettingsSaveState>("saved");
@@ -109,8 +115,10 @@ export default function App() {
   const [showAbout, setShowAbout] = useState(false);
   const [showEnvironmentDetails, setShowEnvironmentDetails] = useState(false);
   const [updateState, setUpdateState] = useState<UpdateCheckState>({ kind: "idle" });
+  const [dismissedUpdateVersion, setDismissedUpdateVersion] = useState<string>();
   const activeLogJobIdRef = useRef<string>();
   const diagnosticJobIdRef = useRef<string>();
+  const exportJobIdRef = useRef<string>();
   const cancelRequestedJobIdRef = useRef<string>();
   const didHydrateSettingsRef = useRef(false);
   const autoClearPasswordRef = useRef(Boolean(config.autoClearPassword));
@@ -124,6 +132,7 @@ export default function App() {
     getAppDiagnostics()
       .then(setAppDiagnostics)
       .catch((err) => setError(String(err)));
+    checkForUpdates();
   }, []);
 
   useEffect(() => {
@@ -183,6 +192,9 @@ export default function App() {
     setDiagnosticsSucceeded(false);
     setDiagnosticJob(undefined);
     diagnosticJobIdRef.current = undefined;
+    setDiagnosticLogs([]);
+    setDiagnosticExitCode(undefined);
+    setDiagnosticOutcome({ kind: "idle" });
   }, [config.backupPath, config.encrypted]);
 
   useEffect(() => {
@@ -259,30 +271,32 @@ export default function App() {
     [validationErrors, exportPathErrors, environmentErrors],
   );
   const warnings = useMemo(() => converterWarnings(config.copyMethod, environment), [config.copyMethod, environment]);
-  const diagnosticsText = useMemo(() => logs.map((line) => line.text).join("\n"), [logs]);
+  const diagnosticsText = useMemo(() => diagnosticLogs.map((line) => line.text).join("\n"), [diagnosticLogs]);
   const diagnostics = useMemo(() => summarizeDiagnostics(diagnosticsText), [diagnosticsText]);
+  const exportRunning = Boolean(exportJob && runningJobId === exportJob.jobId);
+  const diagnosticsRunning = Boolean(diagnosticJob && runningJobId === diagnosticJob.jobId);
+  const exportStartDisabled = Boolean(runningJobId) || checkingExportPath || allValidationErrors.length > 0;
   const activeSection = workspaceSections.find((candidate) => candidate.id === activeSectionId) ?? workspaceSections[0];
+  const updateNoticeInfo = updateState.kind === "available" && updateState.info.version !== dismissedUpdateVersion ? updateState.info : undefined;
   const sourceSelectionErrors = useMemo(() => sourceSelectionBlockers(config, selectedBackup), [config.backupPath, selectedBackup]);
   const diagnosticsNavErrors = useMemo(
     () => sourceDiagnosticsBlockers(config, selectedBackup, environment),
     [config.backupPath, config.encrypted, config.cleartextPassword, selectedBackup, environment],
   );
   const sectionAccess = useMemo(
-    () => workspaceSectionAccessMap(sourceSelectionErrors, diagnosticsNavErrors, Boolean(exportJob)),
-    [sourceSelectionErrors, diagnosticsNavErrors, exportJob],
+    () => workspaceSectionAccessMap(sourceSelectionErrors, diagnosticsNavErrors),
+    [sourceSelectionErrors, diagnosticsNavErrors],
   );
   const sectionCompletion = useMemo(
-    () => workspaceSectionCompletionMap(sourceSelectionErrors, diagnosticsSucceeded, allValidationErrors, Boolean(exportJob), jobOutcome),
-    [sourceSelectionErrors, diagnosticsSucceeded, allValidationErrors, exportJob, jobOutcome],
+    () => workspaceSectionCompletionMap(sourceSelectionErrors, diagnosticsSucceeded, allValidationErrors, Boolean(exportJob), exportOutcome),
+    [sourceSelectionErrors, diagnosticsSucceeded, allValidationErrors, exportJob, exportOutcome],
   );
 
   useEffect(() => {
     if ((activeSectionId === "diagnostics" || activeSectionId === "options") && sourceSelectionErrors.length > 0) {
       setActiveSectionId("source");
-    } else if (activeSectionId === "run" && !exportJob) {
-      setActiveSectionId(sourceSelectionErrors.length ? "source" : "options");
     }
-  }, [activeSectionId, sourceSelectionErrors.length, exportJob]);
+  }, [activeSectionId, sourceSelectionErrors.length]);
 
   async function refreshEnvironment() {
     setLoading(true);
@@ -317,12 +331,8 @@ export default function App() {
     }
   }
 
-  function handleJobEvent(event: JobEvent) {
-    if (activeLogJobIdRef.current && event.jobId !== activeLogJobIdRef.current) {
-      return;
-    }
-
-    setLogs((current) => [
+  function appendJobLog(event: JobEvent, setJobLogs: Dispatch<SetStateAction<LogLine[]>>) {
+    setJobLogs((current) => [
       ...current,
       {
         id: `${event.jobId}-${event.timestamp}-${current.length}`,
@@ -331,13 +341,28 @@ export default function App() {
         timestamp: event.timestamp,
       },
     ]);
+  }
+
+  function handleJobEvent(event: JobEvent) {
+    if (event.jobId === diagnosticJobIdRef.current) {
+      appendJobLog(event, setDiagnosticLogs);
+    } else if (event.jobId === exportJobIdRef.current) {
+      appendJobLog(event, setExportLogs);
+    } else if (activeLogJobIdRef.current && event.jobId !== activeLogJobIdRef.current) {
+      return;
+    }
 
     if (event.kind === "exit" || event.kind === "error") {
+      const nextOutcome = terminalOutcome(event, cancelRequestedJobIdRef.current === event.jobId);
       setRunningJobId(undefined);
-      setLastExitCode(event.code);
-      setJobOutcome(terminalOutcome(event, cancelRequestedJobIdRef.current === event.jobId));
       if (event.jobId === diagnosticJobIdRef.current) {
+        setDiagnosticExitCode(event.code);
+        setDiagnosticOutcome(nextOutcome);
         setDiagnosticsSucceeded(event.kind === "exit" && event.code === 0 && cancelRequestedJobIdRef.current !== event.jobId);
+      }
+      if (event.jobId === exportJobIdRef.current) {
+        setExportExitCode(event.code);
+        setExportOutcome(nextOutcome);
       }
       if (autoClearPasswordRef.current) {
         clearPassword();
@@ -413,9 +438,13 @@ export default function App() {
 
   async function startDiagnostics() {
     setError(undefined);
-    setLogs([]);
-    setLastExitCode(undefined);
-    setJobOutcome({ kind: "idle" });
+    if (runningJobId) {
+      setError("另一个任务正在运行，请等待完成或先取消。");
+      return;
+    }
+    setDiagnosticLogs([]);
+    setDiagnosticExitCode(undefined);
+    setDiagnosticOutcome({ kind: "idle" });
     cancelRequestedJobIdRef.current = undefined;
     const blockers = sourceDiagnosticsBlockers(config, selectedBackup, environment);
     if (blockers.length) {
@@ -428,7 +457,7 @@ export default function App() {
       diagnosticJobIdRef.current = job.jobId;
       activeLogJobIdRef.current = job.jobId;
       setRunningJobId(job.jobId);
-      setJobOutcome({ kind: "running" });
+      setDiagnosticOutcome({ kind: "running" });
       setDiagnosticsSucceeded(false);
       setActiveSectionId("diagnostics");
     } catch (err) {
@@ -438,28 +467,55 @@ export default function App() {
 
   async function startExportJob() {
     setError(undefined);
-    setLogs([]);
-    setLastExitCode(undefined);
-    setJobOutcome({ kind: "idle" });
-    cancelRequestedJobIdRef.current = undefined;
-    const errors = [...validateExportConfig(config), ...blockingExportPathErrors(exportPathStatus), ...environmentExportBlockers(environment)];
+    if (runningJobId) {
+      setError("另一个任务正在运行，请等待完成或先取消。");
+      return;
+    }
+
+    const normalized = normalizeConfig(config);
+    let latestExportPathStatus = exportPathStatus;
+    if (normalized.exportPath.trim()) {
+      try {
+        latestExportPathStatus = await inspectExportPath(normalized.exportPath);
+        setExportPathStatus(latestExportPathStatus);
+      } catch (err) {
+        latestExportPathStatus = {
+          path: normalized.exportPath,
+          exists: false,
+          isDirectory: false,
+          parentExists: false,
+          containsHtml: false,
+          containsTxt: false,
+          containsAttachments: false,
+          warnings: ["无法检查输出目录，请重新选择或确认权限。"],
+          error: String(err),
+        };
+        setExportPathStatus(latestExportPathStatus);
+      }
+    }
+
+    const errors = [...validateExportConfig(normalized), ...blockingExportPathErrors(latestExportPathStatus), ...environmentExportBlockers(environment)];
     if (errors.length) {
       setError(errors.join(" "));
       return;
     }
-    if (needsExportPathConfirmation(exportPathStatus)) {
+    if (needsExportPathConfirmation(latestExportPathStatus)) {
       const ok = window.confirm(tx("输出目录已有内容或疑似旧导出文件。继续导出会把新结果写入同一个目录，是否继续？"));
       if (!ok) return;
     }
 
     try {
-      const normalized = normalizeConfig(config);
+      setExportLogs([]);
+      setExportExitCode(undefined);
+      setExportOutcome({ kind: "idle" });
+      cancelRequestedJobIdRef.current = undefined;
       const job = await startExport(normalized);
       setExportJob(job);
+      exportJobIdRef.current = job.jobId;
       setPreview(job.preview);
       activeLogJobIdRef.current = job.jobId;
       setRunningJobId(job.jobId);
-      setJobOutcome({ kind: "running" });
+      setExportOutcome({ kind: "running" });
       setActiveSectionId("run");
     } catch (err) {
       setError(String(err));
@@ -530,7 +586,7 @@ export default function App() {
       const info = await checkForAppUpdate();
       setUpdateState(info.available ? { kind: "available", info } : { kind: "current", info });
     } catch (err) {
-      setUpdateState({ kind: "failed", message: String(err) });
+      setUpdateState({ kind: "failed", source: "check", message: String(err) });
     }
   }
 
@@ -552,7 +608,7 @@ export default function App() {
       });
       setUpdateState({ kind: "installed", info });
     } catch (err) {
-      setUpdateState({ kind: "failed", message: String(err) });
+      setUpdateState({ kind: "failed", source: "install", message: String(err) });
     }
   }
 
@@ -611,7 +667,6 @@ export default function App() {
           activeSectionLabel={activeSection.label}
           backup={selectedBackup}
           exportPath={config.exportPath}
-          environment={environment}
           running={Boolean(runningJobId)}
           language={language}
           onLanguageChange={setLanguage}
@@ -630,13 +685,35 @@ export default function App() {
           </div>
         ) : null}
 
+        {updateNoticeInfo ? (
+          <div className="notice update" role="status">
+            <Download size={18} />
+            <span>
+              发现新版本 {updateNoticeInfo.version ?? "unknown"}，当前版本 {updateNoticeInfo.currentVersion ?? appDiagnostics?.version ?? "unknown"}。
+            </span>
+            <div className="notice-actions">
+              <button className="primary-button compact" type="button" onClick={installUpdate}>
+                下载并安装
+              </button>
+              <button
+                className="icon-button"
+                type="button"
+                onClick={() => setDismissedUpdateVersion(updateNoticeInfo.version)}
+                aria-label="稍后提醒"
+                title="稍后提醒"
+              >
+                <X size={15} />
+              </button>
+            </div>
+          </div>
+        ) : null}
+
         {activeSectionId === "source" && (
           <SourceStep
             backups={backups}
             selectedBackup={selectedBackup}
             config={config}
             environment={environment}
-            loadingEnvironment={loading}
             diagnosticsSucceeded={diagnosticsSucceeded}
             onChooseBackup={chooseBackupPath}
             onSelectBackup={applyBackup}
@@ -649,16 +726,16 @@ export default function App() {
 
         {activeSectionId === "diagnostics" && (
           <DiagnosticsStep
-            logs={logs}
+            logs={diagnosticLogs}
             diagnostics={diagnostics}
             job={diagnosticJob}
             config={config}
             language={language}
             backup={selectedBackup}
             environment={environment}
-            running={Boolean(runningJobId)}
-            exitCode={lastExitCode}
-            outcome={jobOutcome}
+            running={diagnosticsRunning}
+            exitCode={diagnosticExitCode}
+            outcome={diagnosticOutcome}
             canContinue={diagnosticsSucceeded}
             onRunDiagnostics={startDiagnostics}
             onCancel={stopActiveJob}
@@ -690,15 +767,15 @@ export default function App() {
 
         {activeSectionId === "run" && (
           <RunStep
-            logs={logs}
+            logs={exportLogs}
             preview={preview ?? exportJob?.preview}
             hasExportTask={Boolean(exportJob)}
-            running={Boolean(runningJobId)}
-            exitCode={lastExitCode}
-            outcome={jobOutcome}
-            exportPath={config.exportPath}
-            format={config.format}
-            copyMethod={config.copyMethod}
+            running={exportRunning}
+            startDisabled={exportStartDisabled}
+            exitCode={exportExitCode}
+            outcome={exportOutcome}
+            config={config}
+            conversations={conversations}
             onStart={startExportJob}
             onCancel={stopActiveJob}
             onBackToOptions={() => setActiveSectionId("options")}
@@ -713,7 +790,6 @@ export default function App() {
         <OnboardingDialog
           backup={selectedBackup}
           config={config}
-          environment={environment}
           diagnosticsSucceeded={diagnosticsSucceeded}
           diagnosticsBlockers={sourceDiagnosticsBlockers(config, selectedBackup, environment)}
           onChooseBackup={chooseBackupPath}
@@ -731,7 +807,6 @@ export default function App() {
           environment={environment}
           config={config}
           updateState={updateState}
-          onCheckUpdates={checkForUpdates}
           onInstallUpdate={installUpdate}
           onOpenResource={(file) => openResourceFile(file).catch((err) => setError(String(err)))}
           onClose={closeAbout}
@@ -782,14 +857,13 @@ function environmentExportBlockers(environment?: EnvironmentStatus): string[] {
 function workspaceSectionAccessMap(
   sourceErrors: string[],
   diagnosticsErrors: string[],
-  hasExportJob: boolean,
 ): Record<WorkspaceSectionId, WorkspaceSectionAccess> {
   const sourceReason = sourceErrors[0];
   return {
     source: { disabled: false },
     diagnostics: sourceReason ? { disabled: true, reason: sourceReason } : diagnosticsErrors[0] ? { disabled: true, reason: diagnosticsErrors[0] } : { disabled: false },
     options: sourceReason ? { disabled: true, reason: sourceReason } : { disabled: false },
-    run: hasExportJob ? { disabled: false } : { disabled: true, reason: "开始导出后可查看结果。" },
+    run: { disabled: false },
   };
 }
 

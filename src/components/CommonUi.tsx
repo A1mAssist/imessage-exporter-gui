@@ -479,6 +479,7 @@ export function FooterActions({
   secondaryLabel,
   secondaryIcon,
   onSecondary,
+  secondaryDisabled,
 }: {
   primaryLabel: string;
   primaryIcon: ReactNode;
@@ -487,11 +488,12 @@ export function FooterActions({
   secondaryLabel?: string;
   secondaryIcon?: ReactNode;
   onSecondary?: () => void;
+  secondaryDisabled?: boolean;
 }) {
   return (
     <footer className="footer-actions">
       {secondaryLabel && onSecondary ? (
-        <button className="secondary-button" type="button" onClick={onSecondary}>
+        <button className="secondary-button" type="button" onClick={onSecondary} disabled={secondaryDisabled}>
           {secondaryIcon}
           {secondaryLabel}
         </button>

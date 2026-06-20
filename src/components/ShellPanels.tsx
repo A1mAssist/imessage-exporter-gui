@@ -11,7 +11,6 @@ import {
   Moon,
   RefreshCcw,
   Sun,
-  TerminalSquare,
 } from "lucide-react";
 
 import type { AppLanguage } from "../i18n";
@@ -24,7 +23,6 @@ export function TopBar({
   activeSectionLabel,
   backup,
   exportPath,
-  environment,
   running,
   language,
   onLanguageChange,
@@ -38,7 +36,6 @@ export function TopBar({
   activeSectionLabel: string;
   backup?: BackupCandidate;
   exportPath: string;
-  environment?: EnvironmentStatus;
   running: boolean;
   language: AppLanguage;
   onLanguageChange: (language: AppLanguage) => void;
@@ -72,7 +69,6 @@ export function TopBar({
       <div className="quick-stats" aria-label="当前导出状态">
         <QuickStat icon={<Database size={16} />} label="备份" value={backup?.displayName ?? "未选择"} tone={backup?.valid ? "ok" : "neutral"} />
         <QuickStat icon={<Archive size={16} />} label="输出" value={exportPath ? compactPath(exportPath) : "未设置"} tone={exportPath ? "ok" : "neutral"} />
-        <QuickStat icon={<TerminalSquare size={16} />} label="导出引擎" value={environment?.exporterAvailable ? "就绪" : "缺失"} tone={environment?.exporterAvailable ? "ok" : "warn"} />
         <QuickStat icon={running ? <Loader2 className="spin" size={16} /> : <CheckCircle2 size={16} />} label="任务" value={running ? "运行中" : "空闲"} tone={running ? "accent" : "neutral"} />
       </div>
     </header>
@@ -95,8 +91,6 @@ export function EnvironmentPanel({
   const attachmentReady = Boolean(environment?.ffmpegAvailable && environment?.imagemagickAvailable);
   const attachmentPartial = Boolean(environment?.ffmpegAvailable || environment?.imagemagickAvailable);
   const attachmentValue = attachmentReady ? "可用" : attachmentPartial ? "部分可用" : "未配置";
-  const versionHint = exporterVersionHint(environment);
-  const versionTone = environment?.exporterVersionStatus === "verified" ? "ok" : "warn";
   return (
     <div className="env-panel">
       <div className="panel-title">
@@ -105,13 +99,7 @@ export function EnvironmentPanel({
           {loading ? <Loader2 className="spin" size={16} /> : <RefreshCcw size={16} />}
         </button>
       </div>
-      <StatusLine ok={environment?.exporterAvailable} label="导出引擎" value={environment?.exporterAvailable ? "内置可用" : "未就绪"} />
       <StatusLine ok={attachmentReady} label="附件转换" value={attachmentValue} />
-      {versionHint ? (
-        <small className={`env-version-line ${versionTone}`} title={versionHint}>
-          {versionHint}
-        </small>
-      ) : null}
       <div className="env-panel-actions">
         <button className="ghost-button" type="button" onClick={onOpenDetails} ref={detailsButtonRef}>
           <Info size={15} />
@@ -249,15 +237,6 @@ export function settingsStateLabel(state: SettingsSaveState): string {
   if (state === "failed") return "设置保存失败";
   if (state === "cleared") return "已清除保存设置";
   return "设置已保存";
-}
-
-function exporterVersionHint(environment?: EnvironmentStatus): string | undefined {
-  if (!environment?.exporterAvailable) return undefined;
-  const verified = environment.verifiedExporterVersion;
-  const current = environment.exporterVersion ?? "未识别";
-  if (environment.exporterVersionStatus === "older") return `低于已验证 ${verified} · 当前 ${current}`;
-  if (environment.exporterVersionStatus === "unknown") return `已验证 ${verified} · 当前版本未识别`;
-  return `已验证 ${verified} · 当前 ${current}`;
 }
 
 function StatusLine({ ok, label, value }: { ok?: boolean; label: string; value: string }) {

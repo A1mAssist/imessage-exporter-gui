@@ -129,10 +129,13 @@ const en: Record<string, string> = {
   "正在连接 GitHub Release 检查新版本。": "Connecting to GitHub Releases to check for a new version.",
   "更新已安装，应用正在重启。": "The update is installed. The app is restarting.",
   "更新检查失败。可以稍后重试，或从 GitHub Releases 手动下载。": "Update check failed. Try again later, or download manually from GitHub Releases.",
+  "更新安装失败，请稍后重新打开应用再试。": "Update installation failed. Reopen the app later and try again.",
+  "启动时会自动检查更新；只有发现新版本时才会提示。": "The app checks for updates at startup and only prompts when a new version is available.",
   "手动检查 GitHub Releases 上是否有新版本。": "Check GitHub Releases for a new version manually.",
   "更新下载进度": "Update download progress",
   "检查更新": "Check for updates",
   "下载并安装": "Download and install",
+  "稍后提醒": "Remind me later",
   "可用性检测": "Availability check",
   "支持摘要": "Support snapshot",
   "复制这份信息可以快速说明版本、平台、引擎和依赖状态。": "Copy this information to summarize version, platform, engine, and dependency status.",
@@ -260,11 +263,11 @@ const en: Record<string, string> = {
   "新建归档目录": "New Archive Folder",
   "生成带时间戳的新文件夹，避免导出结果混入旧目录。": "Generate a timestamped folder so new exports do not mix with old files.",
   "格式": "Format",
-  "Windows 第一版建议使用 clone；basic/full 依赖本机转换器。": "For the first Windows version, clone is recommended; basic/full depend on local converters.",
+  "clone 不依赖本机转换器；basic/full 需要 ffmpeg 和 ImageMagick。": "clone does not depend on local converters; basic/full require ffmpeg and ImageMagick.",
   "保留更多富文本和附件引用，适合归档与打印。": "Preserves richer text and attachment references for archiving and printing.",
   "纯文本输出，更轻量，适合检索和长期保存。": "Plain text output, lighter and easier to search or store long term.",
   "不复制附件，导出最快，输出最轻。": "Does not copy attachments. Fastest export and smallest output.",
-  "复制原始附件，Windows 第一版推荐。": "Copies original attachments. Recommended for the first Windows release.",
+  "复制原始附件，不依赖本机转换器。": "Copies original attachments without depending on local converters.",
   "基础转换，需要 ffmpeg/ImageMagick。": "Basic conversion; requires ffmpeg/ImageMagick.",
   "完整转换，需要 ffmpeg/ImageMagick，耗时更久。": "Full conversion; requires ffmpeg/ImageMagick and takes longer.",
   "逐行结构化 JSON，适合检索、分析和二次处理。": "Line-delimited structured JSON for search, analysis, and downstream processing.",
@@ -330,12 +333,26 @@ const en: Record<string, string> = {
   "全部日期": "All dates",
   "导出与结果": "Export and Results",
   "实时查看 imessage-exporter 输出，导出完成后打开结果目录。": "Watch imessage-exporter output in real time, then open the result folder when export finishes.",
-  "还没有开始导出": "Export has not started",
-  "先在选项页确认输出目录、格式和命令预览，再启动导出任务。": "Confirm the output folder, format, and command preview in Options before starting export.",
+  "导出前预览": "Export Preview",
+  "导出中": "Exporting",
+  "导出结果": "Export Results",
+  "正在追踪导出输出和结果。": "Tracking export output and results.",
+  "先确认命令、结果文件和输出位置，再开始导出。": "Confirm the command, result files, and output location before starting export.",
+  "查看导出摘要、日志和结果入口。": "Review the export summary, logs, and result actions.",
+  "结果总览": "Result Overview",
+  "导出总览": "Export Overview",
+  "开始前": "Before Starting",
+  "导出前总览": "Export Preview Summary",
+  "开始导出前检查": "Pre-export Checks",
+  "准备导出": "Ready to Export",
+  "结果命名": "Result Naming",
+  "已生成，可复制检查": "Generated and ready to copy",
+  "等待备份和输出目录完整后生成": "Generated after backup and output folder are complete",
   "返回选项": "Back to Options",
   "正在导出": "Exporting",
   "打开首个 HTML": "Open First HTML",
   "打开首个 TXT": "Open First TXT",
+  "打开首个 JSONL": "Open First JSONL",
   "复制路径": "Copy Path",
   "复制结果路径": "Copy result path",
   "取消导出": "Cancel Export",
@@ -348,19 +365,20 @@ const en: Record<string, string> = {
   "下一步": "Next Step",
   "日志未报告": "Not reported in logs",
   "未报告": "Not reported",
-  "等待导出": "Waiting to export",
-  "正在等待 imessage-exporter 输出。": "Waiting for imessage-exporter output.",
   "任务已成功结束。": "The task finished successfully.",
   "任务已停止，已保留当前日志。": "The task stopped and current logs were kept.",
   "请查看日志中的错误信息。": "Check the error details in the logs.",
-  "开始导出后会在这里汇总结果。": "A result summary appears here after export starts.",
+  "开始前先确认设置和输出位置。": "Confirm settings and output location before starting.",
+  "开始前先看一眼将要导出的设置和结果位置。": "Review the export settings and result location before starting.",
   "打开首个 HTML 或输出目录检查结果。": "Open the first HTML file or the output folder to review results.",
   "打开首个 TXT 或输出目录检查结果。": "Open the first TXT file or the output folder to review results.",
+  "打开首个 JSONL 或输出目录检查结果。": "Open the first JSONL file or the output folder to review results.",
   "按失败提示修正后重新导出。": "Fix the issue shown in the failure hint, then export again.",
   "调整选项后可重新导出。": "Adjust options, then export again.",
   "保持窗口打开，必要时可取消任务。": "Keep this window open; cancel the task if needed.",
-  "开始导出后会显示下一步。": "The next step appears after export starts.",
+  "确认无误后开始导出。": "Start export after everything looks right.",
   "命令预览": "Command Preview",
+  "暂时还没有命令预览。": "No command preview yet.",
   "密码和敏感值已脱敏。": "Passwords and sensitive values are redacted.",
   "复制命令": "Copy Command",
   "诊断报告": "Diagnostic Report",
@@ -493,6 +511,18 @@ export function translateText(language: AppLanguage, text: string): string {
 
   const labeledArchiveFolder = text.match(/^生成带“(.+)”和时间戳的新文件夹。$/);
   if (labeledArchiveFolder) return `Generate a timestamped folder named with "${labeledArchiveFolder[1]}".`;
+
+  const matchedConversationFile = text.match(/^匹配会话名(\.[a-z0-9]+)$/i);
+  if (matchedConversationFile) return `Matched conversation name${matchedConversationFile[1]}`;
+
+  const contactOrGroupFile = text.match(/^联系人或群聊名称(\.[a-z0-9]+)$/i);
+  if (contactOrGroupFile) return `Contact or group chat name${contactOrGroupFile[1]}`;
+
+  const matchedConversationDescription = text.match(/^会按匹配到的会话生成 (.+)$/);
+  if (matchedConversationDescription) return `A file will be generated for the matched conversation: ${translateText(language, matchedConversationDescription[1])}`;
+
+  const perConversationDescription = text.match(/^每个联系人或群聊各生成一个 (.+)$/);
+  if (perConversationDescription) return `One file will be generated per contact or group chat: ${translateText(language, perConversationDescription[1])}`;
 
   const selectedResultName = text.match(/^以“(.+)”命名(\.[a-z0-9]+)$/i);
   if (selectedResultName) return `Named with "${selectedResultName[1]}"${selectedResultName[2]}`;

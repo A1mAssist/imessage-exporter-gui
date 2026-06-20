@@ -102,9 +102,13 @@ check("app exposes copy actions", commonUi.includes("复制命令") && commonUi.
 check("app supports log tail follow control", commonUi.includes("ArrowDownToLine") && commonUi.includes("followTail") && commonUi.includes("滚动到最新日志"));
 check("app reports clipboard copy failure", commonUi.includes("复制失败") && commonUi.includes("Clipboard API unavailable"));
 check("app warns before exporting into non-empty output folders", workspaceSteps.includes("ExportPathNotice") && workspaceSteps.includes("输出目录已有内容") && workspaceSteps.includes("needsExportPathConfirmation"));
+check("app rechecks export path before starting from Run", app.includes("latestExportPathStatus = await inspectExportPath(normalized.exportPath)") && app.indexOf("inspectExportPath(normalized.exportPath)") < app.indexOf("const errors = [...validateExportConfig(normalized)"));
+check("app isolates diagnostics and export job state", app.includes("diagnosticLogs") && app.includes("exportLogs") && app.includes("diagnosticOutcome") && app.includes("exportOutcome") && app.includes("exportJobIdRef"));
+check("app disables export start while another job runs", app.includes("const exportStartDisabled = Boolean(runningJobId)") && app.includes("running={diagnosticsRunning}") && app.includes("running={exportRunning}") && app.includes("startDisabled={exportStartDisabled}"));
+check("run step disables every start path when export preflight blocks", workspaceSteps.includes("startDisabled: boolean") && workspaceSteps.includes("disabled={!running && startDisabled}") && workspaceSteps.includes("disabled={startDisabled}") && workspaceSteps.includes("secondaryDisabled={!running && startDisabled}") && commonUi.includes("secondaryDisabled?: boolean"));
 check("app shows explicit cancelled and failed job outcomes", commonUi.includes("type JobOutcome") && commonUi.includes("JobOutcomeNotice") && commonUi.includes("resultStripClass"));
 check("app renders export summary panel", workspaceSteps.includes("ExportSummaryPanel") && workspaceSteps.includes("导出摘要") && workspaceSteps.includes("summarizeExportResult"));
-check("app renders first-run route", workspaceSteps.includes("function FirstRunGuide") && workspaceSteps.includes("首次导出路线") && workspaceSteps.includes("内置导出引擎"));
+check("app renders first-run route without built-in engine noise", workspaceSteps.includes("function FirstRunGuide") && workspaceSteps.includes("首次导出路线") && !workspaceSteps.includes('label: "内置导出引擎"'));
 check("app renders first-run OOBE dialog", dialogs.includes("function OnboardingDialog") && dialogs.includes("首次设置指引") && app.includes("onboardingStorageKey"));
 check("app dialogs support Escape, focus trap, and focus restore", dialogs.includes("useDialogKeyboard") && commonUi.includes('event.key === "Escape"') && commonUi.includes('event.key !== "Tab"') && commonUi.includes("getFocusableDialogElements") && app.includes("aboutTriggerRef") && app.includes("onboardingTriggerRef"));
 check("app keeps preferences compact in topbar", shellPanels.includes("topbar-utilities") && shellPanels.includes("设置向导") && !app.includes("preference-controls"));
@@ -114,15 +118,14 @@ check(
   "app shows verified exporter version compatibility state",
   read("src-tauri/src/models.rs").includes("verified_exporter_version") &&
     read("src-tauri/src/models.rs").includes("exporter_version_status") &&
-    shellPanels.includes("已验证") &&
     dialogs.includes("兼容状态") &&
     dialogs.includes("Verified exporter version") &&
     read("src/api/tauri.ts").includes("verifiedExporterVersion"),
 );
-check("app exposes updater controls", app.includes("checkForUpdates") && app.includes("installUpdate") && dialogs.includes("下载并安装") && dialogs.includes("update-progress"));
-check("app renders built-in export engine setup card", workspaceSteps.includes("function EngineSetupCard") && workspaceSteps.includes("内置导出引擎") && workspaceSteps.includes("无需选择外部 exe") && workspaceSteps.includes("重新检测"));
+check("app exposes automatic updater prompt", app.includes("checkForUpdates()") && app.includes('className="notice update"') && app.includes("dismissedUpdateVersion") && dialogs.includes("下载并安装") && !dialogs.includes("onCheckUpdates"));
+check("app omits redundant built-in export engine setup card", !workspaceSteps.includes("function EngineSetupCard") && !workspaceSteps.includes(".engine-setup-card") && !workspaceSteps.includes("无需选择外部 exe"));
 check("app remounts shell on language changes", app.includes('key={language}'));
-check("app shows built-in exporter status line", shellPanels.includes('label="导出引擎" value={environment?.exporterAvailable ? "内置可用" : "未就绪"}'));
+check("app keeps sidebar environment summary free of exporter validation noise", !shellPanels.includes('label="导出引擎"') && !shellPanels.includes("env-version-line"));
 check("app renders diagnostic summary panel", workspaceSteps.includes("function DiagnosticSummaryPanel") && workspaceSteps.includes("诊断摘要") && workspaceSteps.includes("附件转换"));
 check("app renders recovery action buttons", commonUi.includes("function RecoveryActionRow") && commonUi.includes("回到数据源") && commonUi.includes("回到选项") && !commonUi.includes("下载导出引擎"));
 check("app exposes generated archive directory action", workspaceSteps.includes("新建归档目录") && app.includes("timestampedArchiveSequence") && workspaceSteps.includes("生成带时间戳的新文件夹"));
@@ -134,16 +137,17 @@ check("app supports log search and kind filters", commonUi.includes("搜索日�
 check("app exports diagnostic reports", workspaceSteps.includes("DiagnosticReportActions") && commonUi.includes("复制诊断报告") && commonUi.includes("下载诊断报告 .txt") && workspaceSteps.includes("buildDiagnosticReport"));
 check("app exposes path copy actions and tooltips", commonUi.includes("复制路径") && commonUi.includes("复制完整") && commonUi.includes("title={value}"));
 check("app shows first-use backup empty guidance", workspaceSteps.includes("没有自动发现本机 iOS 备份") && workspaceSteps.includes("Apple Devices") && workspaceSteps.includes("%USERPROFILE%\\Apple\\MobileSync\\Backup"));
-check("app shows startup readiness checks", workspaceSteps.includes("function ReadinessBand") && workspaceSteps.includes("就绪检查") && workspaceSteps.includes("导出引擎"));
+check("app shows startup readiness checks without exporter status", workspaceSteps.includes("function ReadinessBand") && workspaceSteps.includes("就绪检查") && !workspaceSteps.includes('label: "导出引擎"'));
 check("app blocks diagnostics for incomplete backups", workspaceSteps.includes("sourceDiagnosticsBlockers") && workspaceSteps.includes("备份目录需要同时包含 Manifest.db 和 Info.plist") && workspaceSteps.includes("source-blockers"));
 check("app renders diagnostic detail text", commonUi.includes("DiagnosticFinding") && commonUi.includes("status.detail"));
-check("app summarizes export before running", workspaceSteps.includes("function ExportReview") && workspaceSteps.includes("导出前复核") && workspaceSteps.includes("exportReviewNotes") && workspaceSteps.includes("结果文件"));
+check("app summarizes export before running", workspaceSteps.includes("function ExportReview") && workspaceSteps.includes("function RunPreflightSummary") && workspaceSteps.includes("导出前复核") && workspaceSteps.includes("导出前总览") && workspaceSteps.includes("结果文件") && workspaceSteps.includes("preflightFileDescription"));
 check("app persists only non-sensitive settings", app.includes("loadPersistedExportConfig(defaultExportConfig)") && app.includes("persistExportConfig(config)") && dialogs.includes("不保存备份密码"));
 check("app exposes password clearing controls", workspaceSteps.includes("清除密码") && workspaceSteps.includes("任务结束后自动清除密码") && app.includes("autoClearPasswordRef"));
 check("app validates saved manual backup path on startup", app.includes("validateBackupPath(config.backupPath)") && app.includes("candidate.encrypted ?? current.encrypted"));
 check("app disables HTML-only print mode for non-HTML formats", workspaceSteps.includes('format === "html" ? { format } : { format, noLazy: false }') && workspaceSteps.includes('disabled={config.format !== "html"}'));
 check("app no longer blocks export on external exporter setup", app.includes("environmentExportBlockers") && !app.includes("缺少 imessage-exporter 导出引擎，暂时不能开始导出"));
 check("app reports open result failures", app.includes("function openOutputPath") && app.includes("function openFirstResultFile") && app.includes("setError(String(err))"));
+check("app keeps run section reachable before export starts", app.includes("run: { disabled: false }") && !app.includes('reason: "开始导出后可查看结果。"'));
 check("app shows environment fix commands", shellPanels.includes("function EnvironmentFixList") && shellPanels.includes("setup-windows.ps1 -Install -InstallOptionalTools"));
 check("app links bundled license resources", shellPanels.includes("function ResourceLinks") && shellPanels.includes("GPL 许可证") && app.includes("openResourceFile"));
 
@@ -229,7 +233,7 @@ check("styles include startup readiness band", styles.includes(".readiness-band"
 check("styles include first-run and diagnostic summary panels", styles.includes(".first-run-guide") && styles.includes(".first-run-grid") && styles.includes(".diagnostic-summary-panel") && styles.includes(".diagnostic-summary-grid"));
 check("styles include compact topbar controls and OOBE dialog", styles.includes(".topbar-utilities") && styles.includes(".guide-chip") && styles.includes(".oobe-dialog") && styles.includes(".oobe-backdrop"));
 check("styles include About dialog and updater progress", styles.includes(".about-dialog") && styles.includes(".about-grid") && styles.includes(".support-snapshot") && styles.includes(".update-progress"));
-check("styles include export engine setup card", styles.includes(".engine-setup-card") && styles.includes(".engine-setup-steps") && styles.includes(".primary-button.compact"));
+check("styles omit redundant export engine setup card", !styles.includes(".engine-setup-card") && !styles.includes(".engine-setup-steps") && styles.includes(".primary-button.compact"));
 check("styles make language and theme controls discoverable", styles.includes("grid-template-columns: repeat(2, minmax(46px, auto))") && styles.includes("grid-template-columns: repeat(3, 38px)") && styles.includes("var(--accent-soft)"));
 check("styles keep topbar controls legible in dark mode", styles.includes(':root[data-theme="dark"] .language-toggle') && styles.includes(':root[data-theme="dark"] .theme-toggle button.selected'));
 check("styles use green available status lines", shellPanels.includes('status-line ${ok ? "ok" : "warn"}') && styles.includes(".status-line.ok svg") && styles.includes(".status-line.warn svg"));
@@ -238,6 +242,8 @@ check("styles include diagnostic detail text", styles.includes(".diagnostic-tile
 check("styles include password clear row", styles.includes(".password-row") && styles.includes("grid-template-columns: minmax(0, 1fr) auto"));
 check("styles include source blockers", styles.includes(".source-blockers") && styles.includes("#fff8e7"));
 check("styles include export review panel", styles.includes(".review-panel") && styles.includes(".risk-pill"));
+check("styles include run preflight summary", styles.includes(".run-preflight-summary") && styles.includes(".preflight-facts") && styles.includes(".preflight-checklist"));
+check("styles constrain command preview inside run preflight cards", styles.includes(".preflight-card .command-box") && styles.includes("width: 100%") && styles.includes("box-sizing: border-box"));
 check("styles include conversation picker", styles.includes(".conversation-picker") && styles.includes(".conversation-picker-tools") && styles.includes(".conversation-picker-warning") && styles.includes(".manual-conversation-filter") && styles.includes(".text-button"));
 check("styles use workspace navigation naming", styles.includes(".workspace-nav") && styles.includes(".workspace-nav-button") && !styles.includes(".step-list") && !styles.includes(".step-button"));
 check("styles keep selected option cards symmetric", !styles.includes("inset 0 -3px 0") && styles.includes(".segment-grid button.selected:hover") && styles.includes(".preset-grid button.selected:hover"));
@@ -357,6 +363,7 @@ checkSameMajorMinor(
 const preview = read("preview/index.html");
 check("static preview links app stylesheet", preview.includes("../src/styles.css"));
 check("static preview uses workspace navigation naming", preview.includes("workspace-nav") && preview.includes("数据准备") && !preview.includes("step-list") && !preview.includes("Step 1"));
+check("static preview reflects built-in exporter direction", preview.includes("内置引擎") && preview.includes("4.1.0 + JSONL") && preview.includes("导出前总览") && !preview.includes("sidecar") && !preview.includes("Sidecar") && !preview.includes("临时传给 CLI"));
 check("Chrome screenshot was generated", existsSync(join(root, "preview/preview-desktop.png")));
 check("static mock preview server serves dist", read("scripts/serve-dist.mjs").includes("Serving dist") && read("scripts/serve-dist.mjs").includes("no-store"));
 check("smoke generates mock options screenshot", read("scripts/smoke-mock-ui.mjs").includes("react-mock-options.png"));
@@ -376,6 +383,7 @@ check("smoke verifies built-in exporter status", read("scripts/smoke-mock-ui.mjs
 check("smoke verifies theme switching", read("scripts/smoke-mock-ui.mjs").includes("assertThemeToggle"));
 check("smoke verifies export cancellation", read("scripts/smoke-mock-ui.mjs").includes("assertCancelledOutcome") && read("scripts/smoke-mock-ui.mjs").includes(".result-strip.cancelled"));
 check("smoke verifies export summary panel", read("scripts/smoke-mock-ui.mjs").includes("assertExportSummary") && read("scripts/smoke-mock-ui.mjs").includes("导出摘要"));
+check("smoke verifies run preflight start guards", read("scripts/smoke-mock-ui.mjs").includes("assertRunStartBlockedWithoutExportPath") && read("scripts/smoke-mock-ui.mjs").includes("assertRunPageDoesNotTreatDiagnosticsAsExport"));
 check("smoke verifies OOBE, language round-trip, and diagnostic summary panels", read("scripts/smoke-mock-ui.mjs").includes("assertOnboardingDialog") && read("scripts/smoke-mock-ui.mjs").includes("assertLanguageRoundTrip") && read("scripts/smoke-mock-ui.mjs").includes("assertDiagnosticSummaryPanel"));
 check("smoke verifies About dialog and updater UI", read("scripts/smoke-mock-ui.mjs").includes("assertAboutAndUpdaterPanel") && read("scripts/smoke-mock-ui.mjs").includes("react-mock-about.png") && read("scripts/smoke-mock-ui.mjs").includes("updateAvailable=1"));
 check("smoke verifies English localization coverage", read("scripts/smoke-mock-ui.mjs").includes("assertEnglishLocalizationCoverage") && read("src/i18n.ts").includes("快速归档") && read("src/i18n.ts").includes("iMessage Exporter GUI 诊断报告"));

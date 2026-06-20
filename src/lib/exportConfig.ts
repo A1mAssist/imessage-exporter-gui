@@ -27,7 +27,7 @@ export const exportFormats: Array<{ value: ExportFormat; label: string; descript
 
 export const copyMethods: Array<{ value: CopyMethod; label: string; description: string }> = [
   { value: "disabled", label: "disabled", description: "不复制附件，导出最快，输出最轻。" },
-  { value: "clone", label: "clone", description: "复制原始附件，Windows 第一版推荐。" },
+  { value: "clone", label: "clone", description: "复制原始附件，不依赖本机转换器。" },
   { value: "basic", label: "basic", description: "基础转换，需要 ffmpeg/ImageMagick。" },
   { value: "full", label: "full", description: "完整转换，需要 ffmpeg/ImageMagick，耗时更久。" },
 ];
