@@ -753,6 +753,11 @@ button:disabled {
   line-height: 1.45;
 }
 
+.path-inspection-facts {
+  display: block;
+  margin-top: 2px;
+}
+
 .path-inspection ul {
   margin: 7px 0 0;
   padding-left: 18px;

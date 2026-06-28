@@ -101,6 +101,14 @@ function Get-ArtifactPrefix {
     return "$($TauriConfig.productName)_$($TauriConfig.version)"
 }
 
+function Get-PublicArtifactName {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+
+    return $Name.Replace(" ", ".")
+}
+
 function Get-BundleRoot {
     return Join-Path (Get-CargoTargetDir) "release/bundle"
 }
@@ -179,8 +187,9 @@ try {
         Get-ChildItem -Path $OutputPath -File -ErrorAction SilentlyContinue | Remove-Item -Force
 
         foreach ($Artifact in $Artifacts) {
-            Copy-Item -LiteralPath $Artifact.FullName -Destination $OutputPath -Force
-            Write-Host ("Copied {0}" -f $Artifact.Name)
+            $PublicName = Get-PublicArtifactName $Artifact.Name
+            Copy-Item -LiteralPath $Artifact.FullName -Destination (Join-Path $OutputPath $PublicName) -Force
+            Write-Host ("Copied {0} as {1}" -f $Artifact.Name, $PublicName)
         }
 
         $ChecksumPath = Join-Path $OutputPath (Get-ChecksumFileName)

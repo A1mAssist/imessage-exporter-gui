@@ -24,6 +24,7 @@ tauri-build = { version = "2.6.2", features = [] }
 [dependencies]
 imessage-database = { path = "vendor/imessage-exporter/imessage-database" }
 imessage-exporter = { path = "vendor/imessage-exporter/imessage-exporter" }
+fs2 = "0.4.3"
 plist = "1.7.0"
 rusqlite = { version = "=0.40.0", features = ["bundled"] }
 serde = { version = "1.0", features = ["derive"] }

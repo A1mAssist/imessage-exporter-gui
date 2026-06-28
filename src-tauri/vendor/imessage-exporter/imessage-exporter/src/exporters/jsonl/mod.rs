@@ -69,6 +69,7 @@ impl<'a> JSONL<'a> {
         )?;
 
         for message in Message::rows(&mut statement, [])? {
+            self.config.check_cancelled()?;
             let mut msg = message?;
 
             if msg.rowid == current_message_row {
@@ -88,6 +89,7 @@ impl<'a> JSONL<'a> {
             self.advance_progress(&mut current_message);
         }
         self.state.pb.finish();
+        self.config.check_cancelled()?;
 
         if failures > 0 {
             eprintln!("{failures} messages skipped due to JSONL export errors.");

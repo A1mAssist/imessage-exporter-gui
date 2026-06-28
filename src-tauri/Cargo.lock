@@ -1930,6 +1930,7 @@ dependencies = [
 name = "imessage-exporter-gui"
 version = "0.2.0"
 dependencies = [
+ "fs2",
  "imessage-database",
  "imessage-exporter",
  "plist",

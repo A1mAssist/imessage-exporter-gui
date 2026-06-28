@@ -66,6 +66,7 @@ export function blockingExportPathErrors(status?: ExportPathStatus): string[] {
   if (status.error) return [status.error];
   if (status.exists && !status.isDirectory) return ["输出路径已存在，但它不是文件夹。"];
   if (!status.parentExists) return ["输出目录的上级目录不存在，请重新选择。"];
+  if (status.writable === false) return ["输出目录不可写，请选择有写入权限的新文件夹。"];
   return [];
 }
 
@@ -899,6 +900,7 @@ function ExportPathNotice({ status, checking }: { status?: ExportPathStatus; che
       <span>
         <strong>输出目录状态</strong>
         <small>{summary}</small>
+        <ExportPathFacts status={status} />
         {status.warnings.length ? (
           <ul>
             {status.warnings.map((warning) => (
@@ -911,13 +913,36 @@ function ExportPathNotice({ status, checking }: { status?: ExportPathStatus; che
   );
 }
 
+function ExportPathFacts({ status }: { status: ExportPathStatus }) {
+  const facts = [
+    status.pathLength ? `路径 ${status.pathLength} 字符` : undefined,
+    status.availableBytes ? `可用空间 ${formatBytes(status.availableBytes)}` : undefined,
+    status.writable === true ? "可写" : status.writable === false ? "不可写" : undefined,
+  ].filter(Boolean);
+
+  if (!facts.length) return null;
+  return <small className="path-inspection-facts">{facts.join(" · ")}</small>;
+}
+
 function exportPathSummary(status: ExportPathStatus): string {
   if (status.error) return status.error;
   if (status.exists && !status.isDirectory) return "当前路径不可用于导出。";
   if (!status.parentExists) return "上级目录不存在。";
+  if (status.writable === false) return "当前目录不可写。";
   if (!status.exists) return "目录当前不存在，导出前请确认路径可创建。";
   if ((status.entryCount ?? 0) === 0) return "空文件夹，适合写入新的导出结果。";
   return `已有 ${status.entryCount ?? 0} 个项目。继续导出前建议确认这些文件可以保留。`;
+}
+
+function formatBytes(bytes: number): string {
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let value = bytes;
+  let unit = 0;
+  while (unit < units.length - 1 && value >= 1024) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
 }
 
 export function RunStep({

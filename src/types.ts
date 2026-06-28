@@ -81,6 +81,9 @@ export type ExportPathStatus = {
   exists: boolean;
   isDirectory: boolean;
   parentExists: boolean;
+  writable?: boolean;
+  availableBytes?: number;
+  pathLength: number;
   entryCount?: number;
   containsHtml: boolean;
   containsTxt: boolean;

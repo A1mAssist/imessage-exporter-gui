@@ -7,6 +7,7 @@ use std::{
     collections::{BTreeSet, HashMap, HashSet},
     fs::create_dir_all,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use fdlimit::raise_fd_limit;
@@ -28,7 +29,7 @@ use imessage_database::{
 };
 
 use crate::{
-    HTML, JSONL, TXT,
+    CancellationToken, HTML, JSONL, NoopCancellationToken, TXT,
     app::{
         compatibility::attachment_manager::AttachmentManagerMode, contacts::Name,
         data_source::DataSource, error::RuntimeError, export_type::ExportType, options::Options,
@@ -63,6 +64,7 @@ pub struct Config {
     pub offset: i64,
     /// Database and contact data source.
     pub data_source: DataSource,
+    cancellation: Arc<dyn CancellationToken>,
 }
 
 impl Config {
@@ -246,17 +248,37 @@ impl Config {
     // MARK: Init
     /// Build application state and caches.
     pub fn new(options: Options) -> Result<Config, RuntimeError> {
+        Self::new_with_cancel(options, Arc::new(NoopCancellationToken))
+    }
+
+    /// Build application state and caches with a cooperative cancellation token.
+    pub fn new_with_cancel(
+        options: Options,
+        cancellation: Arc<dyn CancellationToken>,
+    ) -> Result<Config, RuntimeError> {
+        if cancellation.is_cancelled() {
+            return Err(RuntimeError::Cancelled);
+        }
         let data_source = DataSource::from(&options)?;
 
         eprintln!("Building cache...");
+        if cancellation.is_cancelled() {
+            return Err(RuntimeError::Cancelled);
+        }
         eprintln!("  [1/5] Caching chats...");
         let chatrooms = Chat::cache(data_source.db())?;
 
+        if cancellation.is_cancelled() {
+            return Err(RuntimeError::Cancelled);
+        }
         eprintln!("  [2/5] Caching chatrooms...");
         let chatroom_participants = ChatToHandle::cache(data_source.db())?;
         let chat_handle_lookup = ChatToHandle::get_chat_lookup_map(data_source.db())?;
         let real_chatrooms = ChatToHandle::dedupe(&chatroom_participants, &chat_handle_lookup)?;
 
+        if cancellation.is_cancelled() {
+            return Err(RuntimeError::Cancelled);
+        }
         eprintln!("  [3/5] Caching participants...");
         let participants = Handle::cache(data_source.db())?;
         let real_participants = Handle::dedupe(&participants);
@@ -264,9 +286,15 @@ impl Config {
             .contacts_index
             .build_participants_map(&participants, &real_participants);
 
+        if cancellation.is_cancelled() {
+            return Err(RuntimeError::Cancelled);
+        }
         eprintln!("  [4/5] Caching tapbacks...");
         let tapbacks = Message::cache(data_source.db())?;
 
+        if cancellation.is_cancelled() {
+            return Err(RuntimeError::Cancelled);
+        }
         eprintln!("  [5/5] Caching translations...");
         // Missing translation metadata means no messages need translation lookup.
         let translated_messages = Message::cache_translations(data_source.db()).unwrap_or_default();
@@ -283,7 +311,16 @@ impl Config {
             options,
             offset: get_offset(),
             data_source,
+            cancellation,
         })
+    }
+
+    pub fn check_cancelled(&self) -> Result<(), RuntimeError> {
+        if self.cancellation.is_cancelled() {
+            Err(RuntimeError::Cancelled)
+        } else {
+            Ok(())
+        }
     }
 
     // MARK: Filters
@@ -411,6 +448,7 @@ impl Config {
     // MARK: Diagnostic
     /// Print diagnostic data for the active database and environment.
     fn run_diagnostic(&self) -> Result<(), RuntimeError> {
+        self.check_cancelled()?;
         println!("\niMessage Database Diagnostics\n");
 
         // Handle diagnostics
@@ -431,6 +469,7 @@ impl Config {
                 handle_diag.total_duplicated
             );
         }
+        self.check_cancelled()?;
 
         // Message diagnostics
         let message_diag = Message::run_diagnostic(self.data_source.db())?;
@@ -467,6 +506,7 @@ impl Config {
                 readable_diff(&first_date, &last_date).unwrap_or_else(|| "N/A".to_string()),
             );
         }
+        self.check_cancelled()?;
 
         // Attachment diagnostics
         let attach_diag = Attachment::run_diagnostic(
@@ -496,6 +536,7 @@ impl Config {
                 println!("        No file located: {}", attach_diag.no_file_located());
             }
         }
+        self.check_cancelled()?;
 
         // Chat/thread diagnostics
         let chat_diag = ChatToHandle::run_diagnostic(self.data_source.db())?;
@@ -510,6 +551,7 @@ impl Config {
                 chat_diag.chats_with_no_handles
             );
         }
+        self.check_cancelled()?;
 
         // Global Diagnostics
         println!("Global diagnostic data:");
@@ -542,6 +584,7 @@ impl Config {
 
         println!("\nEnvironment Diagnostics\n");
         self.options.attachment_manager.diagnostic();
+        self.check_cancelled()?;
 
         Ok(())
     }
@@ -549,9 +592,11 @@ impl Config {
     // MARK: Startup
     /// Run diagnostics or export data, depending on the selected options.
     pub fn start(&self) -> Result<(), RuntimeError> {
+        self.check_cancelled()?;
         if self.options.diagnostic {
             self.run_diagnostic()?;
         } else if let Some(export_type) = &self.options.export_type {
+            self.check_cancelled()?;
             if let Some(filters) = &self.options.conversation_filter
                 && !self.options.query_context.has_filters()
             {
@@ -562,6 +607,7 @@ impl Config {
 
             // Ensure the path we want to export to exists
             create_dir_all(&self.options.export_path)?;
+            self.check_cancelled()?;
 
             // Ensure the path we want to copy attachments to exists, if requested
             if !matches!(
@@ -570,14 +616,17 @@ impl Config {
             ) {
                 create_dir_all(self.attachment_path())?;
             }
+            self.check_cancelled()?;
 
             // Ensure there is enough free disk space to write the export
             if !self.options.ignore_disk_space {
                 self.ensure_free_space()?;
             }
+            self.check_cancelled()?;
 
             // Ensure we have enough file handles to export
             let _ = raise_fd_limit();
+            self.check_cancelled()?;
 
             // Create exporter, pass it data we care about, then kick it off
             match export_type {

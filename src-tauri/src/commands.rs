@@ -1,7 +1,9 @@
 use std::{
-    fs,
+    fs::{self, File},
+    io::Write,
     path::{Path, PathBuf},
     process::Command,
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use tauri::{AppHandle, Manager, State};
@@ -236,10 +238,13 @@ fn inspect_export_path_impl(path: &Path) -> ExportPathStatus {
     let path_text = path.display().to_string();
     let parent_exists = path.parent().map(Path::exists).unwrap_or(true);
     let mut status = ExportPathStatus {
-        path: path_text,
+        path: path_text.clone(),
         exists: path.exists(),
         is_directory: path.is_dir(),
         parent_exists,
+        writable: None,
+        available_bytes: available_space_for_path(path),
+        path_length: path_text.chars().count(),
         entry_count: None,
         contains_html: false,
         contains_txt: false,
@@ -254,10 +259,16 @@ fn inspect_export_path_impl(path: &Path) -> ExportPathStatus {
                 .warnings
                 .push("输出目录的上级目录不存在，请重新选择。".to_string());
         }
+        if status.path_length > 240 {
+            status.warnings.push(
+                "输出路径较长，Windows 安装版或后续附件文件名可能触发路径长度限制。".to_string(),
+            );
+        }
         return status;
     }
 
     if !status.is_directory {
+        status.writable = Some(false);
         status
             .warnings
             .push("输出路径已存在，但它不是文件夹。".to_string());
@@ -274,6 +285,20 @@ fn inspect_export_path_impl(path: &Path) -> ExportPathStatus {
             return status;
         }
     };
+
+    match probe_directory_writable(path) {
+        Ok(()) => {
+            status.writable = Some(true);
+        }
+        Err(err) => {
+            status.writable = Some(false);
+            status.error = Some(format!("无法写入输出目录: {err}"));
+            status
+                .warnings
+                .push("无法在输出目录创建测试文件，请检查权限或同步软件锁定。".to_string());
+            return status;
+        }
+    }
 
     let mut count = 0usize;
     for entry in entries.filter_map(Result::ok) {
@@ -310,8 +335,39 @@ fn inspect_export_path_impl(path: &Path) -> ExportPathStatus {
             .warnings
             .push("检测到疑似旧导出文件，建议选择一个新的空目录。".to_string());
     }
+    if status.path_length > 240 {
+        status
+            .warnings
+            .push("输出路径较长，Windows 安装版或后续附件文件名可能触发路径长度限制。".to_string());
+    }
+    if let Some(available_bytes) = status.available_bytes {
+        if available_bytes < 1024 * 1024 * 1024 {
+            status
+                .warnings
+                .push("输出磁盘可用空间低于 1 GB，大型备份导出可能失败。".to_string());
+        }
+    }
 
     status
+}
+
+fn probe_directory_writable(path: &Path) -> std::io::Result<()> {
+    let id = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let probe_path = path.join(format!(".imessage-exporter-gui-write-test-{id}.tmp"));
+    {
+        let mut file = File::create(&probe_path)?;
+        file.write_all(b"ok")?;
+        file.sync_all()?;
+    }
+    fs::remove_file(probe_path)
+}
+
+fn available_space_for_path(path: &Path) -> Option<u64> {
+    let target = if path.exists() { path } else { path.parent()? };
+    fs2::available_space(target).ok()
 }
 
 #[cfg(test)]
@@ -341,6 +397,8 @@ mod tests {
         assert!(status.is_directory);
         assert!(status.contains_html);
         assert!(status.contains_attachments);
+        assert_eq!(status.writable, Some(true));
+        assert!(status.available_bytes.is_some());
         assert!(status.entry_count.unwrap_or_default() >= 2);
         assert!(status
             .warnings
@@ -360,6 +418,7 @@ mod tests {
         let status = inspect_export_path_impl(&file);
         assert!(status.exists);
         assert!(!status.is_directory);
+        assert_eq!(status.writable, Some(false));
         assert!(status
             .warnings
             .iter()
@@ -389,5 +448,24 @@ mod tests {
         );
 
         fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn inspect_export_path_warns_for_long_new_path() {
+        let base = unique_temp_dir("long-path");
+        fs::create_dir_all(&base).unwrap();
+        let long_segment = "nested-output-directory-name".repeat(10);
+        let path = base.join(long_segment);
+
+        let status = inspect_export_path_impl(&path);
+        assert!(!status.exists);
+        assert!(status.parent_exists);
+        assert!(status.path_length > 240);
+        assert!(status
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("路径较长")));
+
+        fs::remove_dir_all(base).unwrap();
     }
 }

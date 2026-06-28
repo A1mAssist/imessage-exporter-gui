@@ -150,33 +150,34 @@ impl JobRegistry {
             let log_sink = sink.clone();
             let log_redactor = redactor.clone();
             let log_job_id = job_id.clone();
-            let result = engine::run_with_logger(options, move |stream, line| {
-                let kind = match stream {
-                    imessage_exporter::LogStream::Stdout => JobEventKind::Stdout,
-                    imessage_exporter::LogStream::Stderr => JobEventKind::Stderr,
-                };
-                emit_event(
-                    &log_sink,
-                    &log_redactor,
-                    &log_job_id,
-                    kind,
-                    Some(line),
-                    None,
-                );
-            });
+            let result = engine::run_with_logger(
+                options,
+                move |stream, line| {
+                    let kind = match stream {
+                        imessage_exporter::LogStream::Stdout => JobEventKind::Stdout,
+                        imessage_exporter::LogStream::Stderr => JobEventKind::Stderr,
+                    };
+                    emit_event(
+                        &log_sink,
+                        &log_redactor,
+                        &log_job_id,
+                        kind,
+                        Some(line),
+                        None,
+                    );
+                },
+                Arc::clone(&cancel_flag),
+            );
             let was_cancelled = cancel_flag.load(Ordering::SeqCst);
 
             match result {
-                Ok(()) if was_cancelled => {
+                Err(imessage_exporter::RuntimeError::Cancelled) | Ok(()) if was_cancelled => {
                     emit_event(
                         &sink,
                         &redactor,
                         &job_id,
                         JobEventKind::Error,
-                        Some(
-                            "Job cancellation was requested. The built-in exporter finished before cooperative cancellation was available."
-                                .to_string(),
-                        ),
+                        Some("Job cancelled by user request.".to_string()),
                         None,
                     );
                 }
@@ -189,7 +190,7 @@ impl JobRegistry {
                         &redactor,
                         &job_id,
                         JobEventKind::Error,
-                        Some(err),
+                        Some(err.to_string()),
                         None,
                     );
                 }

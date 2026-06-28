@@ -1,4 +1,7 @@
-use std::path::PathBuf;
+use std::{
+    path::PathBuf,
+    sync::{atomic::AtomicBool, Arc},
+};
 
 use imessage_database::util::{platform::Platform, query_context::QueryContext};
 use imessage_exporter::{
@@ -6,7 +9,7 @@ use imessage_exporter::{
         compatibility::attachment_manager::{AttachmentManager, AttachmentManagerMode},
         export_type::ExportType,
     },
-    run_with_options_and_logger, LogStream, Options,
+    run_with_options_logger_and_cancel, AtomicCancellationToken, LogStream, Options, RuntimeError,
 };
 
 use crate::{
@@ -63,11 +66,19 @@ pub fn export_options(config: &ExportConfig) -> Result<Options, String> {
     Ok(options)
 }
 
-pub fn run_with_logger<F>(options: Options, sink: F) -> Result<(), String>
+pub fn run_with_logger<F>(
+    options: Options,
+    sink: F,
+    cancel_flag: Arc<AtomicBool>,
+) -> Result<(), RuntimeError>
 where
     F: FnMut(LogStream, String) + 'static,
 {
-    run_with_options_and_logger(options, sink).map_err(|err| err.to_string())
+    run_with_options_logger_and_cancel(
+        options,
+        sink,
+        Arc::new(AtomicCancellationToken::new(cancel_flag)),
+    )
 }
 
 fn base_options(
@@ -129,4 +140,33 @@ fn clean(value: Option<&str>) -> Option<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::SourceKind;
+    use std::sync::atomic::Ordering;
+
+    #[test]
+    fn run_with_logger_honors_pre_cancelled_flag() {
+        let source = SourceConfig {
+            kind: SourceKind::IosBackup,
+            backup_path: std::env::temp_dir()
+                .join("imessage-exporter-gui-cancelled")
+                .display()
+                .to_string(),
+            exporter_path: None,
+            encrypted: false,
+            cleartext_password: None,
+        };
+        let options = diagnostics_options(&source).unwrap();
+        let cancel_flag = Arc::new(AtomicBool::new(true));
+
+        let err = run_with_logger(options, |_stream, _line| {}, Arc::clone(&cancel_flag))
+            .expect_err("pre-cancelled run should stop before opening the data source");
+
+        assert!(matches!(err, RuntimeError::Cancelled));
+        assert!(cancel_flag.load(Ordering::SeqCst));
+    }
 }
