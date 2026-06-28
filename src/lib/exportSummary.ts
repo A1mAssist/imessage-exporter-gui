@@ -52,15 +52,15 @@ function statusLabel(status: ExportSummaryStatus, code?: number): string {
   if (status === "succeeded") return "导出完成";
   if (status === "cancelled") return "导出已取消";
   if (status === "failed") return code === undefined ? "导出失败" : `导出失败，代码 ${code}`;
-  return "等待导出";
+  return "导出前预览";
 }
 
 function summaryDetail(status: ExportSummaryStatus, logText: string, message?: string): string {
-  if (status === "running") return latestMeaningfulLine(logText) ?? "正在等待 imessage-exporter 输出。";
+  if (status === "running") return latestMeaningfulLine(logText) ?? "正在等待内置导出引擎输出。";
   if (status === "succeeded") return latestMeaningfulLine(logText) ?? "任务已成功结束。";
   if (status === "cancelled") return "任务已停止，已保留当前日志。";
   if (status === "failed") return message || latestMeaningfulLine(logText) || "请查看日志中的错误信息。";
-  return "开始导出后会在这里汇总结果。";
+  return "开始前先确认设置和输出位置。";
 }
 
 function parseOutputPath(logText: string): string | undefined {
@@ -98,11 +98,17 @@ function durationLabel(logs: LogLine[]): string {
 }
 
 function nextStep(status: ExportSummaryStatus, format: ExportFormat): string {
-  if (status === "succeeded") return format === "html" ? "打开首个 HTML 或输出目录检查结果。" : "打开首个 TXT 或输出目录检查结果。";
+  if (status === "succeeded") return `打开首个 ${resultFormatLabel(format)} 或输出目录检查结果。`;
   if (status === "failed") return "按失败提示修正后重新导出。";
   if (status === "cancelled") return "调整选项后可重新导出。";
   if (status === "running") return "保持窗口打开，必要时可取消任务。";
-  return "开始导出后会显示下一步。";
+  return "确认无误后开始导出。";
+}
+
+function resultFormatLabel(format: ExportFormat): string {
+  if (format === "html") return "HTML";
+  if (format === "jsonl") return "JSONL";
+  return "TXT";
 }
 
 function latestMeaningfulLine(logText: string): string | undefined {

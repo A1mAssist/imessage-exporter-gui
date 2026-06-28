@@ -69,6 +69,18 @@ describe("export config helpers", () => {
     expect(normalized.noLazy).toBe(false);
   });
 
+  it("prevents conflicting self-name options", () => {
+    expect(
+      validateExportConfig({
+        ...defaultExportConfig,
+        backupPath: "C:/Backup",
+        exportPath: "C:/Out",
+        customName: "Me",
+        useCallerId: true,
+      }),
+    ).toContain("我的显示名和 Caller ID 只能选择一个。");
+  });
+
   it("rejects an end date before the start date", () => {
     expect(
       validateExportConfig({
@@ -107,6 +119,8 @@ describe("export config helpers", () => {
         exporterAvailable: true,
         exporterVersion: "imessage-exporter 4.1.0",
         exporterPath: "C:\\Tools\\imessage-exporter.exe",
+        verifiedExporterVersion: "4.1.0",
+        exporterVersionStatus: "verified",
         ffmpegAvailable: false,
         imagemagickAvailable: false,
         defaultBackupRoots: [],

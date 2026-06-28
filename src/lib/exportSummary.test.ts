@@ -46,6 +46,21 @@ describe("summarizeExportResult", () => {
     expect(summary.nextStep).toBe("打开首个 TXT 或输出目录检查结果。");
   });
 
+  it("keeps pending summaries as a preflight preview", () => {
+    const summary = summarizeExportResult({
+      logs: [],
+      running: false,
+      outcome: { kind: "idle" },
+      format: "html",
+      copyMethod: "clone",
+      exportPath: "D:\\Preview",
+    });
+
+    expect(summary.statusLabel).toBe("导出前预览");
+    expect(summary.detail).toBe("开始前先确认设置和输出位置。");
+    expect(summary.nextStep).toBe("确认无误后开始导出。");
+  });
+
   it("shows cancelled and failed states distinctly", () => {
     expect(
       summarizeExportResult({

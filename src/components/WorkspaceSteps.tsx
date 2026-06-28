@@ -7,7 +7,6 @@ import {
   CheckCircle2,
   CircleStop,
   Database,
-  Download,
   ExternalLink,
   FileArchive,
   FolderOpen,
@@ -81,11 +80,8 @@ export function SourceStep({
   selectedBackup,
   config,
   environment,
-  loadingEnvironment,
   diagnosticsSucceeded,
   onChooseBackup,
-  onChooseExporter,
-  onOpenExporterDownload,
   onSelectBackup,
   onChange,
   onClearPassword,
@@ -96,11 +92,8 @@ export function SourceStep({
   selectedBackup?: BackupCandidate;
   config: ExportConfig;
   environment?: EnvironmentStatus;
-  loadingEnvironment: boolean;
   diagnosticsSucceeded: boolean;
   onChooseBackup: () => void;
-  onChooseExporter: () => void;
-  onOpenExporterDownload: () => void;
   onSelectBackup: (backup: BackupCandidate) => void;
   onChange: (patch: Partial<ExportConfig>) => void;
   onClearPassword: () => void;
@@ -117,29 +110,16 @@ export function SourceStep({
       <FirstRunGuide
         backup={selectedBackup}
         config={config}
-        environment={environment}
         diagnosticsSucceeded={diagnosticsSucceeded}
         diagnosticsBlockers={diagnosticsBlockers}
-        onChooseExporter={onChooseExporter}
-        onOpenExporterDownload={onOpenExporterDownload}
         onChooseBackup={onChooseBackup}
         onRunDiagnostics={onRunDiagnostics}
-      />
-
-      <EngineSetupCard
-        config={config}
-        environment={environment}
-        loading={loadingEnvironment}
-        onOpenExporterDownload={onOpenExporterDownload}
-        onChooseExporter={onChooseExporter}
-        onRefreshEnvironment={onRefreshEnvironment}
       />
 
       <ReadinessBand
         backup={selectedBackup}
         config={config}
         environment={environment}
-        loading={loadingEnvironment}
         onRefresh={onRefreshEnvironment}
       />
 
@@ -223,7 +203,7 @@ export function SourceStep({
               </label>
               <p className="warning-text">
                 <ShieldAlert size={15} />
-                密码会临时传给 CLI，命令预览和日志会脱敏，但系统进程列表仍可能短暂看到。
+                密码只在本次任务中传给内置导出引擎，命令预览和日志会脱敏。
               </p>
             </div>
           ) : null}
@@ -253,65 +233,41 @@ export function SourceStep({
 function FirstRunGuide({
   backup,
   config,
-  environment,
   diagnosticsSucceeded,
   diagnosticsBlockers,
-  onChooseExporter,
-  onOpenExporterDownload,
   onChooseBackup,
   onRunDiagnostics,
 }: {
   backup?: BackupCandidate;
   config: ExportConfig;
-  environment?: EnvironmentStatus;
   diagnosticsSucceeded: boolean;
   diagnosticsBlockers: string[];
-  onChooseExporter: () => void;
-  onOpenExporterDownload: () => void;
   onChooseBackup: () => void;
   onRunDiagnostics: () => void;
 }) {
-  const engineReady = Boolean(environment?.exporterAvailable);
   const backupReady = Boolean(config.backupPath.trim() && backup?.valid);
   const passwordReady = !config.encrypted || Boolean(config.cleartextPassword?.trim());
   const canRunDiagnostics = diagnosticsBlockers.length === 0;
   const items: Array<{ label: string; detail: string; done: boolean; actions: ReactNode }> = [
     {
-      label: "准备导出引擎",
-      detail: engineReady ? "已检测到 imessage-exporter，可以继续。" : "先下载 imessage-exporter，然后在这里选择可执行文件。",
-      done: engineReady,
-      actions: (
-        <>
-          <button className="ghost-button" type="button" onClick={onOpenExporterDownload}>
-            <ExternalLink size={15} />
-            下载
-          </button>
-          <button className="ghost-button" type="button" onClick={onChooseExporter}>
-            <FolderOpen size={15} />
-            选择
-          </button>
-        </>
-      ),
-    },
-    {
       label: "选择 iOS 备份",
-      detail: backupReady ? backup?.displayName ?? "备份目录已就绪。" : "选择包含 Manifest.db 和 Info.plist 的本机 iOS 备份根目录。",
+      detail: backupReady ? backup?.displayName ?? "备份目录已就绪" : "选择包含 Manifest.db 和 Info.plist 的 iOS 备份根目录",
       done: backupReady && passwordReady,
       actions: (
         <button className="ghost-button" type="button" onClick={onChooseBackup}>
           <Database size={15} />
-          选择备份
+          选择
         </button>
       ),
     },
     {
       label: "运行诊断",
-      detail: diagnosticsSucceeded ? "诊断已通过，可以继续设置导出选项。" : "确认数据库、附件、联系人和可选转换器状态。",
+      detail: diagnosticsSucceeded ? "诊断已通过，可以继续设置导出选项" : "确认数据库、附件、联系人和转换器状态",
       done: diagnosticsSucceeded,
       actions: (
         <button className="ghost-button" type="button" onClick={onRunDiagnostics} disabled={!canRunDiagnostics}>
           <Search size={15} />
-          运行诊断
+          运行
         </button>
       ),
     },
@@ -321,8 +277,8 @@ function FirstRunGuide({
     <section className="content-band first-run-guide" aria-label="首次导出路线">
       <div className="section-heading">
         <div>
-          <h2>首次导出清单</h2>
-          <p>按顺序完成这三项，就能进入导出选项。</p>
+          <h2>首次导出路线</h2>
+          <p>按这个顺序准备备份、确认诊断，再进入导出选项。</p>
         </div>
       </div>
       <div className="first-run-grid">
@@ -341,71 +297,10 @@ function FirstRunGuide({
   );
 }
 
-function EngineSetupCard({
-  config,
-  environment,
-  loading,
-  onOpenExporterDownload,
-  onChooseExporter,
-  onRefreshEnvironment,
-}: {
-  config: ExportConfig;
-  environment?: EnvironmentStatus;
-  loading: boolean;
-  onOpenExporterDownload: () => void;
-  onChooseExporter: () => void;
-  onRefreshEnvironment: () => void;
-}) {
-  const selectedPath = config.exporterPath?.trim() || environment?.exporterPath;
-  const ready = Boolean(environment?.exporterAvailable);
-  const engineItems = [
-    { label: "获取方式", done: ready || Boolean(selectedPath), detail: ready || selectedPath ? "已使用本机可执行文件" : "需要下载或选择 imessage-exporter.exe", icon: <Download size={15} /> },
-    { label: "当前位置", done: Boolean(selectedPath), detail: selectedPath ? compactPath(selectedPath) : "未选择；会尝试从 PATH 检测", icon: <FolderOpen size={15} /> },
-    { label: "可用状态", done: ready, detail: ready ? environment?.exporterVersion ?? "检测通过" : "尚未检测到可用版本", icon: <CheckCircle2 size={15} /> },
-  ];
-
-  return (
-    <section className="content-band engine-setup-card" aria-label="导出引擎设置">
-      <div className="section-heading">
-        <div>
-          <h2>导出引擎设置</h2>
-          <p>{ready ? "已检测到 imessage-exporter，诊断和导出可以继续运行。" : "GUI 不内置 imessage-exporter；需要先下载或选择本机已有的可执行文件。"}</p>
-        </div>
-        <Badge tone={ready ? "ok" : "warn"}>{ready ? "已就绪" : "需要设置"}</Badge>
-      </div>
-      <div className="engine-setup-steps">
-        {engineItems.map((item) => (
-          <span className={item.done ? "done" : ""} key={item.label}>
-            <strong>{item.done ? <CheckCircle2 size={16} /> : item.icon}</strong>
-            <em>
-              {item.label}
-              <small>{item.detail}</small>
-            </em>
-          </span>
-        ))}
-      </div>
-      <div className="panel-actions">
-        <button className="ghost-button" type="button" onClick={onOpenExporterDownload}>
-          <ExternalLink size={15} />
-          打开下载页
-        </button>
-        <button className="ghost-button" type="button" onClick={onChooseExporter}>
-          <FolderOpen size={15} />
-          选择导出引擎
-        </button>
-        <button className="ghost-button" type="button" onClick={onRefreshEnvironment} disabled={loading}>
-          {loading ? <Loader2 className="spin" size={15} /> : <RefreshCcw size={15} />}
-          重新检测
-        </button>
-      </div>
-    </section>
-  );
-}
-
 export function sourceDiagnosticsBlockers(config: ExportConfig, backup?: BackupCandidate, environment?: EnvironmentStatus): string[] {
   const blockers: string[] = [];
 
-  if (!environment?.exporterAvailable) blockers.push("缺少 imessage-exporter 导出引擎，暂时不能运行诊断。");
+  if (!environment?.exporterAvailable) blockers.push("内置导出引擎暂未就绪，暂时不能运行诊断。");
   blockers.push(...sourceSelectionBlockers(config, backup));
   if (config.encrypted && !config.cleartextPassword?.trim()) blockers.push("加密备份需要输入密码。");
 
@@ -428,13 +323,11 @@ function ReadinessBand({
   backup,
   config,
   environment,
-  loading,
   onRefresh,
 }: {
   backup?: BackupCandidate;
   config: ExportConfig;
   environment?: EnvironmentStatus;
-  loading: boolean;
   onRefresh: () => void;
 }) {
   const items: Array<{
@@ -444,17 +337,6 @@ function ReadinessBand({
     tone: "ok" | "warn" | "error" | "neutral";
     icon: ReactNode;
   }> = [
-    {
-      key: "exporter",
-      label: "导出引擎",
-      detail: loading
-        ? "正在检查"
-        : environment?.exporterAvailable
-          ? environment.exporterVersion ?? environment.exporterPath ?? "已就绪"
-          : "未找到导出引擎，请下载或选择 imessage-exporter",
-      tone: loading ? "neutral" : environment?.exporterAvailable ? "ok" : "error",
-      icon: loading ? <Loader2 className="spin" size={17} /> : environment?.exporterAvailable ? <CheckCircle2 size={17} /> : <AlertCircle size={17} />,
-    },
     {
       key: "backup",
       label: "备份目录",
@@ -530,7 +412,6 @@ function DiagnosticSummaryPanel({
   const hasDiagnosticOutput = diagnosticFindings.some((finding) => finding.status !== "unknown");
   const hasDiagnosticWarning = diagnosticFindings.some((finding) => finding.status === "warn");
   const convertersReady = Boolean(environment?.ffmpegAvailable && environment?.imagemagickAvailable);
-  const engineDetail = environment?.exporterAvailable ? environment.exporterVersion ?? environment.exporterPath ?? "导出引擎可用" : "未检测到导出引擎";
   const diagnosticDetail = canContinue ? "诊断已通过，可以继续设置导出选项。" : hasDiagnosticOutput ? "诊断已完成，但仍有项目需要处理。" : "运行诊断后会汇总检查结果。";
   const items: Array<{ label: string; value: string; detail: string; tone: "ok" | "warn" | "error" | "neutral"; icon: ReactNode }> = [
     {
@@ -539,13 +420,6 @@ function DiagnosticSummaryPanel({
       detail: backup?.valid ? backup.displayName : "需要有效的 iOS 备份根目录",
       tone: backup?.valid ? "ok" : "warn",
       icon: <Database size={17} />,
-    },
-    {
-      label: "导出引擎",
-      value: environment?.exporterAvailable ? "可用" : "缺失",
-      detail: engineDetail,
-      tone: environment?.exporterAvailable ? "ok" : "error",
-      icon: <TerminalSquare size={17} />,
     },
     {
       label: "诊断结果",
@@ -602,8 +476,6 @@ export function DiagnosticsStep({
   onRunDiagnostics,
   onCancel,
   onNext,
-  onChooseExporter,
-  onOpenExporterDownload,
   onChooseBackup,
   onBackToSource,
 }: {
@@ -621,8 +493,6 @@ export function DiagnosticsStep({
   onRunDiagnostics: () => void;
   onCancel: () => void;
   onNext: () => void;
-  onChooseExporter: () => void;
-  onOpenExporterDownload: () => void;
   onChooseBackup: () => void;
   onBackToSource: () => void;
 }) {
@@ -661,8 +531,6 @@ export function DiagnosticsStep({
         context="diagnostics"
         logs={logs}
         actions={{
-          onChooseExporter,
-          onOpenExporterDownload,
           onChooseBackup,
           onBackToSource,
           onRetry: onRunDiagnostics,
@@ -722,6 +590,8 @@ export function OptionsStep({
   onApplyPreset: (presetId: ExportPresetId) => void;
   onStart: () => void;
 }) {
+  const selectedConversation = selectedConversationForFilter(config.conversationFilter, conversations);
+
   return (
     <div className="page">
       <Header eyebrow="导出设置" title="设置导出选项" description="选择输出格式、附件复制策略、日期范围和会话筛选。" />
@@ -756,14 +626,14 @@ export function OptionsStep({
             <Archive size={15} />
             新建归档目录
           </button>
-          <small>生成带时间戳的新文件夹，避免导出结果混入旧目录。</small>
+          <small>{selectedConversation ? `生成带“${selectedConversation.title}”和时间戳的新文件夹。` : "生成带时间戳的新文件夹，避免导出结果混入旧目录。"}</small>
         </div>
         <ExportPathNotice status={exportPathStatus} checking={checkingExportPath} />
         <SegmentedControl
           label="格式"
           value={config.format}
           options={exportFormats}
-          onChange={(format) => onChange(format === "txt" ? { format, noLazy: false } : { format })}
+          onChange={(format) => onChange(format === "html" ? { format } : { format, noLazy: false })}
         />
         <SegmentedControl
           label="附件"
@@ -778,7 +648,7 @@ export function OptionsStep({
           </div>
         ))}
         {config.copyMethod !== "clone" && environment && !environment.ffmpegAvailable ? (
-          <p className="muted">Windows 第一版建议使用 clone；basic/full 依赖本机转换器。</p>
+          <p className="muted">clone 不依赖本机转换器；basic/full 需要 ffmpeg 和 ImageMagick。</p>
         ) : null}
       </section>
 
@@ -792,12 +662,12 @@ export function OptionsStep({
           onChange={(conversationFilter) => onChange({ conversationFilter })}
         />
         <label>
-          <span>自定义显示名</span>
+          <span>我的显示名</span>
           <input
             value={config.customName ?? ""}
             disabled={config.useCallerId}
             onChange={(event) => onChange({ customName: event.target.value })}
-            placeholder="留空使用默认联系人解析"
+            placeholder="只影响导出内容里自己的名字"
           />
         </label>
       </section>
@@ -814,7 +684,7 @@ export function OptionsStep({
         </label>
         <label className="checkbox-row">
           <input type="checkbox" checked={Boolean(config.useCallerId)} onChange={(event) => onChange({ useCallerId: event.target.checked, customName: "" })} />
-          <span>使用 Caller ID 作为显示名</span>
+          <span>用 Caller ID 显示我自己</span>
         </label>
         <label className="checkbox-row">
           <input type="checkbox" checked={Boolean(config.ignoreDiskWarning)} onChange={(event) => onChange({ ignoreDiskWarning: event.target.checked })} />
@@ -822,7 +692,7 @@ export function OptionsStep({
         </label>
       </section>
 
-      <ExportReview config={config} environment={environment} exportPathStatus={exportPathStatus} />
+      <ExportReview config={config} environment={environment} exportPathStatus={exportPathStatus} selectedConversation={selectedConversation} />
 
       {preview ? <CommandBox preview={preview} /> : null}
       {errors.map((message) => (
@@ -841,12 +711,15 @@ function ExportReview({
   config,
   environment,
   exportPathStatus,
+  selectedConversation,
 }: {
   config: ExportConfig;
   environment?: EnvironmentStatus;
   exportPathStatus?: ExportPathStatus;
+  selectedConversation?: ConversationCandidate;
 }) {
   const notes = exportReviewNotes(config, environment, exportPathStatus);
+  const conversationName = conversationExportName(config.conversationFilter, selectedConversation);
   const items: Array<{ label: string; value: string; icon: ReactNode }> = [
     {
       label: "来源",
@@ -870,11 +743,16 @@ function ExportReview({
     },
     {
       label: "会话",
-      value: config.conversationFilter?.trim() || "全部会话",
+      value: conversationName,
       icon: <MessagesSquare size={17} />,
     },
     {
-      label: "显示名",
+      label: "结果文件",
+      value: resultFilenameLabel(config, selectedConversation),
+      icon: <FileArchive size={17} />,
+    },
+    {
+      label: "我的名字",
       value: displayNameLabel(config),
       icon: <UserRound size={17} />,
     },
@@ -925,7 +803,25 @@ function dateRangeLabel(config: ExportConfig): string {
 function displayNameLabel(config: ExportConfig): string {
   if (config.useCallerId) return "使用 Caller ID";
   if (config.customName?.trim()) return config.customName.trim();
-  return "默认联系人解析";
+  return "默认解析";
+}
+
+function selectedConversationForFilter(conversationFilter?: string, conversations: ConversationCandidate[] = []): ConversationCandidate | undefined {
+  const filter = conversationFilter?.trim();
+  if (!filter) return undefined;
+  return conversations.find((conversation) => conversation.filterValue === filter);
+}
+
+function conversationExportName(conversationFilter?: string, selectedConversation?: ConversationCandidate): string {
+  if (selectedConversation) return selectedConversation.title;
+  return conversationFilter?.trim() || "全部会话";
+}
+
+function resultFilenameLabel(config: ExportConfig, selectedConversation?: ConversationCandidate): string {
+  const extension = config.format === "jsonl" ? ".jsonl" : config.format === "txt" ? ".txt" : ".html";
+  if (selectedConversation) return `${selectedConversation.title}${extension}`;
+  if (config.conversationFilter?.trim()) return `匹配会话名${extension}`;
+  return `联系人或群聊名称${extension}`;
 }
 
 function exportReviewNotes(
@@ -1029,17 +925,15 @@ export function RunStep({
   preview,
   hasExportTask,
   running,
+  startDisabled,
   exitCode,
   outcome,
-  exportPath,
-  format,
-  copyMethod,
+  config,
+  conversations,
   onStart,
   onCancel,
   onBackToOptions,
   onBackToSource,
-  onChooseExporter,
-  onOpenExporterDownload,
   onOpenOutput,
   onOpenFirstResult,
 }: {
@@ -1047,87 +941,248 @@ export function RunStep({
   preview?: CommandPreview;
   hasExportTask: boolean;
   running: boolean;
+  startDisabled: boolean;
   exitCode?: number;
   outcome: JobOutcome;
-  exportPath: string;
-  format: ExportConfig["format"];
-  copyMethod: ExportConfig["copyMethod"];
+  config: ExportConfig;
+  conversations: ConversationCandidate[];
   onStart: () => void;
   onCancel: () => void;
   onBackToOptions: () => void;
   onBackToSource: () => void;
-  onChooseExporter: () => void;
-  onOpenExporterDownload: () => void;
   onOpenOutput: () => void;
   onOpenFirstResult: () => void;
 }) {
   const visualState = running ? "running" : outcome.kind;
   const Icon = visualState === "running" ? Loader2 : visualState === "succeeded" ? CheckCircle2 : visualState === "cancelled" ? CircleStop : TerminalSquare;
   const stripText = running ? "正在导出" : jobOutcomeLabel(outcome, "export");
-  const summary = summarizeExportResult({ logs, running, outcome, format, copyMethod, exportPath });
-
-  if (!hasExportTask) {
-    return (
-      <div className="page">
-        <Header eyebrow="运行结果" title="导出与结果" description="实时查看 imessage-exporter 输出，导出完成后打开结果目录。" />
-        <section className="content-band run-empty-state">
-          <span className="run-empty-icon">
-            <TerminalSquare size={22} />
-          </span>
-          <div>
-            <h2>还没有开始导出</h2>
-            <p>先在选项页确认输出目录、格式和命令预览，再启动导出任务。</p>
-          </div>
-        </section>
-        <FooterActions primaryLabel="返回选项" primaryIcon={<Settings2 size={17} />} onPrimary={onBackToOptions} />
-      </div>
-    );
-  }
+  const selectedConversation = selectedConversationForFilter(config.conversationFilter, conversations);
+  const summary = summarizeExportResult({ logs, running, outcome, format: config.format, copyMethod: config.copyMethod, exportPath: config.exportPath });
+  const phase = !hasExportTask ? "preview" : running ? "running" : "finished";
+  const headingTitle = phase === "preview" ? "导出前预览" : phase === "running" ? "导出中" : "导出结果";
+  const headingDescription =
+    phase === "preview" ? "先确认命令、结果文件和输出位置，再开始导出。" : phase === "running" ? "正在追踪导出输出和结果。" : "查看导出摘要、日志和结果入口。";
+  const primaryActionLabel = running ? "取消导出" : hasExportTask ? "重新导出" : "开始导出";
+  const primaryActionIcon = running ? <CircleStop size={17} /> : hasExportTask ? <RefreshCcw size={17} /> : <Play size={17} />;
+  const primaryAction = running ? onCancel : onStart;
 
   return (
     <div className="page">
       <Header eyebrow="运行结果" title="导出与结果" description="实时查看 imessage-exporter 输出，导出完成后打开结果目录。" />
-      {preview ? <CommandBox preview={preview} /> : null}
-      <div className={`result-strip ${resultStripClass(visualState)}`}>
-        <Icon className={visualState === "running" ? "spin" : undefined} size={20} />
-        <span>{stripText}</span>
+      <section className={`content-band export-preflight ${hasExportTask ? "has-task" : "idle"}`}>
+        <div className="section-heading">
+          <div>
+            <h2>{headingTitle}</h2>
+            <p>{headingDescription}</p>
+          </div>
+          <div className="export-preflight-actions">
+            <button className="secondary-button" type="button" onClick={onBackToOptions}>
+              <Settings2 size={17} />
+              返回选项
+            </button>
+            <button className="primary-button" type="button" onClick={primaryAction} disabled={!running && startDisabled}>
+              {primaryActionIcon}
+              {primaryActionLabel}
+            </button>
+          </div>
+        </div>
+        <div className="export-preflight-grid">
+          <div className="preflight-card command-card">
+            <div className="preflight-card-heading">
+              <TerminalSquare size={16} />
+              <strong>命令预览</strong>
+            </div>
+            {preview ? <CommandBox preview={preview} /> : <div className="empty-state">暂时还没有命令预览。</div>}
+          </div>
+          <div className="preflight-card summary-card">
+            <div className="preflight-card-heading">
+              <Info size={16} />
+              <strong>{hasExportTask ? "结果总览" : "导出总览"}</strong>
+            </div>
+            {hasExportTask ? (
+              <>
+                <div className={`result-strip ${resultStripClass(visualState)}`}>
+                  <Icon className={visualState === "running" ? "spin" : undefined} size={20} />
+                  <span>{stripText}</span>
+                </div>
+                <ExportSummaryPanel summary={summary} />
+              </>
+            ) : (
+              <RunPreflightSummary config={config} selectedConversation={selectedConversation} summary={summary} />
+            )}
+          </div>
+          <div className="preflight-card next-step-card">
+            <div className="preflight-card-heading">
+              <FolderOpen size={16} />
+              <strong>{hasExportTask ? "下一步" : "开始前"}</strong>
+            </div>
+            {hasExportTask ? (
+              <>
+                <LogPanel logs={logs} running={running} exitCode={exitCode} outcome={outcome} />
+                <JobOutcomeNotice
+                  outcome={outcome}
+                  context="export"
+                  logs={logs}
+                  actions={{
+                    onBackToSource,
+                    onBackToOptions,
+                    onRetry: startDisabled ? undefined : onStart,
+                  }}
+                />
+                <div className="result-actions">
+                  <button className="secondary-button" type="button" onClick={onOpenFirstResult} disabled={!config.exportPath.trim() || running || outcome.kind !== "succeeded"}>
+                    <ExternalLink size={17} />
+                    {`打开首个 ${resultFileLabel(config.format)}`}
+                  </button>
+                  <CopyButton label="复制路径" value={config.exportPath} disabled={!config.exportPath.trim()} title={config.exportPath ? `复制结果路径: ${config.exportPath}` : "复制结果路径"} />
+                </div>
+                <FooterActions
+                  secondaryLabel={running ? "取消导出" : "重新导出"}
+                  secondaryIcon={running ? <CircleStop size={17} /> : <RefreshCcw size={17} />}
+                  onSecondary={running ? onCancel : onStart}
+                  secondaryDisabled={!running && startDisabled}
+                  primaryLabel="打开输出目录"
+                  primaryIcon={<FolderOpen size={17} />}
+                  onPrimary={onOpenOutput}
+                  primaryDisabled={!config.exportPath.trim() || running}
+                />
+              </>
+            ) : (
+              <>
+                <RunPreflightNextStep config={config} selectedConversation={selectedConversation} preview={preview} />
+                <div className="result-actions">
+                  <button className="secondary-button" type="button" onClick={onBackToSource}>
+                    <Database size={17} />
+                    回到数据源
+                  </button>
+                  <button className="primary-button" type="button" onClick={onStart} disabled={startDisabled}>
+                    <Play size={17} />
+                    开始导出
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function RunPreflightSummary({
+  config,
+  selectedConversation,
+  summary,
+}: {
+  config: ExportConfig;
+  selectedConversation?: ConversationCandidate;
+  summary: ExportSummary;
+}) {
+  const items: Array<{ label: string; value: string; icon: ReactNode; title?: string }> = [
+    {
+      label: "结果文件",
+      value: resultFilenameLabel(config, selectedConversation),
+      icon: <FileArchive size={16} />,
+    },
+    {
+      label: "输出目录",
+      value: compactPath(config.exportPath || summary.outputPath),
+      title: config.exportPath || summary.outputPath,
+      icon: <FolderOpen size={16} />,
+    },
+    {
+      label: "会话",
+      value: conversationExportName(config.conversationFilter, selectedConversation),
+      icon: <MessagesSquare size={16} />,
+    },
+    {
+      label: "日期",
+      value: dateRangeLabel(config),
+      icon: <CalendarDays size={16} />,
+    },
+    {
+      label: "格式",
+      value: `${summary.format} · 附件 ${summary.copyMethod}`,
+      icon: <Archive size={16} />,
+    },
+    {
+      label: "我的名字",
+      value: displayNameLabel(config),
+      icon: <UserRound size={16} />,
+    },
+  ];
+
+  return (
+    <div className="run-preflight-summary" aria-label="导出前总览">
+      <div className="preflight-hero">
+        <span className="run-empty-icon">
+          <FileArchive size={22} />
+        </span>
+        <div>
+          <h3>准备导出</h3>
+          <p>{preflightFileDescription(config, selectedConversation)}</p>
+        </div>
       </div>
-      <ExportSummaryPanel summary={summary} />
-      <LogPanel logs={logs} running={running} exitCode={exitCode} outcome={outcome} />
-      <JobOutcomeNotice
-        outcome={outcome}
-        context="export"
-        logs={logs}
-        actions={{
-          onChooseExporter,
-          onOpenExporterDownload,
-          onBackToSource,
-          onBackToOptions,
-          onRetry: onStart,
-        }}
-      />
-      <div className="result-actions">
-        <button className="secondary-button" type="button" onClick={onOpenFirstResult} disabled={!exportPath.trim() || running || outcome.kind !== "succeeded"}>
-          <ExternalLink size={17} />
-          {format === "html" ? "打开首个 HTML" : "打开首个 TXT"}
-        </button>
-        <CopyButton label="复制路径" value={exportPath} disabled={!exportPath.trim()} title={exportPath ? `复制结果路径: ${exportPath}` : "复制结果路径"} />
+      <div className="preflight-facts">
+        {items.map((item) => (
+          <div className="preflight-fact" key={item.label} title={item.title ?? item.value}>
+            <span className="summary-icon">{item.icon}</span>
+            <span>
+              <small>{item.label}</small>
+              <strong>{item.value}</strong>
+            </span>
+          </div>
+        ))}
       </div>
-      <FooterActions
-        secondaryLabel={running ? "取消导出" : "重新导出"}
-        secondaryIcon={running ? <CircleStop size={17} /> : <RefreshCcw size={17} />}
-        onSecondary={running ? onCancel : onStart}
-        primaryLabel="打开输出目录"
-        primaryIcon={<FolderOpen size={17} />}
-        onPrimary={onOpenOutput}
-        primaryDisabled={!exportPath.trim() || running}
-      />
+    </div>
+  );
+}
+
+function RunPreflightNextStep({
+  config,
+  selectedConversation,
+  preview,
+}: {
+  config: ExportConfig;
+  selectedConversation?: ConversationCandidate;
+  preview?: CommandPreview;
+}) {
+  const checks = [
+    {
+      label: "输出目录",
+      value: config.exportPath ? compactPath(config.exportPath) : "未设置",
+      icon: <FolderOpen size={16} />,
+    },
+    {
+      label: "结果命名",
+      value: preflightFileDescription(config, selectedConversation),
+      icon: <FileArchive size={16} />,
+    },
+    {
+      label: "命令预览",
+      value: preview ? "已生成，可复制检查" : "等待备份和输出目录完整后生成",
+      icon: <TerminalSquare size={16} />,
+    },
+  ];
+
+  return (
+    <div className="preflight-checklist" aria-label="开始导出前检查">
+      {checks.map((check) => (
+        <div className="preflight-check" key={check.label}>
+          <span>{check.icon}</span>
+          <div>
+            <strong>{check.label}</strong>
+            <small>{check.value}</small>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
 
 function ExportSummaryPanel({ summary }: { summary: ExportSummary }) {
   const tone = summary.status === "succeeded" ? "ok" : summary.status === "failed" ? "error" : summary.status === "cancelled" ? "warn" : "neutral";
+  const isPending = summary.status === "pending";
   const items: Array<{ label: string; value: string; icon: ReactNode }> = [
     { label: "状态", value: summary.statusLabel, icon: summary.status === "succeeded" ? <CheckCircle2 size={16} /> : <Info size={16} /> },
     { label: "格式", value: summary.format, icon: <FileArchive size={16} /> },
@@ -1142,7 +1197,7 @@ function ExportSummaryPanel({ summary }: { summary: ExportSummary }) {
       <div className="section-heading">
         <div>
           <h2>导出摘要</h2>
-          <p>{summary.detail}</p>
+          <p>{isPending ? "开始前先看一眼将要导出的设置和结果位置。" : summary.detail}</p>
         </div>
       </div>
       <div className="summary-grid">
@@ -1156,14 +1211,25 @@ function ExportSummaryPanel({ summary }: { summary: ExportSummary }) {
           </div>
         ))}
       </div>
-      <div className="summary-next-step">
-        <CheckCircle2 size={17} />
+      <div className={`summary-next-step ${isPending ? "pending" : ""}`}>
+        {isPending ? <Play size={17} /> : <CheckCircle2 size={17} />}
         <span>
-          <strong>下一步</strong>
-          <small>{summary.nextStep}</small>
+          <strong>{isPending ? "准备导出" : "下一步"}</strong>
+          <small>{isPending ? "确认无误后开始导出。" : summary.nextStep}</small>
         </span>
       </div>
     </section>
   );
 }
 
+function resultFileLabel(format: ExportConfig["format"]): string {
+  if (format === "jsonl") return "JSONL";
+  if (format === "txt") return "TXT";
+  return "HTML";
+}
+
+function preflightFileDescription(config: ExportConfig, selectedConversation?: ConversationCandidate): string {
+  const filename = resultFilenameLabel(config, selectedConversation);
+  if (selectedConversation || config.conversationFilter?.trim()) return `会按匹配到的会话生成 ${filename}`;
+  return `每个联系人或群聊各生成一个 ${filename}`;
+}

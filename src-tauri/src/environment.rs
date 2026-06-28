@@ -7,20 +7,13 @@ use std::{
 
 use crate::{
     app::{plist_bool_value, plist_string_value},
-    cli,
+    engine,
     models::{BackupCandidate, EnvironmentStatus},
 };
 
-pub fn get_environment(configured_exporter_path: Option<&str>) -> EnvironmentStatus {
-    let (exporter_path, exporter_error) = match cli::resolve_exporter_path(configured_exporter_path)
-    {
-        Ok(path) => (Some(path), None),
-        Err(err) => (None, Some(err)),
-    };
-    let exporter_available = exporter_path.is_some();
-    let exporter_version = exporter_path
-        .as_ref()
-        .and_then(|path| read_exporter_version(path));
+const VERIFIED_EXPORTER_VERSION: &str = "4.1.0 + JSONL";
+
+pub fn get_environment() -> EnvironmentStatus {
     let ffmpeg_available = command_available("ffmpeg");
     let imagemagick_available = command_available("magick");
     let default_backup_roots = default_backup_roots()
@@ -29,26 +22,25 @@ pub fn get_environment(configured_exporter_path: Option<&str>) -> EnvironmentSta
         .collect::<Vec<_>>();
 
     let mut warnings = Vec::new();
-    if !exporter_available {
-        warnings.push(
-            "未找到 imessage-exporter。请安装命令行工具，或在界面中选择 imessage-exporter 可执行文件。"
-                .to_string(),
-        );
-        if let Some(err) = exporter_error {
-            warnings.push(err);
-        }
-    }
     if !ffmpeg_available {
-        warnings.push("未检测到 ffmpeg，basic/full 附件转换可能不可用。".to_string());
+        warnings.push("未检测到 ffmpeg；basic/full 附件转换中的音视频转换可能不可用。".to_string());
     }
     if !imagemagick_available {
-        warnings.push("未检测到 ImageMagick，HEIC 等图片转换可能不可用。".to_string());
+        warnings.push(
+            "未检测到 ImageMagick；basic/full 附件转换中的 HEIC 图片转换可能不可用。".to_string(),
+        );
     }
 
     EnvironmentStatus {
-        exporter_available,
-        exporter_version,
-        exporter_path: exporter_path.map(|path| path.display().to_string()),
+        exporter_available: true,
+        exporter_version: Some(format!(
+            "{} {}",
+            engine::ENGINE_LABEL,
+            engine::ENGINE_VERSION
+        )),
+        exporter_path: None,
+        verified_exporter_version: VERIFIED_EXPORTER_VERSION.to_string(),
+        exporter_version_status: "verified".to_string(),
         ffmpeg_available,
         imagemagick_available,
         default_backup_roots,
@@ -141,19 +133,15 @@ fn command_available(name: &str) -> bool {
         .unwrap_or(false)
 }
 
-fn read_exporter_version(path: &Path) -> Option<String> {
-    Command::new(path)
-        .arg("--version")
-        .output()
-        .ok()
-        .and_then(|output| {
-            if output.status.success() {
-                String::from_utf8(output.stdout)
-                    .ok()
-                    .map(|value| value.trim().to_string())
-                    .filter(|value| !value.is_empty())
-            } else {
-                None
-            }
-        })
+#[cfg(test)]
+mod tests {
+    use super::get_environment;
+
+    #[test]
+    fn built_in_exporter_is_always_available() {
+        let environment = get_environment();
+        assert!(environment.exporter_available);
+        assert_eq!(environment.exporter_version_status, "verified");
+        assert_eq!(environment.exporter_path, None);
+    }
 }

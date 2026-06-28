@@ -1,10 +1,18 @@
 [package]
 name = "imessage-exporter-gui"
-version = "0.1.1"
+version = "0.2.0"
 description = "Desktop GUI for imessage-exporter"
 authors = ["A1mAssist"]
 edition = "2021"
 license = "GPL-3.0-only"
+
+[workspace]
+members = [
+  ".",
+  "vendor/imessage-exporter/imessage-database",
+  "vendor/imessage-exporter/imessage-exporter",
+]
+resolver = "2"
 
 [lib]
 name = "imessage_exporter_gui_lib"
@@ -14,8 +22,10 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2.6.2", features = [] }
 
 [dependencies]
+imessage-database = { path = "vendor/imessage-exporter/imessage-database" }
+imessage-exporter = { path = "vendor/imessage-exporter/imessage-exporter" }
 plist = "1.7.0"
-rusqlite = { version = "0.32.1", features = ["bundled"] }
+rusqlite = { version = "=0.40.0", features = ["bundled"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tauri = { version = "2.11.2", features = [] }

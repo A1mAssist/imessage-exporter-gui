@@ -1,14 +1,16 @@
 export function timestampedArchivePath({
   exportPath,
   backupPath,
+  label,
   now = new Date(),
 }: {
   exportPath?: string;
   backupPath?: string;
+  label?: string;
   now?: Date;
 }): string {
   const base = parentPath(exportPath) ?? documentsPathFromBackup(backupPath) ?? "";
-  const name = buildArchiveStem(now);
+  const name = buildArchiveStem(now, label);
   return base ? joinPath(base, name) : name;
 }
 
@@ -20,15 +22,17 @@ export type TimestampedArchiveSequence = {
 export function timestampedArchiveSequence({
   exportPath,
   backupPath,
+  label,
   now = new Date(),
 }: {
   exportPath?: string;
   backupPath?: string;
+  label?: string;
   now?: Date;
 }): TimestampedArchiveSequence {
   const current = archiveStemFromPath(exportPath);
   if (current) return current;
-  return { stem: timestampedArchivePath({ exportPath, backupPath, now }), startSuffix: 1 };
+  return { stem: timestampedArchivePath({ exportPath, backupPath, label, now }), startSuffix: 1 };
 }
 
 export function formatArchiveTimestamp(date: Date): string {
@@ -55,7 +59,7 @@ function archiveStemFromPath(path?: string): TimestampedArchiveSequence | undefi
   const index = Math.max(trimmed.lastIndexOf("\\"), trimmed.lastIndexOf("/"));
   const parent = index >= 0 ? trimmed.slice(0, index) : "";
   const basename = index >= 0 ? trimmed.slice(index + 1) : trimmed;
-  const match = basename.match(/^Messages Export \d{4}-\d{2}-\d{2} \d{4}(?: \((\d+)\))?$/);
+  const match = basename.match(/^(?:.+ - )?Messages Export \d{4}-\d{2}-\d{2} \d{4}(?: \((\d+)\))?$/);
   if (!match) return undefined;
 
   const stemName = basename.replace(/ \(\d+\)$/, "");
@@ -65,8 +69,22 @@ function archiveStemFromPath(path?: string): TimestampedArchiveSequence | undefi
   };
 }
 
-function buildArchiveStem(now: Date): string {
-  return `Messages Export ${formatArchiveTimestamp(now)}`;
+function buildArchiveStem(now: Date, label?: string): string {
+  const name = sanitizePathSegment(label);
+  const suffix = `Messages Export ${formatArchiveTimestamp(now)}`;
+  return name ? `${name} - ${suffix}` : suffix;
+}
+
+export function sanitizePathSegment(value?: string): string {
+  const cleaned = value
+    ?.trim()
+    .replace(/[<>:"/\\|?*\x00-\x1f\x7f]/g, "_")
+    .replace(/\s+/g, " ")
+    .replace(/[. ]+$/g, "");
+  if (!cleaned) return "";
+  const reserved = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i;
+  const safe = reserved.test(cleaned) ? `_${cleaned}` : cleaned;
+  return safe.length > 80 ? safe.slice(0, 80).replace(/[. ]+$/g, "") : safe;
 }
 
 function documentsPathFromBackup(path?: string): string | undefined {

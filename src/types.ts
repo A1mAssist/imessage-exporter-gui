@@ -1,4 +1,4 @@
-export type ExportFormat = "html" | "txt";
+export type ExportFormat = "html" | "txt" | "jsonl";
 export type CopyMethod = "disabled" | "clone" | "basic" | "full";
 
 export type SourceConfig = {
@@ -27,6 +27,8 @@ export type EnvironmentStatus = {
   exporterAvailable: boolean;
   exporterVersion?: string;
   exporterPath?: string;
+  verifiedExporterVersion: string;
+  exporterVersionStatus: "verified" | "older" | "unknown";
   ffmpegAvailable: boolean;
   imagemagickAvailable: boolean;
   defaultBackupRoots: string[];

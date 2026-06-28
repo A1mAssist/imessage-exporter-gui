@@ -1,58 +1,4 @@
-use std::{
-    env,
-    path::{Path, PathBuf},
-};
-
 use crate::models::{CommandPreview, ExportConfig, SourceConfig};
-
-pub const EXPORTER_BASENAME: &str = "imessage-exporter";
-
-pub fn resolve_exporter_path(configured_path: Option<&str>) -> Result<PathBuf, String> {
-    if let Some(path) = clean(configured_path) {
-        let selected = PathBuf::from(&path);
-        if selected.is_file() {
-            return Ok(selected);
-        }
-        if is_command_name(&path) {
-            if let Some(found) = find_on_path(&path) {
-                return Ok(found);
-            }
-        }
-        return Err(format!(
-            "imessage-exporter was not found at {path}. Choose a valid exporter executable."
-        ));
-    }
-
-    find_on_path(EXPORTER_BASENAME).ok_or_else(|| {
-        "imessage-exporter was not found on PATH. Install it or choose the exporter executable."
-            .to_string()
-    })
-}
-
-fn find_on_path(name: &str) -> Option<PathBuf> {
-    let path = env::var_os("PATH")?;
-    for directory in env::split_paths(&path) {
-        for candidate in executable_candidates(name) {
-            let path = directory.join(candidate);
-            if path.is_file() {
-                return Some(path);
-            }
-        }
-    }
-    None
-}
-
-fn executable_candidates(name: &str) -> Vec<String> {
-    if cfg!(windows) && Path::new(name).extension().is_none() {
-        vec![format!("{name}.exe"), name.to_string()]
-    } else {
-        vec![name.to_string()]
-    }
-}
-
-fn is_command_name(value: &str) -> bool {
-    !value.contains('/') && !value.contains('\\')
-}
 
 pub fn diagnostics_args(config: &SourceConfig) -> Result<Vec<String>, String> {
     validate_backup_path_string(&config.backup_path)?;
@@ -292,11 +238,6 @@ fn shell_quote(value: &str) -> String {
 mod tests {
     use super::*;
     use crate::models::{CopyMethod, ExportFormat, SourceKind};
-    use std::{
-        fs,
-        process::Command,
-        time::{SystemTime, UNIX_EPOCH},
-    };
 
     fn base_config() -> ExportConfig {
         ExportConfig {
@@ -539,46 +480,9 @@ mod tests {
     }
 
     #[test]
-    fn rejects_missing_configured_exporter_path() {
-        let error = resolve_exporter_path(Some("C:\\missing\\imessage-exporter.exe")).unwrap_err();
-        assert!(error.contains("imessage-exporter was not found"));
-    }
-
-    #[test]
-    fn real_exporter_accepts_gui_generated_command_matrix() {
-        let Ok(exporter) = std::env::var("IMESSAGE_EXPORTER_REAL_SMOKE_PATH") else {
-            eprintln!(
-                "IMESSAGE_EXPORTER_REAL_SMOKE_PATH is not set; real exporter CLI matrix skipped."
-            );
-            return;
-        };
-
-        let version = Command::new(&exporter)
-            .arg("--version")
-            .output()
-            .expect("failed to run imessage-exporter --version");
-        assert!(
-            version.status.success(),
-            "could not run imessage-exporter --version: {}{}",
-            String::from_utf8_lossy(&version.stdout),
-            String::from_utf8_lossy(&version.stderr)
-        );
-
-        let run_id = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let missing_backup = std::env::temp_dir().join(format!(
-            "imessage-exporter-gui-real-cli-missing-backup-{run_id}"
-        ));
-        let missing_output =
-            std::env::temp_dir().join(format!("imessage-exporter-gui-real-cli-output-{run_id}"));
-        let missing_backup_text = missing_backup.display().to_string();
-        let missing_output_text = missing_output.display().to_string();
-
-        let _ = fs::remove_dir_all(&missing_backup);
-        let _ = fs::remove_dir_all(&missing_output);
-
+    fn built_in_exporter_command_matrix_stays_compatible() {
+        let missing_backup_text = "C:\\Missing\\iOS Backup".to_string();
+        let missing_output_text = "D:\\Missing\\Messages Export".to_string();
         let mut cases: Vec<(String, Vec<String>)> = Vec::new();
         let source = SourceConfig {
             kind: SourceKind::IosBackup,
@@ -600,7 +504,11 @@ mod tests {
             diagnostics_args(&encrypted_source).unwrap(),
         ));
 
-        let formats = [(ExportFormat::Html, "html"), (ExportFormat::Txt, "txt")];
+        let formats = [
+            (ExportFormat::Html, "html"),
+            (ExportFormat::Txt, "txt"),
+            (ExportFormat::Jsonl, "jsonl"),
+        ];
         let copy_methods = [
             (CopyMethod::Disabled, "disabled"),
             (CopyMethod::Clone, "clone"),
@@ -782,46 +690,42 @@ mod tests {
             txt_normalized_args,
         ));
 
-        println!("Real imessage-exporter CLI compatibility smoke:");
-        println!("  Exporter: {exporter}");
-        println!(
-            "  Version: {}",
-            String::from_utf8_lossy(&version.stdout).trim()
-        );
         println!("  GUI-generated command matrix: {} cases", cases.len());
 
-        for (name, args) in cases {
-            let output = Command::new(&exporter)
-                .args(&args)
-                .output()
-                .unwrap_or_else(|err| panic!("{name} failed to launch imessage-exporter: {err}"));
-            let combined = format!(
-                "{}\n{}",
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr)
-            );
+        assert_eq!(cases.len(), 29);
+        assert!(cases
+            .iter()
+            .any(|(_, args)| args.windows(2).any(|pair| pair == ["-f", "jsonl"])));
 
-            for pattern in [
-                "requires --format",
-                "Invalid command line options",
-                "Invalid options",
-                "unexpected argument",
-                "unrecognized option",
-            ] {
+        for (name, args) in cases {
+            if args.contains(&"-d".to_string()) {
                 assert!(
-                    !combined.contains(pattern),
-                    "{name} hit an imessage-exporter option compatibility error: {combined}"
+                    !args.contains(&"-f".to_string()),
+                    "{name} diagnostics should not pass export format"
+                );
+                assert!(
+                    !args.contains(&"--no-progress".to_string()),
+                    "{name} diagnostics should not pass export-only progress flag"
+                );
+            } else {
+                assert!(
+                    args.windows(2).any(|pair| pair[0] == "-f"),
+                    "{name} export should always pass explicit format"
+                );
+                assert!(
+                    args.contains(&"--no-progress".to_string()),
+                    "{name} export should use stable non-interactive progress output"
                 );
             }
-
-            assert!(
-                combined.contains("Manifest.plist") || combined.contains("Manifest.db"),
-                "{name} did not reach backup validation. Output was: {combined}"
-            );
-            println!("  ok {name}");
+            if args
+                .windows(2)
+                .any(|pair| pair == ["-f", "txt"] || pair == ["-f", "jsonl"])
+            {
+                assert!(
+                    !args.contains(&"-l".to_string()),
+                    "{name} non-HTML exports must not pass HTML-only no-lazy flag"
+                );
+            }
         }
-
-        let _ = fs::remove_dir_all(&missing_backup);
-        let _ = fs::remove_dir_all(&missing_output);
     }
 }

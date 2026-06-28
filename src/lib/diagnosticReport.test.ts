@@ -11,6 +11,8 @@ describe("diagnostic reports", () => {
         exporterAvailable: true,
         exporterVersion: "imessage-exporter 4.1.0",
         exporterPath: "C:\\Tools\\imessage-exporter.exe",
+        verifiedExporterVersion: "4.1.0",
+        exporterVersionStatus: "verified",
         ffmpegAvailable: false,
         imagemagickAvailable: false,
         defaultBackupRoots: [],

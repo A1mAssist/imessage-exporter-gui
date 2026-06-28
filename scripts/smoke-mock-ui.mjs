@@ -70,6 +70,7 @@ try {
   await assertInitialSectionNavigation(page);
   await assertIncompleteBackupBlocksDiagnostics(page);
   await assertPasswordClearControls(page);
+  await assertRunStartBlockedWithoutExportPath(page);
   await page.screenshot({ path: join(previewDir, "react-mock-source.png"), fullPage: true });
   console.log("smoke: source desktop passed");
 
@@ -83,6 +84,7 @@ try {
   await assertReadySectionNavigation(page);
   await assertPersistedSettingsDoNotLeak(page, "mock-password");
   await sourceDiagnosticsButton(page).click();
+  await assertRunPageDoesNotTreatDiagnosticsAsExport(page);
   await waitForExitZero(page);
   await assertHealthyApp(page, "diagnostics");
   await assertNoVisibleTextLeak(page, "mock-password");
@@ -103,6 +105,9 @@ try {
   await assertExportReview(page);
   await assertFormatSpecificControls(page);
   await assertConversationPicker(page);
+  await page.locator(".workspace-nav").getByRole("button", { name: /^导出$/ }).click();
+  await assertRunPreflight(page, ["Alex Chen.html", "会按匹配到的会话生成", "已生成，可复制检查"]);
+  await page.locator(".workspace-nav").getByRole("button", { name: /^选项$/ }).click();
   await page.screenshot({ path: join(previewDir, "react-mock-options.png"), fullPage: true });
   await page.setViewportSize({ width: 720, height: 1000 });
   await assertHealthyApp(page, "options compact");
@@ -113,7 +118,7 @@ try {
 
   await page.getByRole("button", { name: /^开始导出$/ }).click();
   await page.locator(".result-strip.running").waitFor({ timeout: 5000 });
-  await page.getByRole("button", { name: /取消导出/ }).click();
+  await page.locator(".export-preflight-actions").getByRole("button", { name: /^取消导出$/ }).click();
   await page.locator(".result-strip.cancelled").waitFor({ timeout: 5000 });
   await assertHealthyApp(page, "cancelled export");
   await assertCancelledOutcome(page);
@@ -122,7 +127,7 @@ try {
   await page.screenshot({ path: join(previewDir, "react-mock-cancelled.png"), fullPage: true });
   console.log("smoke: cancellation passed");
 
-  await page.getByRole("button", { name: /重新导出/ }).click();
+  await page.locator(".export-preflight-actions").getByRole("button", { name: /^重新导出$/ }).click();
   await page.locator(".result-strip.success").waitFor({ timeout: 10000 });
   if (!sawOutputConfirm) throw new Error("Output directory confirmation was not shown");
   await assertHealthyApp(page, "results");
@@ -136,8 +141,8 @@ try {
 
   await assertSavedManualBackupIsValidated(browser);
   console.log("smoke: saved manual backup passed");
-  await assertMissingExporterBlocksExport(browser);
-  console.log("smoke: missing exporter passed");
+  await assertBuiltInExporterStatus(browser);
+  console.log("smoke: built-in exporter status passed");
   await assertTxtResultsExposeTxtAction(browser);
   console.log("smoke: txt result passed");
   await assertGeneratedArchiveDirectory(browser);
@@ -242,16 +247,20 @@ async function assertOutputDirectoryWarning(page) {
 async function assertReadinessBand(page) {
   const text = await page.locator(".readiness-band").textContent();
   if (!text?.includes("就绪检查")) throw new Error("Readiness band was not rendered");
-  if (!text.includes("导出引擎")) throw new Error("Readiness band did not show exporter status");
+  for (const expected of ["备份目录", "加密密码", "附件转换"]) {
+    if (!text.includes(expected)) throw new Error(`Readiness band did not include ${expected}`);
+  }
+  if (text.includes("导出引擎")) throw new Error("Readiness band should not emphasize the built-in exporter");
 }
 
 async function assertOnboardingDialog(page) {
   const dialog = page.getByRole("dialog", { name: "首次设置指引" });
   await dialog.waitFor({ timeout: 5000 });
   const text = await dialog.textContent();
-  for (const expected of ["首次设置指引", "准备导出引擎", "选择 iOS 备份", "运行诊断", "开始设置"]) {
+  for (const expected of ["首次设置指引", "选择 iOS 备份", "运行诊断", "开始设置"]) {
     if (!text?.includes(expected)) throw new Error(`OOBE dialog did not include ${expected}`);
   }
+  if (text?.includes("准备导出引擎")) throw new Error("OOBE dialog should not include a built-in exporter setup step");
   await assertDialogFocusTrap(page, ".oobe-dialog", "OOBE dialog");
   await page.keyboard.press("Escape");
   await dialog.waitFor({ state: "detached", timeout: 5000 });
@@ -354,16 +363,22 @@ async function assertNoUnexpectedCjk(page, label) {
 
 async function assertFirstRunGuide(page) {
   const text = await page.locator(".first-run-guide").textContent();
-  if (!text?.includes("首次导出清单")) throw new Error("First-run checklist was not rendered");
-  for (const expected of ["准备导出引擎", "选择 iOS 备份", "运行诊断"]) {
-    if (!text.includes(expected)) throw new Error(`First-run checklist did not include ${expected}`);
+  if (!text?.includes("首次导出路线")) throw new Error("First-run route was not rendered");
+  for (const expected of ["选择 iOS 备份", "运行诊断"]) {
+    if (!text.includes(expected)) throw new Error(`First-run route did not include ${expected}`);
   }
+  if (text.includes("内置导出引擎")) throw new Error("First-run route should not include a built-in exporter step");
 }
 
 async function assertAboutAndUpdaterPanel(browser) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1 });
   await page.goto(`${baseUrl}&updateAvailable=1`, { waitUntil: "networkidle" });
   await dismissOnboardingIfPresent(page);
+  await page.getByText("发现新版本 0.2.1", { exact: false }).waitFor({ timeout: 5000 });
+  const updateNotice = await page.locator(".notice.update").textContent();
+  if (!updateNotice?.includes("发现新版本 0.2.1") || !updateNotice.includes("下载并安装")) {
+    throw new Error("Automatic update prompt was not rendered on startup");
+  }
   await page.getByRole("button", { name: "关于" }).click();
   const dialog = page.getByRole("dialog", { name: "关于与诊断" });
   await dialog.waitFor({ timeout: 5000 });
@@ -376,8 +391,6 @@ async function assertAboutAndUpdaterPanel(browser) {
     throw new Error("Support snapshot did not include app and exporter details");
   }
   await assertDialogFocusTrap(page, ".about-dialog", "About dialog");
-  await dialog.getByRole("button", { name: "检查更新" }).click();
-  await dialog.getByText("发现新版本", { exact: false }).waitFor({ timeout: 5000 });
   await dialog.getByRole("button", { name: "下载并安装" }).click();
   await dialog.getByText("更新已安装", { exact: false }).waitFor({ timeout: 5000 });
   await page.screenshot({ path: join(previewDir, "react-mock-about.png"), fullPage: true });
@@ -388,6 +401,21 @@ async function assertAboutAndUpdaterPanel(browser) {
     throw new Error("About dialog did not restore focus to the About trigger");
   }
   await page.close();
+
+  const currentPage = await browser.newPage({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1 });
+  await currentPage.goto(baseUrl, { waitUntil: "networkidle" });
+  await dismissOnboardingIfPresent(currentPage);
+  if ((await currentPage.locator(".notice.update").count()) !== 0) {
+    throw new Error("Update prompt should stay quiet when no update is available");
+  }
+  await currentPage.getByRole("button", { name: "关于" }).click();
+  const currentDialog = currentPage.getByRole("dialog", { name: "关于与诊断" });
+  await currentDialog.waitFor({ timeout: 5000 });
+  const currentText = await currentDialog.textContent();
+  if (currentText?.includes("自动更新") || currentText?.includes("检查更新")) {
+    throw new Error("About dialog should not render an idle manual update panel");
+  }
+  await currentPage.close();
 }
 
 async function assertDialogFocusTrap(page, selector, label) {
@@ -509,16 +537,17 @@ async function assertInitialSectionNavigation(page) {
   if (await options.isDisabled()) {
     throw new Error("Options section should remain reachable once a valid backup is selected");
   }
-  if (!(await run.isDisabled())) {
-    throw new Error("Run section should be disabled before an export job has started");
+  if (await run.isDisabled()) {
+    throw new Error("Run section should remain reachable so the empty results page can be inspected");
   }
-  if ((await run.getAttribute("aria-disabled")) !== "true") {
-    throw new Error("Disabled run section should expose aria-disabled=true");
-  }
+  await run.click();
+  await assertRunPreflight(page, ["导出前预览", "联系人或群聊名称.html", "结果文件"]);
+  await source.click();
 }
 
 async function assertReadySectionNavigation(page) {
   const nav = page.locator(".workspace-nav");
+  const source = nav.getByRole("button", { name: /^数据源$/ });
   const diagnostics = nav.getByRole("button", { name: /^诊断$/ });
   const options = nav.getByRole("button", { name: /^选项$/ });
   const run = nav.getByRole("button", { name: /导出/ });
@@ -529,9 +558,12 @@ async function assertReadySectionNavigation(page) {
   if (await options.isDisabled()) {
     throw new Error("Options section should be reachable after source setup");
   }
-  if (!(await run.isDisabled())) {
-    throw new Error("Run section should stay disabled until an export job has started");
+  if (await run.isDisabled()) {
+    throw new Error("Run section should be reachable before an export job has started");
   }
+  await run.click();
+  await assertRunPreflight(page, ["导出前预览", "联系人或群聊名称.html", "开始前"]);
+  await source.click();
 }
 
 async function assertIncompleteBackupBlocksDiagnostics(page) {
@@ -548,10 +580,47 @@ async function assertIncompleteBackupBlocksDiagnostics(page) {
   if (!(await nav.getByRole("button", { name: /选项/ }).isDisabled())) {
     throw new Error("Options section should be disabled for incomplete backups");
   }
-  if (!(await nav.getByRole("button", { name: /导出/ }).isDisabled())) {
-    throw new Error("Run section should be disabled for incomplete backups");
+  const runButton = nav.getByRole("button", { name: /导出/ });
+  if (await runButton.isDisabled()) {
+    throw new Error("Run section should stay reachable even when source setup is incomplete");
   }
+  await runButton.click();
+  await assertRunPreflight(page, ["导出前预览", "未设置", "开始导出"]);
+  await page.locator(".workspace-nav").getByRole("button", { name: /^数据源$/ }).click();
   await page.getByRole("button", { name: /A1mAssist 的 iPhone/ }).click();
+}
+
+async function assertRunStartBlockedWithoutExportPath(page) {
+  const nav = page.locator(".workspace-nav");
+  await nav.getByRole("button", { name: /导出/ }).click();
+  await assertRunPreflight(page, ["导出前预览", "未设置", "开始导出"]);
+  const startButtons = page.locator(".export-preflight").getByRole("button", { name: /^开始导出$/ });
+  const count = await startButtons.count();
+  if (count < 1) throw new Error("Run preflight did not render a start export action");
+  for (let index = 0; index < count; index += 1) {
+    if (!(await startButtons.nth(index).isDisabled())) {
+      throw new Error("Run preflight start action should be disabled without an export path");
+    }
+  }
+  await nav.getByRole("button", { name: /^数据源$/ }).click();
+}
+
+async function assertRunPageDoesNotTreatDiagnosticsAsExport(page) {
+  await page.locator(".log-state").filter({ hasText: "运行中" }).waitFor({ timeout: 5000 });
+  const nav = page.locator(".workspace-nav");
+  await nav.getByRole("button", { name: /导出/ }).click();
+  await assertRunPreflight(page, ["导出前预览", "未设置", "开始导出"]);
+  if ((await page.getByRole("button", { name: /^取消导出$/ }).count()) !== 0) {
+    throw new Error("Run page should not expose cancel-export controls while diagnostics are running");
+  }
+  const startButtons = page.locator(".export-preflight").getByRole("button", { name: /^开始导出$/ });
+  const count = await startButtons.count();
+  for (let index = 0; index < count; index += 1) {
+    if (!(await startButtons.nth(index).isDisabled())) {
+      throw new Error("Run page should disable export start while diagnostics are running");
+    }
+  }
+  await nav.getByRole("button", { name: /^诊断$/ }).click();
 }
 
 async function assertPersistedSettingsDoNotLeak(page, secret) {
@@ -599,19 +668,19 @@ async function assertSavedManualBackupIsValidated(browser) {
   await page.close();
 }
 
-async function assertMissingExporterBlocksExport(browser) {
+async function assertBuiltInExporterStatus(browser) {
   const page = await browser.newPage({ viewport: { width: 1120, height: 900 }, deviceScaleFactor: 1 });
-  await page.goto(`${baseUrl}&missingExporter=1`, { waitUntil: "networkidle" });
+  await page.goto(baseUrl, { waitUntil: "networkidle" });
   await dismissOnboardingIfPresent(page);
   await page.getByRole("button", { name: /^选项$/ }).click();
 
   const text = await page.locator(".app-shell").textContent();
-  if (!text?.includes("缺少 imessage-exporter 导出引擎")) {
-    throw new Error("Missing exporter export blocker was not shown");
+  if (text?.includes("内置可用") || text?.includes("built-in imessage-exporter")) {
+    throw new Error("Main workflow should not show built-in exporter validation noise");
   }
   const startButton = page.getByRole("button", { name: /^开始导出$/ });
-  if (!(await startButton.isDisabled())) {
-    throw new Error("Export should be disabled when the exporter is missing");
+  if ((await startButton.isDisabled()) && text?.includes("缺少 imessage-exporter 导出引擎")) {
+    throw new Error("Built-in exporter should not create a missing-exporter blocker");
   }
   await page.close();
 }
@@ -621,6 +690,21 @@ async function assertExportReview(page) {
   if (!text?.includes("导出前复核")) throw new Error("Export review panel was not rendered");
   if (!text.includes("HTML") || !text.includes("附件 clone")) {
     throw new Error("Export review panel did not summarize format and attachment options");
+  }
+}
+
+async function assertRunPreflight(page, expectedTexts) {
+  const preflight = page.locator(".export-preflight.idle");
+  await preflight.waitFor({ timeout: 5000 });
+  const text = await preflight.textContent();
+  for (const expected of ["导出前预览", "导出总览", "命令预览", "输出目录", "结果文件", "开始导出"]) {
+    if (!text?.includes(expected)) throw new Error(`Run preflight did not include ${expected}`);
+  }
+  if (text?.includes("还没有开始导出")) {
+    throw new Error("Run preflight should not fall back to the old empty state copy");
+  }
+  for (const expected of expectedTexts) {
+    if (!text?.includes(expected)) throw new Error(`Run preflight did not include ${expected}`);
   }
 }
 
@@ -657,8 +741,14 @@ async function assertConversationPicker(page) {
     throw new Error("Conversation picker did not update the command preview");
   }
   const reviewText = await page.locator(".review-panel").textContent();
-  if (!reviewText?.includes("+15551234567")) {
+  if (!reviewText?.includes("Alex Chen")) {
     throw new Error("Conversation picker selection was not reflected in the review panel");
+  }
+  if (!reviewText.includes("结果文件") || !reviewText.includes("Alex Chen")) {
+    throw new Error("Export review did not explain conversation-based result filenames");
+  }
+  if (!reviewText.includes("Alex Chen.html") || reviewText.includes("以“Alex Chen”命名")) {
+    throw new Error("Export review should show the concrete conversation result filename");
   }
 }
 
@@ -678,9 +768,10 @@ async function assertDiagnosticDetails(page) {
 async function assertDiagnosticSummaryPanel(page) {
   const text = await page.locator(".diagnostic-summary-panel").textContent();
   if (!text?.includes("诊断摘要")) throw new Error("Diagnostic summary panel was not rendered");
-  for (const expected of ["备份目录", "导出引擎", "诊断结果", "附件转换"]) {
+  for (const expected of ["备份目录", "诊断结果", "附件转换"]) {
     if (!text.includes(expected)) throw new Error(`Diagnostic summary panel did not include ${expected}`);
   }
+  if (text.includes("导出引擎")) throw new Error("Diagnostic summary panel should not include exporter status");
 }
 
 async function assertCancelledOutcome(page) {
@@ -728,17 +819,18 @@ async function assertGeneratedArchiveDirectory(browser) {
   const secret = "archive-password";
   const page = await openOptionsPage(browser, `${baseUrl}&archiveCollision=1`, secret);
   await assertOutputDirectoryWarning(page);
+  await page.getByLabel("会话筛选").selectOption("chat-42");
 
   await page.getByRole("button", { name: "新建归档目录" }).click();
-  await page.waitForFunction(() => /Messages Export \d{4}-\d{2}-\d{2} \d{4} \(2\)/.test(document.querySelector(".path-field input")?.value ?? ""));
+  await page.waitForFunction(() => /家庭群 - Messages Export \d{4}-\d{2}-\d{2} \d{4} \(2\)/.test(document.querySelector(".path-field input")?.value ?? ""));
   const generatedPath = await page.locator(".path-field input").inputValue();
-  if (!/Messages Export \d{4}-\d{2}-\d{2} \d{4} \(2\)/.test(generatedPath)) {
-    throw new Error(`Generated archive directory did not skip the occupied timestamped path: ${generatedPath}`);
+  if (!/家庭群 - Messages Export \d{4}-\d{2}-\d{2} \d{4} \(2\)/.test(generatedPath)) {
+    throw new Error(`Generated archive directory did not use the selected conversation title: ${generatedPath}`);
   }
   await page.getByRole("button", { name: "新建归档目录" }).click();
-  await page.waitForFunction(() => /Messages Export \d{4}-\d{2}-\d{2} \d{4} \(3\)/.test(document.querySelector(".path-field input")?.value ?? ""));
+  await page.waitForFunction(() => /家庭群 - Messages Export \d{4}-\d{2}-\d{2} \d{4} \(3\)/.test(document.querySelector(".path-field input")?.value ?? ""));
   const regeneratedPath = await page.locator(".path-field input").inputValue();
-  if (!/Messages Export \d{4}-\d{2}-\d{2} \d{4} \(3\)/.test(regeneratedPath)) {
+  if (!/家庭群 - Messages Export \d{4}-\d{2}-\d{2} \d{4} \(3\)/.test(regeneratedPath)) {
     throw new Error(`Repeated archive generation did not increment the suffix: ${regeneratedPath}`);
   }
   await page.getByText("目录当前不存在", { exact: false }).waitFor({ timeout: 5000 });

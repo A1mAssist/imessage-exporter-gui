@@ -22,11 +22,12 @@ export const defaultExportConfig: ExportConfig = {
 export const exportFormats: Array<{ value: ExportFormat; label: string; description: string }> = [
   { value: "html", label: "HTML", description: "保留更多富文本和附件引用，适合归档与打印。" },
   { value: "txt", label: "TXT", description: "纯文本输出，更轻量，适合检索和长期保存。" },
+  { value: "jsonl", label: "JSONL", description: "逐行结构化 JSON，适合检索、分析和二次处理。" },
 ];
 
 export const copyMethods: Array<{ value: CopyMethod; label: string; description: string }> = [
   { value: "disabled", label: "disabled", description: "不复制附件，导出最快，输出最轻。" },
-  { value: "clone", label: "clone", description: "复制原始附件，Windows 第一版推荐。" },
+  { value: "clone", label: "clone", description: "复制原始附件，不依赖本机转换器。" },
   { value: "basic", label: "basic", description: "基础转换，需要 ffmpeg/ImageMagick。" },
   { value: "full", label: "full", description: "完整转换，需要 ffmpeg/ImageMagick，耗时更久。" },
 ];
@@ -56,7 +57,7 @@ export function validateExportConfig(config: ExportConfig): string[] {
     }
   }
   if (config.encrypted && !config.cleartextPassword?.trim()) errors.push("加密备份需要输入密码。");
-  if (config.customName?.trim() && config.useCallerId) errors.push("自定义显示名和 Caller ID 只能选择一个。");
+  if (config.customName?.trim() && config.useCallerId) errors.push("我的显示名和 Caller ID 只能选择一个。");
   if (!validDate(config.startDate)) errors.push("开始日期必须是 YYYY-MM-DD。");
   if (!validDate(config.endDate)) errors.push("结束日期必须是 YYYY-MM-DD。");
   if (validDate(config.startDate) && validDate(config.endDate) && reversedDateRange(config.startDate, config.endDate)) {

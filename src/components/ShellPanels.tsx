@@ -5,14 +5,12 @@ import {
   CheckCircle2,
   Clipboard,
   Database,
-  FolderOpen,
   Info,
   Loader2,
   Monitor,
   Moon,
   RefreshCcw,
   Sun,
-  TerminalSquare,
 } from "lucide-react";
 
 import type { AppLanguage } from "../i18n";
@@ -21,13 +19,10 @@ import type { BackupCandidate, EnvironmentStatus } from "../types";
 export type SettingsSaveState = "saved" | "saving" | "failed" | "cleared";
 export type AppTheme = "system" | "light" | "dark";
 
-const exporterDownloadUrl = "https://github.com/ReagentX/imessage-exporter/releases/latest";
-
 export function TopBar({
   activeSectionLabel,
   backup,
   exportPath,
-  environment,
   running,
   language,
   onLanguageChange,
@@ -41,7 +36,6 @@ export function TopBar({
   activeSectionLabel: string;
   backup?: BackupCandidate;
   exportPath: string;
-  environment?: EnvironmentStatus;
   running: boolean;
   language: AppLanguage;
   onLanguageChange: (language: AppLanguage) => void;
@@ -75,7 +69,6 @@ export function TopBar({
       <div className="quick-stats" aria-label="当前导出状态">
         <QuickStat icon={<Database size={16} />} label="备份" value={backup?.displayName ?? "未选择"} tone={backup?.valid ? "ok" : "neutral"} />
         <QuickStat icon={<Archive size={16} />} label="输出" value={exportPath ? compactPath(exportPath) : "未设置"} tone={exportPath ? "ok" : "neutral"} />
-        <QuickStat icon={<TerminalSquare size={16} />} label="导出引擎" value={environment?.exporterAvailable ? "就绪" : "缺失"} tone={environment?.exporterAvailable ? "ok" : "warn"} />
         <QuickStat icon={running ? <Loader2 className="spin" size={16} /> : <CheckCircle2 size={16} />} label="任务" value={running ? "运行中" : "空闲"} tone={running ? "accent" : "neutral"} />
       </div>
     </header>
@@ -85,21 +78,16 @@ export function TopBar({
 export function EnvironmentPanel({
   environment,
   loading,
-  exporterPath,
-  onChooseExporter,
   onRefresh,
   onOpenDetails,
   detailsButtonRef,
 }: {
   environment?: EnvironmentStatus;
   loading: boolean;
-  exporterPath?: string;
-  onChooseExporter: () => void;
   onRefresh: () => void;
   onOpenDetails: () => void;
   detailsButtonRef?: RefObject<HTMLButtonElement>;
 }) {
-  const effectiveExporterPath = exporterPath?.trim() || environment?.exporterPath;
   const attachmentReady = Boolean(environment?.ffmpegAvailable && environment?.imagemagickAvailable);
   const attachmentPartial = Boolean(environment?.ffmpegAvailable || environment?.imagemagickAvailable);
   const attachmentValue = attachmentReady ? "可用" : attachmentPartial ? "部分可用" : "未配置";
@@ -111,16 +99,8 @@ export function EnvironmentPanel({
           {loading ? <Loader2 className="spin" size={16} /> : <RefreshCcw size={16} />}
         </button>
       </div>
-      <StatusLine ok={environment?.exporterAvailable} label="导出引擎" value={environment?.exporterAvailable ? "可用" : "未找到"} />
       <StatusLine ok={attachmentReady} label="附件转换" value={attachmentValue} />
-      <small className="env-path-line" title={effectiveExporterPath || "未选择；会尝试从 PATH 检测"}>
-        {effectiveExporterPath ? compactPath(effectiveExporterPath) : "未选择；会尝试从 PATH 检测"}
-      </small>
       <div className="env-panel-actions">
-        <button className="ghost-button" type="button" onClick={onChooseExporter}>
-          <FolderOpen size={15} />
-          选择
-        </button>
         <button className="ghost-button" type="button" onClick={onOpenDetails} ref={detailsButtonRef}>
           <Info size={15} />
           详情
@@ -242,13 +222,6 @@ export function EnvironmentFixList({ environment, onCopy }: { environment?: Envi
 function environmentFixes(environment?: EnvironmentStatus): Array<{ label: string; command: string }> {
   if (!environment) return [];
   const fixes: Array<{ label: string; command: string }> = [];
-
-  if (!environment.exporterAvailable) {
-    fixes.push({
-      label: "下载 imessage-exporter 后选择可执行文件",
-      command: exporterDownloadUrl,
-    });
-  }
   if (!environment.ffmpegAvailable || !environment.imagemagickAvailable) {
     fixes.push({
       label: "安装 basic/full 附件转换器",

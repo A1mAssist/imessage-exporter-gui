@@ -2,9 +2,9 @@
 
 [中文说明](./README.zh-CN.md)
 
-`iMessage Exporter GUI` is a desktop interface for [`imessage-exporter`](https://github.com/ReagentX/imessage-exporter). It exports SMS and iMessage data from local iOS backups to HTML or TXT.
+`iMessage Exporter GUI` is a desktop interface with the [`imessage-exporter`](https://github.com/ReagentX/imessage-exporter) Rust engine built in. It exports SMS and iMessage data from local iOS backups to HTML, TXT, or JSONL.
 
-It turns the common export flow into a guided app: choose an iOS backup, configure the export engine, check backup health, set export options, run the export, and open the result folder.
+It turns the common export flow into a guided app: choose an iOS backup, check backup health, set export options, run the export, and open the result folder.
 
 ## Screenshots
 
@@ -31,21 +31,19 @@ The installers are not code-signed yet, so your system may show a safety warning
 - Windows SmartScreen: click "More info", then "Run anyway".
 - macOS Gatekeeper: right-click the app and choose "Open", or allow it in System Settings -> Privacy & Security.
 
-The GUI installer does not bundle `imessage-exporter`. On first run, use the setup guide or Environment panel to download the upstream engine, then choose its executable. Installed builds can check GitHub Releases from the About dialog with "Check for updates"; update packages are verified by the app updater signature, but the app installers themselves are still unsigned.
+The installer bundles the imessage-exporter Rust engine, so users do not need to download or choose a separate `imessage-exporter.exe`. Installed builds can check GitHub Releases from the About dialog with "Check for updates"; update packages are verified by the app updater signature, but the app installers themselves are still unsigned.
 
 ## Basic Use
 
-1. Download or install [`imessage-exporter`](https://github.com/ReagentX/imessage-exporter/releases/latest).
-2. Create a local iPhone or iPad backup with Apple Devices or iTunes.
-3. Open iMessage Exporter GUI.
-4. In the Environment panel, choose the `imessage-exporter` executable if it is not already available on `PATH`.
-5. In Data Source, choose or scan your local iOS backup folder.
-6. If the backup is encrypted, enter the backup password.
-7. Run diagnostics to check the database, attachments, and optional converters.
-8. Choose the export format, attachment strategy, date range, and output folder.
-9. Start the export, then open the output folder or the first result file when it completes.
+1. Create a local iPhone or iPad backup with Apple Devices or iTunes.
+2. Open iMessage Exporter GUI.
+3. In Data Source, choose or scan your local iOS backup folder.
+4. If the backup is encrypted, enter the backup password.
+5. Run diagnostics to check the database, attachments, and optional converters.
+6. Choose the export format, attachment strategy, date range, conversation filter, and output folder.
+7. Start the export, then open the output folder or the first result file when it completes.
 
-Use the About dialog to check for app updates and copy a support snapshot that includes the app version, platform, export engine path, and optional converter status.
+Use the About dialog to check for app updates and copy a support snapshot that includes the app version, platform, built-in engine version, and optional converter status.
 
 Common backup locations:
 
@@ -65,14 +63,14 @@ Implemented:
 - Automatic update checks for installed builds through GitHub Releases.
 - Local iOS backup scanning, plus manual backup folder selection.
 - Checks for key backup files such as `Manifest.db` and `Info.plist`.
-- External `imessage-exporter` engine detection from `PATH`, plus a GUI picker for the executable.
-- HTML/TXT export with attachment strategy, date range, conversation filter, and display-name options.
+- Built-in `imessage-exporter` Rust engine with command preview for auditability.
+- HTML/TXT/JSONL export with attachment strategy, date range, conversation filter, and display-name options.
 - Output folder checks to avoid writing into the backup folder or mixing with old exports.
 - One-click timestamped export folders, for example `Messages Export 2026-06-12 0130`.
 - Live export logs with search, stdout/stderr/error filters, and cancellation.
 - Diagnostic reports that can be copied or downloaded as `.txt`.
 - Passwords are not saved in local settings; logs and reports redact sensitive values.
-- Common failure hints for wrong backup passwords, incomplete backups, output folder permissions, missing export engine, and missing converters.
+- Common failure hints for wrong backup passwords, incomplete backups, output folder permissions, engine compatibility issues, and missing converters.
 - Optional detection for `ffmpeg` and ImageMagick for some attachment conversion modes.
 
 Current limits:
@@ -80,7 +78,6 @@ Current limits:
 - v1 only exports from local iOS backups.
 - Windows and macOS are the supported installer targets.
 - macOS `chat.db`, jailbroken-device `sms.db`, and standalone attachment folders are not supported yet.
-- `imessage-exporter` is not bundled in the GUI installer; install it separately or choose its executable in the app.
 - `ffmpeg` and ImageMagick are not bundled.
 - Native PDF export is not available yet; export HTML first, then print to PDF from a browser.
 - Windows and macOS builds are not code-signed yet, so installation may show system safety prompts.
@@ -89,9 +86,23 @@ Current limits:
 
 - Encrypted backup passwords stay in app memory and are not saved to local settings.
 - Logs and diagnostic reports hide passwords.
-- Because the upstream CLI accepts `--cleartext-password`, the password may still appear briefly in the system process list while a task is running.
+- The built-in Rust engine receives the password in-process for the current task only; it is not passed through an external command line.
 - The output folder cannot be the backup folder itself or inside the backup folder.
 - Current installers are unsigned and intended for small-scale testing.
+
+## Development Verification
+
+The built-in exporter compatibility checks live in Rust tests. They use the backend's actual `diagnostics_args` and `export_args` builders and verify the generated command matrix, including JSONL, so CI catches GUI/backend parameter drift.
+
+```powershell
+npm run check:static
+npm test
+npm run build
+Push-Location src-tauri
+cargo test
+cargo check
+Pop-Location
+```
 
 ## License
 

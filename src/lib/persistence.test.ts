@@ -60,7 +60,7 @@ describe("export settings persistence", () => {
 
     expect(saved).toBe(true);
     expect(parsed.backupPath).toBe("C:/Users/me/Apple/MobileSync/Backup/device");
-    expect(parsed.exporterPath).toBe("C:/Tools/imessage-exporter.exe");
+    expect(parsed.exporterPath).toBeUndefined();
     expect(parsed.exportPath).toBe("D:/Messages Export");
     expect(parsed.format).toBe("txt");
     expect(parsed.copyMethod).toBe("full");
@@ -105,6 +105,21 @@ describe("export settings persistence", () => {
     expect(loaded.exportPath).toBe("D:/Export");
     expect(loaded.encrypted).toBe(true);
     expect(loaded.cleartextPassword).toBe("");
+  });
+
+  it("drops legacy exporter paths while loading", () => {
+    const storage = new MemoryStorage();
+    storage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        ...defaultExportConfig,
+        exporterPath: "C:/Tools/imessage-exporter.exe",
+      }),
+    );
+
+    const loaded = loadPersistedExportConfig(defaultExportConfig, storage);
+
+    expect(loaded.exporterPath).toBe("");
   });
 
   it("drops HTML-only no-lazy mode from persisted TXT settings", () => {

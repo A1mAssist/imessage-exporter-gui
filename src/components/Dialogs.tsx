@@ -4,9 +4,6 @@ import {
   CheckCircle2,
   Database,
   Download,
-  ExternalLink,
-  FolderOpen,
-  Loader2,
   MessageSquareText,
   RefreshCcw,
   Search,
@@ -26,16 +23,13 @@ export type UpdateCheckState =
   | { kind: "available"; info: UpdateInfo }
   | { kind: "installing"; info: UpdateInfo; downloadedBytes: number; contentLength?: number }
   | { kind: "installed"; info: UpdateInfo }
-  | { kind: "failed"; message: string };
+  | { kind: "failed"; message: string; source: "check" | "install" };
 
 export function OnboardingDialog({
   backup,
   config,
-  environment,
   diagnosticsSucceeded,
   diagnosticsBlockers,
-  onChooseExporter,
-  onOpenExporterDownload,
   onChooseBackup,
   onRunDiagnostics,
   onClose,
@@ -43,28 +37,18 @@ export function OnboardingDialog({
 }: {
   backup?: BackupCandidate;
   config: ExportConfig;
-  environment?: EnvironmentStatus;
   diagnosticsSucceeded: boolean;
   diagnosticsBlockers: string[];
-  onChooseExporter: () => void;
-  onOpenExporterDownload: () => void;
   onChooseBackup: () => void;
   onRunDiagnostics: () => void;
   onClose: () => void;
   onStart: () => void;
 }) {
-  const engineReady = Boolean(environment?.exporterAvailable);
   const backupReady = Boolean(config.backupPath.trim() && backup?.valid);
   const passwordReady = !config.encrypted || Boolean(config.cleartextPassword?.trim());
   const canRunDiagnostics = diagnosticsBlockers.length === 0;
   const dialogRef = useDialogKeyboard(onClose);
   const items: Array<{ label: string; detail: string; done: boolean; icon: ReactNode }> = [
-    {
-      label: "准备导出引擎",
-      detail: engineReady ? "已检测到 imessage-exporter，可以继续。" : "GUI 不内置导出引擎，请先下载或选择本机可执行文件。",
-      done: engineReady,
-      icon: <TerminalSquare size={17} />,
-    },
     {
       label: "选择 iOS 备份",
       detail: backupReady ? backup?.displayName ?? "备份目录已就绪。" : "选择 Apple Devices 或 iTunes 创建的本机 iOS 备份根目录。",
@@ -108,14 +92,6 @@ export function OnboardingDialog({
           ))}
         </div>
         <div className="oobe-actions" aria-label="首次设置操作">
-          <button className="ghost-button" type="button" onClick={onOpenExporterDownload}>
-            <ExternalLink size={15} />
-            下载导出引擎
-          </button>
-          <button className="ghost-button" type="button" onClick={onChooseExporter}>
-            <FolderOpen size={15} />
-            选择导出引擎
-          </button>
           <button className="ghost-button" type="button" onClick={onChooseBackup}>
             <Database size={15} />
             选择备份
@@ -151,10 +127,7 @@ export function AboutDialog({
   environment,
   config,
   updateState,
-  onCheckUpdates,
   onInstallUpdate,
-  onOpenExporterDownload,
-  onChooseExporter,
   onOpenResource,
   onClose,
 }: {
@@ -162,16 +135,13 @@ export function AboutDialog({
   environment?: EnvironmentStatus;
   config: ExportConfig;
   updateState: UpdateCheckState;
-  onCheckUpdates: () => void;
   onInstallUpdate: () => void;
-  onOpenExporterDownload: () => void;
-  onChooseExporter: () => void;
   onOpenResource: (file: "license" | "thirdPartyNotices") => void;
   onClose: () => void;
 }) {
   const currentVersion = appDiagnostics?.version ?? updateInfoFromState(updateState)?.currentVersion ?? "unknown";
   const snapshot = buildSupportSnapshot(appDiagnostics, environment, config, updateState);
-  const updateBusy = updateState.kind === "checking" || updateState.kind === "installing";
+  const shouldShowUpdateSection = shouldShowAboutUpdateSection(updateState);
   const dialogRef = useDialogKeyboard(onClose);
 
   return (
@@ -205,70 +175,45 @@ export function AboutDialog({
             </div>
           </section>
 
-          <section className="about-section update-section">
-            <div className="section-heading compact-heading">
-              <h3>自动更新</h3>
-              <p>{updateStatusText(updateState, currentVersion)}</p>
-            </div>
-            {updateState.kind === "installing" ? (
-              <div className="update-progress" aria-label="更新下载进度">
-                <span>{updateProgressText(updateState)}</span>
-                <progress value={updateState.downloadedBytes} max={updateState.contentLength ?? updateState.downloadedBytes + 1} />
+          {shouldShowUpdateSection ? (
+            <section className="about-section update-section">
+              <div className="section-heading compact-heading">
+                <h3>自动更新</h3>
+                <p>{updateStatusText(updateState, currentVersion)}</p>
               </div>
-            ) : null}
-            {updateState.kind === "failed" ? (
-              <p className="mini-warning">
-                <AlertCircle size={15} />
-                {updateState.message}
-              </p>
-            ) : null}
-            <div className="panel-actions">
-              <button className="ghost-button" type="button" onClick={onCheckUpdates} disabled={updateBusy}>
-                {updateState.kind === "checking" ? <Loader2 className="spin" size={15} /> : <RefreshCcw size={15} />}
-                检查更新
-              </button>
-              {updateState.kind === "available" ? (
-                <button className="primary-button compact" type="button" onClick={onInstallUpdate}>
-                  <Download size={15} />
-                  下载并安装
-                </button>
+              {updateState.kind === "installing" ? (
+                <div className="update-progress" aria-label="更新下载进度">
+                  <span>{updateProgressText(updateState)}</span>
+                  <progress value={updateState.downloadedBytes} max={updateState.contentLength ?? updateState.downloadedBytes + 1} />
+                </div>
               ) : null}
-            </div>
-          </section>
+              {updateState.kind === "failed" ? (
+                <p className="mini-warning">
+                  <AlertCircle size={15} />
+                  {updateState.message}
+                </p>
+              ) : null}
+              {updateState.kind === "available" ? (
+                <div className="panel-actions">
+                  <button className="primary-button compact" type="button" onClick={onInstallUpdate}>
+                    <Download size={15} />
+                    下载并安装
+                  </button>
+                </div>
+              ) : null}
+            </section>
+          ) : null}
 
           <section className="about-section engine-setup-section">
             <div className="section-heading compact-heading">
               <h3>导出引擎</h3>
-              <p>{environment?.exporterAvailable ? "已检测到 imessage-exporter，诊断和导出可以继续运行。" : "未检测到 imessage-exporter；可以下载新版或选择本机已有文件。"}</p>
-            </div>
-            <div className="engine-setup-steps">
-              <span className={environment?.exporterAvailable ? "done" : ""}>
-                <strong>{environment?.exporterAvailable ? <CheckCircle2 size={16} /> : <Download size={15} />}</strong>
-                获取 imessage-exporter
-              </span>
-              <span className={config.exporterPath?.trim() || environment?.exporterPath ? "done" : ""}>
-                <strong>{config.exporterPath?.trim() || environment?.exporterPath ? <CheckCircle2 size={16} /> : <FolderOpen size={15} />}</strong>
-                可执行文件位置
-              </span>
-              <span className={environment?.exporterAvailable ? "done" : ""}>
-                <strong>{environment?.exporterAvailable ? <CheckCircle2 size={16} /> : <RefreshCcw size={15} />}</strong>
-                可用性检测
-              </span>
+              <p>{environment?.exporterAvailable ? "内置 imessage-exporter 已集成到应用内，诊断和导出可以继续运行。" : "导出引擎信息暂不可用，请稍后重试。"}</p>
             </div>
             <div className="fact-list dense">
               <Fact label="状态" value={environment?.exporterAvailable ? "可用" : "未找到"} />
               <Fact label="版本" value={environment?.exporterVersion ?? "未检测到"} />
-              <Fact label="路径" value={config.exporterPath?.trim() || environment?.exporterPath || "未选择；会检查 PATH"} />
-            </div>
-            <div className="panel-actions">
-              <button className="ghost-button" type="button" onClick={onOpenExporterDownload}>
-                <ExternalLink size={15} />
-                打开下载页
-              </button>
-              <button className="ghost-button" type="button" onClick={onChooseExporter}>
-                <FolderOpen size={15} />
-                选择导出引擎
-              </button>
+              <Fact label="已验证版本" value={environment?.verifiedExporterVersion ?? "4.1.0"} />
+              <Fact label="兼容状态" value={exporterCompatibilityLabel(environment)} />
             </div>
           </section>
 
@@ -293,9 +238,6 @@ export function EnvironmentDialog({
   environment,
   config,
   settingsSaveState,
-  onChooseExporter,
-  onClearExporter,
-  onOpenExporterDownload,
   onRefresh,
   onClearSettings,
   onOpenResource,
@@ -305,9 +247,6 @@ export function EnvironmentDialog({
   environment?: EnvironmentStatus;
   config: ExportConfig;
   settingsSaveState: SettingsSaveState;
-  onChooseExporter: () => void;
-  onClearExporter: () => void;
-  onOpenExporterDownload: () => void;
   onRefresh: () => void;
   onClearSettings: () => void;
   onOpenResource: (file: "license" | "thirdPartyNotices") => void;
@@ -315,8 +254,6 @@ export function EnvironmentDialog({
   onClose: () => void;
 }) {
   const dialogRef = useDialogKeyboard(onClose);
-  const configuredExporterPath = config.exporterPath?.trim() ?? "";
-  const effectiveExporterPath = configuredExporterPath || environment?.exporterPath || "未选择；会尝试从 PATH 检测";
   const attachmentReady = Boolean(environment?.ffmpegAvailable && environment?.imagemagickAvailable);
   const attachmentDetail = attachmentReady
     ? "basic/full 附件转换依赖已经齐备。"
@@ -343,27 +280,15 @@ export function EnvironmentDialog({
           <section className="about-section environment-primary-section">
             <div className="section-heading compact-heading">
               <h3>导出引擎</h3>
-              <p>GUI 不内置 imessage-exporter；请选择本机已有的可执行文件，或打开下载页获取最新版。</p>
+              <p>导出引擎已内置到应用内，环境页只展示版本与兼容性状态。</p>
             </div>
             <div className="fact-list dense">
               <Fact label="状态" value={environment?.exporterAvailable ? "可用" : "未找到"} />
               <Fact label="版本" value={environment?.exporterVersion ?? "未检测到"} />
-              <Fact label="路径" value={effectiveExporterPath} />
+              <Fact label="已验证版本" value={environment?.verifiedExporterVersion ?? "4.1.0"} />
+              <Fact label="兼容状态" value={exporterCompatibilityLabel(environment)} />
             </div>
             <div className="panel-actions">
-              <button className="ghost-button" type="button" onClick={onChooseExporter}>
-                <FolderOpen size={15} />
-                选择导出引擎
-              </button>
-              <button className="ghost-button" type="button" onClick={onOpenExporterDownload}>
-                <ExternalLink size={15} />
-                下载导出引擎
-              </button>
-              {configuredExporterPath ? (
-                <button className="ghost-button" type="button" onClick={onClearExporter}>
-                  清除
-                </button>
-              ) : null}
               <button className="ghost-button" type="button" onClick={onRefresh}>
                 <RefreshCcw size={15} />
                 重新检测
@@ -423,14 +348,17 @@ function formatPlatform(appDiagnostics?: AppDiagnostics): string {
   return `${appDiagnostics.os} / ${appDiagnostics.arch}`;
 }
 
+function shouldShowAboutUpdateSection(state: UpdateCheckState): boolean {
+  if (state.kind === "available" || state.kind === "installing" || state.kind === "installed") return true;
+  return state.kind === "failed" && state.source === "install";
+}
+
 function updateStatusText(state: UpdateCheckState, currentVersion: string): string {
-  if (state.kind === "checking") return "正在连接 GitHub Release 检查新版本。";
   if (state.kind === "available") return `发现新版本 ${state.info.version ?? "unknown"}，当前版本 ${state.info.currentVersion ?? currentVersion}。`;
   if (state.kind === "installing") return `正在下载 ${state.info.version ?? "更新包"}，安装后会重启应用。`;
   if (state.kind === "installed") return "更新已安装，应用正在重启。";
-  if (state.kind === "failed") return "更新检查失败。可以稍后重试，或从 GitHub Releases 手动下载。";
-  if (state.kind === "current") return `当前已是最新版本 ${state.info.currentVersion ?? currentVersion}。`;
-  return "手动检查 GitHub Releases 上是否有新版本。";
+  if (state.kind === "failed") return "更新安装失败，请稍后重新打开应用再试。";
+  return "启动时会自动检查更新；只有发现新版本时才会提示。";
 }
 
 function updateProgressText(state: Extract<UpdateCheckState, { kind: "installing" }>): string {
@@ -459,10 +387,19 @@ function buildSupportSnapshot(
     `Updater: ${updateState.kind}${updateInfo?.version ? ` (${updateInfo.version})` : ""}`,
     `Exporter available: ${environment?.exporterAvailable ? "yes" : "no"}`,
     `Exporter version: ${environment?.exporterVersion ?? "unknown"}`,
-    `Exporter path: ${config.exporterPath?.trim() || environment?.exporterPath || "PATH / not selected"}`,
+    `Verified exporter version: ${environment?.verifiedExporterVersion ?? "4.1.0"}`,
+    `Exporter version status: ${environment?.exporterVersionStatus ?? "unknown"}`,
+    `Exporter path: ${config.exporterPath?.trim() || environment?.exporterPath || "built-in / not applicable"}`,
     `ffmpeg available: ${environment?.ffmpegAvailable ? "yes" : "no"}`,
     `ImageMagick available: ${environment?.imagemagickAvailable ? "yes" : "no"}`,
     `Backup path set: ${config.backupPath.trim() ? "yes" : "no"}`,
     `Output path set: ${config.exportPath.trim() ? "yes" : "no"}`,
   ].join("\n");
+}
+
+function exporterCompatibilityLabel(environment?: EnvironmentStatus): string {
+  if (!environment?.exporterAvailable) return "未检测";
+  if (environment.exporterVersionStatus === "older") return "低于已验证版本";
+  if (environment.exporterVersionStatus === "unknown") return "版本不可识别";
+  return "已验证";
 }
