@@ -1,6 +1,5 @@
 import type { ReactNode, RefObject } from "react";
 import {
-  AlertCircle,
   Archive,
   CheckCircle2,
   Clipboard,
@@ -9,7 +8,6 @@ import {
   Loader2,
   Monitor,
   Moon,
-  RefreshCcw,
   Sun,
 } from "lucide-react";
 
@@ -32,6 +30,8 @@ export function TopBar({
   onboardingButtonRef,
   onOpenAbout,
   aboutButtonRef,
+  onOpenEnvironmentDetails,
+  environmentDetailsButtonRef,
 }: {
   activeSectionLabel: string;
   backup?: BackupCandidate;
@@ -45,6 +45,8 @@ export function TopBar({
   onboardingButtonRef?: RefObject<HTMLButtonElement>;
   onOpenAbout: () => void;
   aboutButtonRef?: RefObject<HTMLButtonElement>;
+  onOpenEnvironmentDetails: () => void;
+  environmentDetailsButtonRef?: RefObject<HTMLButtonElement>;
 }) {
   return (
     <header className="topbar">
@@ -62,6 +64,10 @@ export function TopBar({
             <Info size={15} />
             关于
           </button>
+          <button className="guide-chip" type="button" onClick={onOpenEnvironmentDetails} ref={environmentDetailsButtonRef}>
+            <Monitor size={15} />
+            运行环境
+          </button>
           <LanguageToggle language={language} onChange={onLanguageChange} />
           <ThemeToggle theme={theme} onChange={onThemeChange} />
         </div>
@@ -72,41 +78,6 @@ export function TopBar({
         <QuickStat icon={running ? <Loader2 className="spin" size={16} /> : <CheckCircle2 size={16} />} label="任务" value={running ? "运行中" : "空闲"} tone={running ? "accent" : "neutral"} />
       </div>
     </header>
-  );
-}
-
-export function EnvironmentPanel({
-  environment,
-  loading,
-  onRefresh,
-  onOpenDetails,
-  detailsButtonRef,
-}: {
-  environment?: EnvironmentStatus;
-  loading: boolean;
-  onRefresh: () => void;
-  onOpenDetails: () => void;
-  detailsButtonRef?: RefObject<HTMLButtonElement>;
-}) {
-  const attachmentReady = Boolean(environment?.ffmpegAvailable && environment?.imagemagickAvailable);
-  const attachmentPartial = Boolean(environment?.ffmpegAvailable || environment?.imagemagickAvailable);
-  const attachmentValue = attachmentReady ? "可用" : attachmentPartial ? "部分可用" : "未配置";
-  return (
-    <div className="env-panel">
-      <div className="panel-title">
-        <span>运行环境</span>
-        <button className="icon-button" onClick={onRefresh} type="button" title="刷新环境">
-          {loading ? <Loader2 className="spin" size={16} /> : <RefreshCcw size={16} />}
-        </button>
-      </div>
-      <StatusLine ok={attachmentReady} label="附件转换" value={attachmentValue} />
-      <div className="env-panel-actions">
-        <button className="ghost-button" type="button" onClick={onOpenDetails} ref={detailsButtonRef}>
-          <Info size={15} />
-          详情
-        </button>
-      </div>
-    </div>
   );
 }
 
@@ -237,14 +208,4 @@ export function settingsStateLabel(state: SettingsSaveState): string {
   if (state === "failed") return "设置保存失败";
   if (state === "cleared") return "已清除保存设置";
   return "设置已保存";
-}
-
-function StatusLine({ ok, label, value }: { ok?: boolean; label: string; value: string }) {
-  return (
-    <div className={`status-line ${ok ? "ok" : "warn"}`}>
-      {ok ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
 }

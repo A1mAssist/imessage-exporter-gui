@@ -113,7 +113,7 @@ check("app renders first-run OOBE dialog", dialogs.includes("function Onboarding
 check("app dialogs support Escape, focus trap, and focus restore", dialogs.includes("useDialogKeyboard") && commonUi.includes('event.key === "Escape"') && commonUi.includes('event.key !== "Tab"') && commonUi.includes("getFocusableDialogElements") && app.includes("aboutTriggerRef") && app.includes("onboardingTriggerRef"));
 check("app keeps preferences compact in topbar", shellPanels.includes("topbar-utilities") && shellPanels.includes("设置向导") && !app.includes("preference-controls"));
 check("app exposes About and diagnostics dialog", dialogs.includes("function AboutDialog") && dialogs.includes("关于与诊断") && dialogs.includes("支持摘要") && dialogs.includes("buildSupportSnapshot"));
-check("app exposes environment details dialog", dialogs.includes("function EnvironmentDialog") && dialogs.includes("运行环境详情") && app.includes("showEnvironmentDetails") && shellPanels.includes("onOpenDetails"));
+check("app exposes environment details dialog", dialogs.includes("function EnvironmentDialog") && dialogs.includes("运行环境详情") && app.includes("showEnvironmentDetails") && shellPanels.includes("onOpenEnvironmentDetails"));
 check(
   "app shows verified exporter version compatibility state",
   read("src-tauri/src/models.rs").includes("verified_exporter_version") &&
@@ -237,7 +237,7 @@ check("styles include About dialog and updater progress", styles.includes(".abou
 check("styles omit redundant export engine setup card", !styles.includes(".engine-setup-card") && !styles.includes(".engine-setup-steps") && styles.includes(".primary-button.compact"));
 check("styles make language and theme controls discoverable", styles.includes("grid-template-columns: repeat(2, minmax(46px, auto))") && styles.includes("grid-template-columns: repeat(3, 38px)") && styles.includes("var(--accent-soft)"));
 check("styles keep topbar controls legible in dark mode", styles.includes(':root[data-theme="dark"] .language-toggle') && styles.includes(':root[data-theme="dark"] .theme-toggle button.selected'));
-check("styles use green available status lines", shellPanels.includes('status-line ${ok ? "ok" : "warn"}') && styles.includes(".status-line.ok svg") && styles.includes(".status-line.warn svg"));
+check("styles keep preflight cards on theme variables", styles.includes(".preflight-card.command-card") && styles.includes(".preflight-card.summary-card") && styles.includes(".empty-state") && styles.includes("var(--surface-strong)"));
 check("styles use wide desktop workspace", styles.includes("width: min(100%, 1480px)") && styles.includes("margin: 0 auto 24px"));
 check("styles include diagnostic detail text", styles.includes(".diagnostic-tile small"));
 check("styles include password clear row", styles.includes(".password-row") && styles.includes("grid-template-columns: minmax(0, 1fr) auto"));
@@ -248,7 +248,7 @@ check("styles constrain command preview inside run preflight cards", styles.incl
 check("styles include conversation picker", styles.includes(".conversation-picker") && styles.includes(".conversation-picker-tools") && styles.includes(".conversation-picker-warning") && styles.includes(".manual-conversation-filter") && styles.includes(".text-button"));
 check("styles use workspace navigation naming", styles.includes(".workspace-nav") && styles.includes(".workspace-nav-button") && !styles.includes(".step-list") && !styles.includes(".step-button"));
 check("styles keep selected option cards symmetric", !styles.includes("inset 0 -3px 0") && styles.includes(".segment-grid button.selected:hover") && styles.includes(".preset-grid button.selected:hover"));
-check("app puts environment panel before workspace navigation", app.indexOf("<EnvironmentPanel") > app.indexOf('<div className="brand">') && app.indexOf("<EnvironmentPanel") < app.indexOf('<nav className="workspace-nav"'));
+check("app keeps environment details in topbar", app.includes("showEnvironmentDetails") && shellPanels.includes("environmentDetailsButtonRef") && shellPanels.includes("onOpenEnvironmentDetails"));
 check("styles keep environment panel compact without sidebar scrolling", styles.includes("body:has(.app-shell)") && styles.includes("height: 100vh") && styles.includes(".sidebar") && styles.includes("overflow: hidden") && styles.includes(".workspace") && styles.includes("overflow: auto") && !styles.includes("max-height: calc(100vh - 124px)") && !styles.includes(".sidebar::-webkit-scrollbar"));
 check("styles include settings persistence status", styles.includes(".settings-save-line"));
 check("styles include environment fix list", styles.includes(".env-fix-list") && styles.includes(".env-fix-item"));
