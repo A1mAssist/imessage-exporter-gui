@@ -254,8 +254,8 @@ async function assertReadinessBand(page) {
 }
 
 async function assertOnboardingDialog(page) {
-  const dialog = page.getByRole("dialog", { name: "首次设置指引" });
-  await dialog.waitFor({ timeout: 5000 });
+  const dialog = page.locator('.oobe-dialog');
+  await dialog.waitFor({ state: 'visible', timeout: 5000 });
   const text = await dialog.textContent();
   for (const expected of ["首次设置指引", "选择 iOS 备份", "运行诊断", "开始设置"]) {
     if (!text?.includes(expected)) throw new Error(`OOBE dialog did not include ${expected}`);
@@ -269,7 +269,7 @@ async function assertOnboardingDialog(page) {
     throw new Error("OOBE dialog did not restore focus to the setup guide trigger");
   }
   await page.getByRole("button", { name: "设置向导" }).click();
-  await dialog.waitFor({ timeout: 5000 });
+  await dialog.waitFor({ state: "visible", timeout: 5000 });
 }
 
 async function dismissOnboardingIfPresent(page) {
@@ -287,12 +287,12 @@ async function clearOnboardingDismissalBeforeLoad(page) {
 }
 
 async function assertLanguageRoundTrip(page) {
-  await page.getByRole("button", { name: "English" }).click();
+  await page.locator(".language-toggle button").first().click();
   await page.waitForFunction(() => document.querySelector(".app-shell")?.textContent?.includes("Data Source"));
   const englishText = await page.locator(".app-shell").textContent();
   if (!englishText?.includes("Setup Guide")) throw new Error("English UI did not render the compact setup guide action");
 
-  await page.getByRole("button", { name: "中文" }).click();
+  await page.locator(".language-toggle button").nth(1).click();
   await page.waitForFunction(() => document.querySelector(".app-shell")?.textContent?.includes("数据源"));
   const chineseText = await page.locator(".app-shell").textContent();
   if (!chineseText?.includes("设置向导")) throw new Error("Chinese UI did not return after switching from English");
@@ -453,7 +453,7 @@ async function assertThemeToggle(page) {
 }
 
 async function openEnvironmentDialog(page) {
-  const detailsButton = page.locator(".env-panel-actions .ghost-button").last();
+  const detailsButton = page.getByRole("button", { name: "运行环境" });
   await detailsButton.click();
   const dialog = page.getByRole("dialog", { name: "运行环境详情" });
   await dialog.waitFor({ timeout: 5000 });
@@ -679,7 +679,7 @@ async function assertBuiltInExporterStatus(browser) {
     throw new Error("Main workflow should not show built-in exporter validation noise");
   }
   const startButton = page.getByRole("button", { name: /^开始导出$/ });
-  if ((await startButton.isDisabled()) && text?.includes("缺少 imessage-exporter 导出引擎")) {
+  if ((await startButton.isDisabled()) && text?.includes("内置导出引擎暂未就绪")) {
     throw new Error("Built-in exporter should not create a missing-exporter blocker");
   }
   await page.close();
@@ -872,7 +872,7 @@ async function assertExportPresets(browser) {
     const text = document.querySelector(".command-box code")?.textContent ?? "";
     return text.includes("-f html") && text.includes("-c clone") && !text.includes(" -l");
   });
-  await page.getByRole("button", { name: /^数据源/ }).click();
+  await page.getByRole("button", { name: /^数据源$/ }).click();
   const passwordValue = await page.getByLabel("备份密码").inputValue();
   if (passwordValue !== secret) throw new Error("Preset switching should not overwrite the backup password");
   const backupPath = await page.locator(".path-field input").inputValue();
@@ -963,7 +963,7 @@ async function assertPathCopyActions(browser) {
   if ((await page.getByRole("button", { name: "复制路径" }).count()) < 1) {
     throw new Error("Result path copy action was not rendered");
   }
-  await page.getByRole("button", { name: /^数据源/ }).click();
+  await page.getByRole("button", { name: /^数据源$/ }).click();
   if ((await page.getByRole("button", { name: "复制路径" }).count()) < 1) {
     throw new Error("Backup path copy action was not rendered");
   }
@@ -1008,7 +1008,7 @@ async function assertAutoClearPasswordAfterDiagnostics(browser) {
   await assertPersistedSettingsDoNotLeak(page, secret);
   await sourceDiagnosticsButton(page).click();
   await waitForExitZero(page);
-  await page.getByRole("button", { name: /^数据源/ }).click();
+  await page.getByRole("button", { name: /^数据源$/ }).click();
 
   const passwordValue = await page.getByLabel("备份密码").inputValue();
   if (passwordValue !== "") {

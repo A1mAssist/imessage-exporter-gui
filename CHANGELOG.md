@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added
+- Added cooperative cancellation checks to the built-in exporter cache build and message loops.
+- Added stronger output folder preflight checks for writability, disk space, and long paths.
+
+### Fixed
+- Normalized release artifact filenames before checksum and updater manifest generation so release URLs match uploaded GitHub assets.
+- Recorded vendored upstream exporter provenance alongside the embedded source.
+
 ## v0.1.1 - 2026-06-14
 
 ### Added

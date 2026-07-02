@@ -16,7 +16,7 @@ import { terminalOutcome } from "./components/CommonUi";
 import type { JobOutcome } from "./components/CommonUi";
 import { AboutDialog, EnvironmentDialog, OnboardingDialog } from "./components/Dialogs";
 import type { UpdateCheckState } from "./components/Dialogs";
-import { EnvironmentPanel, TopBar } from "./components/ShellPanels";
+import { TopBar } from "./components/ShellPanels";
 import type { SettingsSaveState } from "./components/ShellPanels";
 import {
   DiagnosticsStep,
@@ -109,7 +109,6 @@ export default function App() {
   const [diagnosticOutcome, setDiagnosticOutcome] = useState<JobOutcome>({ kind: "idle" });
   const [exportOutcome, setExportOutcome] = useState<JobOutcome>({ kind: "idle" });
   const [error, setError] = useState<string>();
-  const [loading, setLoading] = useState(true);
   const [settingsSaveState, setSettingsSaveState] = useState<SettingsSaveState>("saved");
   const [appDiagnostics, setAppDiagnostics] = useState<AppDiagnostics>();
   const [showAbout, setShowAbout] = useState(false);
@@ -234,6 +233,7 @@ export default function App() {
               exists: false,
               isDirectory: false,
               parentExists: false,
+              pathLength: path.length,
               containsHtml: false,
               containsTxt: false,
               containsAttachments: false,
@@ -299,7 +299,6 @@ export default function App() {
   }, [activeSectionId, sourceSelectionErrors.length]);
 
   async function refreshEnvironment() {
-    setLoading(true);
     setError(undefined);
     try {
       const [env, candidates] = await Promise.all([getEnvironment(), scanIosBackups()]);
@@ -326,8 +325,6 @@ export default function App() {
       }
     } catch (err) {
       setError(String(err));
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -484,6 +481,7 @@ export default function App() {
           exists: false,
           isDirectory: false,
           parentExists: false,
+          pathLength: normalized.exportPath.length,
           containsHtml: false,
           containsTxt: false,
           containsAttachments: false,
@@ -623,14 +621,6 @@ export default function App() {
           </div>
         </div>
 
-        <EnvironmentPanel
-          environment={environment}
-          loading={loading}
-          onRefresh={() => refreshEnvironment()}
-          onOpenDetails={openEnvironmentDetails}
-          detailsButtonRef={environmentDetailsTriggerRef}
-        />
-
         <nav className="workspace-nav" aria-label="工作区导航">
           {workspaceSections.map((candidate) => {
             const Icon = candidate.icon;
@@ -676,6 +666,8 @@ export default function App() {
           onboardingButtonRef={onboardingTriggerRef}
           onOpenAbout={openAbout}
           aboutButtonRef={aboutTriggerRef}
+          onOpenEnvironmentDetails={openEnvironmentDetails}
+          environmentDetailsButtonRef={environmentDetailsTriggerRef}
         />
 
         {error ? (
@@ -815,7 +807,6 @@ export default function App() {
       {showEnvironmentDetails ? (
         <EnvironmentDialog
           environment={environment}
-          config={config}
           settingsSaveState={settingsSaveState}
           onRefresh={() => refreshEnvironment()}
           onClearSettings={clearSavedSettings}

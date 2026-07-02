@@ -268,21 +268,12 @@ button:disabled {
   line-height: 1.25;
 }
 
-.env-panel,
 .content-band,
 .command-box,
 .log-panel {
   border: 1px solid #dce3ec;
   border-radius: 8px;
   background: var(--surface);
-}
-
-.env-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px;
-  box-shadow: var(--shadow-tight);
 }
 
 .panel-title,
@@ -335,55 +326,6 @@ button:disabled {
   color: #96a1b1;
   cursor: not-allowed;
   opacity: 0.72;
-}
-
-.status-line {
-  display: grid;
-  grid-template-columns: 18px 1fr auto;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-}
-
-.status-line svg {
-  color: var(--amber);
-}
-
-.status-line.ok svg {
-  color: var(--green);
-}
-
-.status-line.warn svg {
-  color: var(--amber);
-}
-
-.status-line span,
-.status-line strong {
-  white-space: nowrap;
-}
-
-.env-path-line {
-  display: block;
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.env-panel-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding-top: 2px;
-}
-
-.env-panel-actions .ghost-button {
-  flex: 1;
-  min-height: 28px;
-  padding: 0 8px;
-  font-size: 12px;
 }
 
 .settings-save-line {
@@ -751,6 +693,11 @@ button:disabled {
   margin-top: 2px;
   color: var(--muted);
   line-height: 1.45;
+}
+
+.path-inspection-facts {
+  display: block;
+  margin-top: 2px;
 }
 
 .path-inspection ul {
@@ -2344,15 +2291,19 @@ label span {
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fbfdff;
+  background: var(--surface-strong);
 }
 
 .preflight-card.summary-card {
-  background: #f8fcfd;
+  background: var(--surface);
 }
 
 .preflight-card.next-step-card {
   grid-column: 1 / -1;
+}
+
+.preflight-card.command-card {
+  background: var(--surface-strong);
 }
 
 .preflight-card-heading {
@@ -2544,7 +2495,6 @@ label span {
   box-shadow: inset 0 0 0 1px rgba(66, 184, 189, 0.38);
 }
 
-:root[data-theme="dark"] .env-panel,
 :root[data-theme="dark"] .content-band,
 :root[data-theme="dark"] .oobe-dialog,
 :root[data-theme="dark"] .about-dialog,
@@ -2627,6 +2577,30 @@ label span {
 :root[data-theme="dark"] .backup-empty-guidance code {
   border-color: var(--line);
   background: #141d25;
+}
+
+:root[data-theme="dark"] .preflight-card,
+:root[data-theme="dark"] .preflight-card.summary-card,
+:root[data-theme="dark"] .preflight-card.next-step-card,
+:root[data-theme="dark"] .empty-state,
+:root[data-theme="dark"] .preflight-card.command-card,
+:root[data-theme="dark"] .export-summary-panel,
+:root[data-theme="dark"] .summary-item,
+:root[data-theme="dark"] .summary-next-step {
+  border-color: var(--line);
+  background: var(--surface-strong);
+  color: var(--ink);
+}
+
+:root[data-theme="dark"] .preflight-card .command-box,
+:root[data-theme="dark"] .preflight-card .export-summary-panel,
+:root[data-theme="dark"] .preflight-card .log-panel {
+  background: var(--surface-strong);
+}
+
+:root[data-theme="dark"] .summary-icon {
+  background: #25313d;
+  color: #b8c6d1;
 }
 
 :root[data-theme="dark"] .notice.error,
@@ -2776,10 +2750,6 @@ label span {
 
   .workspace-nav-button:hover {
     transform: translateY(-1px);
-  }
-
-  .env-panel {
-    margin-top: 0;
   }
 
   .workspace {

@@ -113,7 +113,7 @@ check("app renders first-run OOBE dialog", dialogs.includes("function Onboarding
 check("app dialogs support Escape, focus trap, and focus restore", dialogs.includes("useDialogKeyboard") && commonUi.includes('event.key === "Escape"') && commonUi.includes('event.key !== "Tab"') && commonUi.includes("getFocusableDialogElements") && app.includes("aboutTriggerRef") && app.includes("onboardingTriggerRef"));
 check("app keeps preferences compact in topbar", shellPanels.includes("topbar-utilities") && shellPanels.includes("设置向导") && !app.includes("preference-controls"));
 check("app exposes About and diagnostics dialog", dialogs.includes("function AboutDialog") && dialogs.includes("关于与诊断") && dialogs.includes("支持摘要") && dialogs.includes("buildSupportSnapshot"));
-check("app exposes environment details dialog", dialogs.includes("function EnvironmentDialog") && dialogs.includes("运行环境详情") && app.includes("showEnvironmentDetails") && shellPanels.includes("onOpenDetails"));
+check("app exposes environment details dialog", dialogs.includes("function EnvironmentDialog") && dialogs.includes("运行环境详情") && app.includes("showEnvironmentDetails") && shellPanels.includes("onOpenEnvironmentDetails"));
 check(
   "app shows verified exporter version compatibility state",
   read("src-tauri/src/models.rs").includes("verified_exporter_version") &&
@@ -229,6 +229,7 @@ check("styles respect reduced motion", styles.includes("prefers-reduced-motion")
 check("styles support narrow browser layout", !styles.includes("min-width: 940px") && styles.includes("@media (max-width: 900px)"));
 check("styles wrap dense panel actions", styles.includes("flex-wrap: wrap") && styles.includes(".panel-actions"));
 check("styles include export path inspection states", styles.includes(".path-inspection.warn") && styles.includes(".path-inspection.error"));
+check("styles include export path inspection facts", styles.includes(".path-inspection-facts"));
 check("styles include startup readiness band", styles.includes(".readiness-band") && styles.includes(".readiness-grid"));
 check("styles include first-run and diagnostic summary panels", styles.includes(".first-run-guide") && styles.includes(".first-run-grid") && styles.includes(".diagnostic-summary-panel") && styles.includes(".diagnostic-summary-grid"));
 check("styles include compact topbar controls and OOBE dialog", styles.includes(".topbar-utilities") && styles.includes(".guide-chip") && styles.includes(".oobe-dialog") && styles.includes(".oobe-backdrop"));
@@ -236,7 +237,7 @@ check("styles include About dialog and updater progress", styles.includes(".abou
 check("styles omit redundant export engine setup card", !styles.includes(".engine-setup-card") && !styles.includes(".engine-setup-steps") && styles.includes(".primary-button.compact"));
 check("styles make language and theme controls discoverable", styles.includes("grid-template-columns: repeat(2, minmax(46px, auto))") && styles.includes("grid-template-columns: repeat(3, 38px)") && styles.includes("var(--accent-soft)"));
 check("styles keep topbar controls legible in dark mode", styles.includes(':root[data-theme="dark"] .language-toggle') && styles.includes(':root[data-theme="dark"] .theme-toggle button.selected'));
-check("styles use green available status lines", shellPanels.includes('status-line ${ok ? "ok" : "warn"}') && styles.includes(".status-line.ok svg") && styles.includes(".status-line.warn svg"));
+check("styles keep preflight cards on theme variables", styles.includes(".preflight-card.command-card") && styles.includes(".preflight-card.summary-card") && styles.includes(".empty-state") && styles.includes("var(--surface-strong)"));
 check("styles use wide desktop workspace", styles.includes("width: min(100%, 1480px)") && styles.includes("margin: 0 auto 24px"));
 check("styles include diagnostic detail text", styles.includes(".diagnostic-tile small"));
 check("styles include password clear row", styles.includes(".password-row") && styles.includes("grid-template-columns: minmax(0, 1fr) auto"));
@@ -247,7 +248,7 @@ check("styles constrain command preview inside run preflight cards", styles.incl
 check("styles include conversation picker", styles.includes(".conversation-picker") && styles.includes(".conversation-picker-tools") && styles.includes(".conversation-picker-warning") && styles.includes(".manual-conversation-filter") && styles.includes(".text-button"));
 check("styles use workspace navigation naming", styles.includes(".workspace-nav") && styles.includes(".workspace-nav-button") && !styles.includes(".step-list") && !styles.includes(".step-button"));
 check("styles keep selected option cards symmetric", !styles.includes("inset 0 -3px 0") && styles.includes(".segment-grid button.selected:hover") && styles.includes(".preset-grid button.selected:hover"));
-check("app puts environment panel before workspace navigation", app.indexOf("<EnvironmentPanel") > app.indexOf('<div className="brand">') && app.indexOf("<EnvironmentPanel") < app.indexOf('<nav className="workspace-nav"'));
+check("app keeps environment details in topbar", app.includes("showEnvironmentDetails") && shellPanels.includes("environmentDetailsButtonRef") && shellPanels.includes("onOpenEnvironmentDetails"));
 check("styles keep environment panel compact without sidebar scrolling", styles.includes("body:has(.app-shell)") && styles.includes("height: 100vh") && styles.includes(".sidebar") && styles.includes("overflow: hidden") && styles.includes(".workspace") && styles.includes("overflow: auto") && !styles.includes("max-height: calc(100vh - 124px)") && !styles.includes(".sidebar::-webkit-scrollbar"));
 check("styles include settings persistence status", styles.includes(".settings-save-line"));
 check("styles include environment fix list", styles.includes(".env-fix-list") && styles.includes(".env-fix-item"));
@@ -276,12 +277,14 @@ const commands = read("src-tauri/src/commands.rs");
 const models = read("src-tauri/src/models.rs");
 check("backend can open first exported result file", commands.includes("open_first_result") && commands.includes("find_first_result_file"));
 check("backend inspects export path before running", commands.includes("inspect_export_path") && commands.includes("contains_attachments"));
+check("backend export path inspection probes write access and disk space", models.includes("available_bytes") && models.includes("writable") && commands.includes("probe_directory_writable") && commands.includes("available_space_for_path"));
 check("backend opens only known bundled resources", commands.includes("open_resource_file") && commands.includes("ResourceFile"));
 check("backend has dev fallback for bundled resources", commands.includes("resolve_resource_file") && commands.includes('current_dir.join("..").join(file_name)'));
 check("backend exposes app diagnostics", commands.includes("get_app_diagnostics") && models.includes("struct AppDiagnostics") && read("src-tauri/src/lib.rs").includes("get_app_diagnostics"));
 
 const jobs = read("src-tauri/src/jobs.rs");
 check("backend redacts job log secrets", jobs.includes("struct LogRedactor") && jobs.includes("redact(&self") && jobs.includes("redacts_cleartext_password_from_engine_events"));
+check("backend passes cancellation into the built-in exporter", jobs.includes("Arc::clone(&cancel_flag)") && read("src-tauri/src/engine.rs").includes("run_with_logger_honors_pre_cancelled_flag") && read("src-tauri/vendor/imessage-exporter/imessage-exporter/src/lib.rs").includes("run_with_options_logger_and_cancel"));
 
 const doctor = read("scripts/doctor.ps1");
 check("doctor summarizes native packaging blockers", doctor.includes("Missing required item(s)") && doctor.includes(".\\scripts\\verify.ps1 -Native"));
@@ -289,6 +292,7 @@ const packageRelease = read("scripts/package-release.ps1");
 check("release packaging script collects Windows and macOS artifacts only", packageRelease.includes("dist-release") && packageRelease.includes("SHA256SUMS") && packageRelease.includes("*.dmg") && packageRelease.includes("*.exe") && packageRelease.includes("*.msi") && !packageRelease.includes("*.deb") && !packageRelease.includes("*.AppImage"));
 check("release packaging script collects updater artifacts", packageRelease.includes("latest.json") && packageRelease.includes("*.sig") && packageRelease.includes("*.zip") && packageRelease.includes("*.tar.gz"));
 check("release packaging script writes platform checksums", packageRelease.includes("Get-ChecksumFileName") && packageRelease.includes("SHA256SUMS-") && packageRelease.includes('$_.Name -notlike "SHA256SUMS*.txt"'));
+check("release packaging script normalizes public asset names", packageRelease.includes("Get-PublicArtifactName") && packageRelease.includes('Replace(" ", ".")') && packageRelease.includes("Copied {0} as {1}"));
 check("release packaging script builds Tauri bundles without sidecar", !packageRelease.includes("build-sidecar") && packageRelease.includes("npm run tauri build -- --bundles"));
 check("release packaging script runs installed artifact smoke on Windows", packageRelease.includes("smoke-installed-windows.ps1") && packageRelease.includes("Installed artifact smoke test"));
 check("release packaging script rejects unsupported Linux bundles", packageRelease.includes("Release packaging is only supported on Windows and macOS") && packageRelease.includes("Unsupported bundle target"));
@@ -299,6 +303,7 @@ const verifyScript = read("scripts/verify.ps1");
 check("Windows packaging script collects installers", packageWindows.includes("dist-installers") && packageWindows.includes("SHA256SUMS.txt"));
 check("Windows packaging script collects updater artifacts", packageWindows.includes("latest.json") && packageWindows.includes("*.zip") && packageWindows.includes("*.sig"));
 check("Windows packaging script writes updater manifest", packageWindows.includes("create-updater-manifest.ps1") && packageWindows.includes("latest.json"));
+check("Windows packaging script normalizes public asset names", packageWindows.includes("Get-PublicArtifactName") && packageWindows.includes('Replace(" ", ".")') && packageWindows.includes("Copied {0} as {1}"));
 check("Windows packaging script runs native verification", packageWindows.includes("scripts\\verify.ps1") && packageWindows.includes("-Native"));
 check("Windows packaging script runs installed artifact smoke", packageWindows.includes("smoke-installed-windows.ps1") && packageWindows.includes("Installed artifact smoke test"));
 check("Windows packaging supports local unsigned installer smoke", verifyScript.includes("--no-sign") && packageWindows.includes("latest.json generation skipped"));

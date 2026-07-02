@@ -201,6 +201,7 @@ where
     // and `clear()` retains it.
     let mut msg_buf = String::with_capacity(W::BUFFER_CAPACITY);
     for message in Message::rows(&mut statement, [])? {
+        writer.config().check_cancelled()?;
         let mut msg = message?;
 
         // Early escape if we try and render the same message GUID twice
@@ -246,6 +247,7 @@ where
         advance_progress(&writer.state().pb, &mut current_message);
     }
     writer.state().pb.finish();
+    writer.config().check_cancelled()?;
 
     if failures > 0 {
         eprintln!("{failures} messages skipped due to formatting errors.");
