@@ -293,7 +293,7 @@ export default function App() {
   );
 
   useEffect(() => {
-    if ((activeSectionId === "diagnostics" || activeSectionId === "options") && sourceSelectionErrors.length > 0) {
+    if ((activeSectionId === "diagnostics" || activeSectionId === "options" || activeSectionId === "run") && sourceSelectionErrors.length > 0) {
       setActiveSectionId("source");
     }
   }, [activeSectionId, sourceSelectionErrors.length]);
@@ -854,7 +854,7 @@ function workspaceSectionAccessMap(
     source: { disabled: false },
     diagnostics: sourceReason ? { disabled: true, reason: sourceReason } : diagnosticsErrors[0] ? { disabled: true, reason: diagnosticsErrors[0] } : { disabled: false },
     options: sourceReason ? { disabled: true, reason: sourceReason } : { disabled: false },
-    run: { disabled: false },
+    run: sourceReason ? { disabled: true, reason: sourceReason } : { disabled: false },
   };
 }
 
