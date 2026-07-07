@@ -581,11 +581,13 @@ async function assertIncompleteBackupBlocksDiagnostics(page) {
     throw new Error("Options section should be disabled for incomplete backups");
   }
   const runButton = nav.getByRole("button", { name: /导出/ });
-  if (await runButton.isDisabled()) {
-    throw new Error("Run section should stay reachable even when source setup is incomplete");
+  if (!(await runButton.isDisabled())) {
+    throw new Error("Run section should be disabled for incomplete backups");
   }
-  await runButton.click();
-  await assertRunPreflight(page, ["导出前预览", "未设置", "开始导出"]);
+  const runTitle = await runButton.getAttribute("title");
+  if (!runTitle?.includes("Manifest.db") || !runTitle.includes("Info.plist")) {
+    throw new Error("Run section should explain the incomplete backup blocker");
+  }
   await page.locator(".workspace-nav").getByRole("button", { name: /^数据源$/ }).click();
   await page.getByRole("button", { name: /A1mAssist 的 iPhone/ }).click();
 }

@@ -147,7 +147,7 @@ check("app validates saved manual backup path on startup", app.includes("validat
 check("app disables HTML-only print mode for non-HTML formats", workspaceSteps.includes('format === "html" ? { format } : { format, noLazy: false }') && workspaceSteps.includes('disabled={config.format !== "html"}'));
 check("app no longer blocks export on external exporter setup", app.includes("environmentExportBlockers") && !app.includes("缺少 imessage-exporter 导出引擎，暂时不能开始导出"));
 check("app reports open result failures", app.includes("function openOutputPath") && app.includes("function openFirstResultFile") && app.includes("setError(String(err))"));
-check("app keeps run section reachable before export starts", app.includes("run: { disabled: false }") && !app.includes('reason: "开始导出后可查看结果。"'));
+check("app keeps run section reachable after source is valid", app.includes("run: sourceReason ? { disabled: true, reason: sourceReason } : { disabled: false }") && app.includes('activeSectionId === "run"') && !app.includes('reason: "开始导出后可查看结果。"'));
 check("app shows environment fix commands", shellPanels.includes("function EnvironmentFixList") && shellPanels.includes("setup-windows.ps1 -Install -InstallOptionalTools"));
 check("app links bundled license resources", shellPanels.includes("function ResourceLinks") && shellPanels.includes("GPL 许可证") && app.includes("openResourceFile"));
 
