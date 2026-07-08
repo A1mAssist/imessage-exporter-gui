@@ -24,6 +24,7 @@ pub mod cancel;
 pub mod exporters;
 pub mod log;
 
+pub use app::progress::with_progress_sink;
 pub use app::{error::RuntimeError, options::Options, runtime::Config};
 pub use cancel::{AtomicCancellationToken, CancellationToken, NoopCancellationToken};
 pub use exporters::{html::HTML, jsonl::JSONL, txt::TXT};
@@ -66,4 +67,22 @@ where
     F: FnMut(LogStream, String) + 'static,
 {
     with_log_sink(sink, || run_with_options_and_cancel(options, cancellation))
+}
+
+/// Run an export or diagnostics task with log routing, progress routing, and cancellation.
+pub fn run_with_options_logger_progress_and_cancel<F, P>(
+    options: Options,
+    sink: F,
+    progress: P,
+    cancellation: std::sync::Arc<dyn CancellationToken>,
+) -> Result<(), RuntimeError>
+where
+    F: FnMut(LogStream, String) + 'static,
+    P: FnMut(u64, u64) + 'static,
+{
+    with_log_sink(sink, || {
+        with_progress_sink(progress, || {
+            run_with_options_and_cancel(options, cancellation)
+        })
+    })
 }

@@ -33,4 +33,37 @@ describe("summarizeDiagnostics", () => {
     expect(summary.contacts).toEqual({ status: "ok", detail: "联系人解析可用" });
     expect(summary.converters).toEqual({ status: "warn", detail: "缺少 ffmpeg / ImageMagick" });
   });
+
+  it("uses structured diagnostic details when available", () => {
+    const summary = summarizeDiagnostics("ffmpeg available", {
+      handles: { totalHandles: 3, totalDuplicated: 0 },
+      messages: {
+        totalMessages: 12,
+        messagesWithoutChat: 0,
+        messagesInMultipleChats: 0,
+      },
+      attachments: {
+        totalAttachments: 5,
+        totalBytesReferenced: 100,
+        totalBytesOnDisk: 80,
+        missingFiles: 2,
+        noPathProvided: 1,
+        noFileLocated: 1,
+      },
+      chats: {
+        totalChats: 2,
+        totalDuplicated: 0,
+        chatsWithNoHandles: 0,
+      },
+      contacts: {
+        resolvedNames: 1,
+        totalParticipants: 3,
+      },
+      warnings: [],
+    });
+
+    expect(summary.database).toEqual({ status: "ok", detail: "12 条消息 · 2 个会话" });
+    expect(summary.attachments).toEqual({ status: "warn", detail: "5 个附件，缺失 2 个" });
+    expect(summary.contacts).toEqual({ status: "ok", detail: "联系人解析可用 · 1/3" });
+  });
 });

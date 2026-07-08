@@ -21,6 +21,37 @@ const HUMAN_COUNT_THRESHOLDS: [(u64, &str); 4] = [
     (1_000, "k"),             // thousand
 ];
 
+type ProgressSink = Box<dyn FnMut(u64, u64)>;
+
+thread_local! {
+    static PROGRESS_SINK: RefCell<Option<ProgressSink>> = const { RefCell::new(None) };
+}
+
+pub fn with_progress_sink<F, R>(sink: F, run: impl FnOnce() -> R) -> R
+where
+    F: FnMut(u64, u64) + 'static,
+{
+    PROGRESS_SINK.with(|slot| {
+        *slot.borrow_mut() = Some(Box::new(sink));
+    });
+
+    let result = run();
+
+    PROGRESS_SINK.with(|slot| {
+        *slot.borrow_mut() = None;
+    });
+
+    result
+}
+
+fn emit_progress(position: u64, length: u64) {
+    PROGRESS_SINK.with(|slot| {
+        if let Some(sink) = slot.borrow_mut().as_mut() {
+            sink(position, length);
+        }
+    });
+}
+
 /// Format a number with comma separators
 fn format_with_commas(n: u64) -> String {
     let s = n.to_string();
@@ -77,11 +108,12 @@ impl ExportProgress {
 
     /// Start the progress bar with the specified total length.
     pub fn start(&self, length: i64) {
+        self.length.set(length.try_into().unwrap_or(0));
+        self.position.set(0);
+        emit_progress(0, self.length.get());
         if !self.enabled {
             return;
         }
-        self.length.set(length.try_into().unwrap_or(0));
-        self.position.set(0);
         self.start_time.set(Some(Instant::now()));
         self.draw();
     }
@@ -106,19 +138,23 @@ impl ExportProgress {
 
     /// Set the progress bar position.
     pub fn set_position(&self, pos: u64) {
+        self.position.set(pos);
+        emit_progress(pos, self.length.get());
         if !self.enabled {
             return;
         }
-        self.position.set(pos);
-        self.draw();
+        if pos.is_multiple_of(99) {
+            self.draw();
+        }
     }
 
     /// Finishes the progress bar
     pub fn finish(&self) {
+        self.position.set(self.length.get());
+        emit_progress(self.length.get(), self.length.get());
         if !self.enabled {
             return;
         }
-        self.position.set(self.length.get());
         self.draw();
         eprintln!();
     }
@@ -214,6 +250,7 @@ impl Default for ExportProgress {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::{cell::RefCell, rc::Rc};
 
     #[test]
     fn test_format_with_commas() {
@@ -232,5 +269,23 @@ mod tests {
         assert_eq!(format_human_rate(1_500_000.0), "1.5M");
         assert_eq!(format_human_rate(2_500_000_000.0), "2.5B");
         assert_eq!(format_human_rate(1_200_000_000_000.0), "1.2T");
+    }
+
+    #[test]
+    fn hidden_progress_still_reports_to_sink() {
+        let seen = Rc::new(RefCell::new(Vec::new()));
+        let captured = Rc::clone(&seen);
+
+        with_progress_sink(
+            move |current, total| captured.borrow_mut().push((current, total)),
+            || {
+                let progress = ExportProgress::new(false);
+                progress.start(10);
+                progress.set_position(3);
+                progress.finish();
+            },
+        );
+
+        assert_eq!(*seen.borrow(), vec![(0, 10), (3, 10), (10, 10)]);
     }
 }

@@ -56,7 +56,6 @@ for (const path of [
   "src/lib/recoveryHints.test.ts",
   "src/lib/persistence.ts",
   "src/lib/persistence.test.ts",
-  "src-tauri/src/cli.rs",
   "src-tauri/src/jobs.rs",
   "src-tauri/src/commands.rs",
   "src-tauri/src/models.rs",
@@ -98,14 +97,17 @@ check("app keeps page components split out of App", workspaceSteps.includes("exp
 check("app uses topbar status overview", app.includes("TopBar") && shellPanels.includes("function TopBar") && shellPanels.includes("quick-stats"));
 check("app exposes first result action", workspaceSteps.includes("resultFileLabel") && workspaceSteps.includes('"JSONL"') && workspaceSteps.includes('"TXT"') && app.includes("openFirstResult"));
 check("app gates first result action on successful export", workspaceSteps.includes('format === "html"') && workspaceSteps.includes('outcome.kind !== "succeeded"'));
-check("app exposes copy actions", commonUi.includes("复制命令") && commonUi.includes("复制日志") && commonUi.includes("function CopyButton"));
-check("app supports log tail follow control", commonUi.includes("ArrowDownToLine") && commonUi.includes("followTail") && commonUi.includes("滚动到最新日志"));
+check("app exposes JSONL quick search only after successful JSONL export", workspaceSteps.includes("function JsonlPreview") && workspaceSteps.includes('config.format === "jsonl"') && workspaceSteps.includes('outcome.kind === "succeeded"') && app.includes("searchJsonlResult"));
+check("app exposes copy actions without command or log chrome", commonUi.includes("function CopyButton") && commonUi.includes("复制路径") && !commonUi.includes("复制命令") && !commonUi.includes("复制日志"));
+check("app keeps engine logs out of the visible UI", !workspaceSteps.includes("LogPanel") && !commonUi.includes("function LogPanel") && !read("src/styles.css").includes(".log-panel") && !commonUi.includes("stderr/stdout"));
 check("app reports clipboard copy failure", commonUi.includes("复制失败") && commonUi.includes("Clipboard API unavailable"));
 check("app warns before exporting into non-empty output folders", workspaceSteps.includes("ExportPathNotice") && workspaceSteps.includes("输出目录已有内容") && workspaceSteps.includes("needsExportPathConfirmation"));
-check("app rechecks export path before starting from Run", app.includes("latestExportPathStatus = await inspectExportPath(normalized.exportPath)") && app.indexOf("inspectExportPath(normalized.exportPath)") < app.indexOf("const errors = [...validateExportConfig(normalized)"));
+check("app surfaces interrupted partial exports", workspaceSteps.includes("function InterruptedExports") && workspaceSteps.includes("interruptedExports") && workspaceSteps.includes(".partial") && read("src/types.ts").includes("interruptedExports: string[]"));
+check("app confirms before starting over when partial exports exist", workspaceSteps.includes("status.interruptedExports.length > 0") && app.includes("检测到上次未完成导出的临时目录") && app.indexOf("inspectExportPath(normalized.exportPath)") < app.indexOf("needsExportPathConfirmation(latestExportPathStatus)"));
+check("app rechecks export path before starting from Run", app.includes("latestExportPathStatus = await inspectExportPath(normalized.exportPath)") && app.indexOf("inspectExportPath(normalized.exportPath)") < app.indexOf("...validateExportConfig(normalized)"));
 check("app isolates diagnostics and export job state", app.includes("diagnosticLogs") && app.includes("exportLogs") && app.includes("diagnosticOutcome") && app.includes("exportOutcome") && app.includes("exportJobIdRef"));
 check("app disables export start while another job runs", app.includes("const exportStartDisabled = Boolean(runningJobId)") && app.includes("running={diagnosticsRunning}") && app.includes("running={exportRunning}") && app.includes("startDisabled={exportStartDisabled}"));
-check("run step disables every start path when export preflight blocks", workspaceSteps.includes("startDisabled: boolean") && workspaceSteps.includes("disabled={!running && startDisabled}") && workspaceSteps.includes("disabled={startDisabled}") && workspaceSteps.includes("secondaryDisabled={!running && startDisabled}") && commonUi.includes("secondaryDisabled?: boolean"));
+check("run step disables every start path when export preflight blocks", workspaceSteps.includes("startDisabled: boolean") && workspaceSteps.includes("(!running && startDisabled)") && workspaceSteps.includes("disabled={startDisabled || startingExport}") && workspaceSteps.includes("secondaryDisabled={!running && startDisabled}") && commonUi.includes("secondaryDisabled?: boolean"));
 check("app shows explicit cancelled and failed job outcomes", commonUi.includes("type JobOutcome") && commonUi.includes("JobOutcomeNotice") && commonUi.includes("resultStripClass"));
 check("app renders export summary panel", workspaceSteps.includes("ExportSummaryPanel") && workspaceSteps.includes("导出摘要") && workspaceSteps.includes("summarizeExportResult"));
 check("app renders first-run route without built-in engine noise", workspaceSteps.includes("function FirstRunGuide") && workspaceSteps.includes("首次导出路线") && !workspaceSteps.includes('label: "内置导出引擎"'));
@@ -133,7 +135,6 @@ check("app names single-conversation archive folders", app.includes("archiveLabe
 check("app increments generated archive directory collisions", app.includes("nextAvailableArchivePath") && app.includes("无法生成未占用的归档目录"));
 check("app wires export presets", workspaceSteps.includes("exportPresets.map") && workspaceSteps.includes("onApplyPreset") && app.includes("applyExportPreset"));
 check("app shows recovery hints for failed jobs", commonUi.includes("recoveryHintForFailure") && commonUi.includes("hint?.action") && commonUi.includes("job-outcome-notice"));
-check("app supports log search and kind filters", commonUi.includes("搜索日志") && commonUi.includes("enabledKinds") && commonUi.includes("log-filters"));
 check("app exports diagnostic reports", workspaceSteps.includes("DiagnosticReportActions") && commonUi.includes("复制诊断报告") && commonUi.includes("下载诊断报告 .txt") && workspaceSteps.includes("buildDiagnosticReport"));
 check("app exposes path copy actions and tooltips", commonUi.includes("复制路径") && commonUi.includes("复制完整") && commonUi.includes("title={value}"));
 check("app shows first-use backup empty guidance", workspaceSteps.includes("没有自动发现本机 iOS 备份") && workspaceSteps.includes("Apple Devices") && workspaceSteps.includes("%USERPROFILE%\\Apple\\MobileSync\\Backup"));
@@ -144,7 +145,8 @@ check("app summarizes export before running", workspaceSteps.includes("function 
 check("app persists only non-sensitive settings", app.includes("loadPersistedExportConfig(defaultExportConfig)") && app.includes("persistExportConfig(config)") && dialogs.includes("不保存备份密码"));
 check("app exposes password clearing controls", workspaceSteps.includes("清除密码") && workspaceSteps.includes("任务结束后自动清除密码") && app.includes("autoClearPasswordRef"));
 check("app validates saved manual backup path on startup", app.includes("validateBackupPath(config.backupPath)") && app.includes("candidate.encrypted ?? current.encrypted"));
-check("app disables HTML-only print mode for non-HTML formats", workspaceSteps.includes('format === "html" ? { format } : { format, noLazy: false }') && workspaceSteps.includes('disabled={config.format !== "html"}'));
+check("app disables HTML-only print mode for non-HTML formats", workspaceSteps.includes('format === "html" ? { format, copyMethod: "clone" } : { format, copyMethod: "disabled", noLazy: false }') && workspaceSteps.includes('disabled={config.format !== "html"}'));
+check("app forces TXT and JSONL attachment export off", workspaceSteps.includes('const handlesAttachments = config.format === "html"') && workspaceSteps.includes('TXT 和 JSONL 只写文本/结构化记录，不处理附件文件。') && workspaceSteps.includes('value={config.copyMethod}'));
 check("app no longer blocks export on external exporter setup", app.includes("environmentExportBlockers") && !app.includes("缺少 imessage-exporter 导出引擎，暂时不能开始导出"));
 check("app reports open result failures", app.includes("function openOutputPath") && app.includes("function openFirstResultFile") && app.includes("setError(String(err))"));
 check("app keeps run section reachable after source is valid", app.includes("run: sourceReason ? { disabled: true, reason: sourceReason } : { disabled: false }") && app.includes('activeSectionId === "run"') && !app.includes('reason: "开始导出后可查看结果。"'));
@@ -160,8 +162,11 @@ check("API opens bundled resource files", api.includes("openResourceFile") && ap
 check("API opens first result file by format", api.includes("openFirstResult") && api.includes('"open_first_result"'));
 check("API exposes app diagnostics and updater flow", api.includes("getAppDiagnostics") && api.includes("checkForAppUpdate") && api.includes("installAvailableUpdate") && api.includes("@tauri-apps/plugin-updater") && api.includes("@tauri-apps/plugin-process"));
 check("API exposes conversation scanning", api.includes("scanConversations") && api.includes('"scan_conversations"') && api.includes("mockConversations"));
+check("conversation picker preserves deduped chat id groups", read("src/types.ts").includes("chatIds: number[]") && read("src/types.ts").includes("conversationIds?: number[]") && workspaceSteps.includes("conversationIds") && read("src-tauri/src/engine.rs").includes("selected_conversation_ids"));
+check("conversation picker searches the full scanned list without backend truncation", read("src/components/ExportOptionFields.tsx").includes("defaultConversationLimit") && read("src/components/ExportOptionFields.tsx").includes("searchedConversationLimit") && !read("src-tauri/src/conversations.rs").includes("conversations.truncate"));
+check("conversation scan merges service-split direct caller ids", read("src-tauri/src/conversations.rs").includes("normalize_direct_identifier") && read("src-tauri/src/conversations.rs").includes("merges_direct_chats_with_same_caller_id_across_services_without_lookup") && api.includes("iMessage + SMS"));
 check("mock API supports updater availability", api.includes("mockUpdateInfo") && api.includes("updateAvailable") && api.includes("0.2.0"));
-check("mock API only maps no-lazy for HTML", api.includes('config.format === "html" && config.noLazy'));
+check("mock API only maps no-lazy for HTML", read("src/lib/exportConfig.ts").includes('noLazy: config.format === "html" ? config.noLazy : false'));
 check("mock API supports generated archive paths", api.includes("looksLikeGeneratedArchive") && api.includes("archiveCollision") && api.includes("messages export \\d{4}-\\d{2}-\\d{2} \\d{4}"));
 check("mock API supports failure and empty-backup scenarios", api.includes('params.get("fail")') && api.includes('fail === "password"') && api.includes("emptyBackups"));
 
@@ -174,6 +179,7 @@ check("persistence drops legacy exporter paths", !persistedKeyEntries.includes('
 check("persistence clears no-lazy for TXT", persistence.includes('noLazy: config.format === "html" ? config.noLazy : false'));
 check("persistence omits password from saved key list", !persistedKeyEntries.includes('"cleartextPassword"'));
 const persistenceTests = read("src/lib/persistence.test.ts");
+check("persistence clears attachment export for TXT and JSONL", persistence.includes('copyMethod: config.format === "html" ? config.copyMethod : "disabled"') && persistenceTests.includes("forces persisted TXT and JSONL settings"));
 check("persistence tests cover password exclusion", persistenceTests.includes("never writes the cleartext backup password") && persistenceTests.includes("legacy-secret"));
 const exportConfig = read("src/lib/exportConfig.ts");
 const exportOptionFields = read("src/components/ExportOptionFields.tsx");
@@ -184,6 +190,7 @@ check("frontend lists conversations before manual filtering", workspaceSteps.inc
 check("frontend can search and sort conversations", exportOptionFields.includes("搜索会话") && exportOptionFields.includes("消息最多") && exportOptionFields.includes("最近消息") && exportOptionFields.includes("filterAndSortConversations"));
 check("frontend clarifies self display name vs result filenames", workspaceSteps.includes("我的显示名") && workspaceSteps.includes("只影响导出内容里自己的名字") && !workspaceSteps.includes("自定义显示名"));
 check("frontend normalizes no-lazy for TXT", exportConfig.includes('noLazy: config.format === "html" ? config.noLazy : false') && read("src/lib/exportConfig.test.ts").includes("drops HTML-only no-lazy mode for TXT exports"));
+check("frontend normalizes attachment export for TXT and JSONL", exportConfig.includes('copyMethod: config.format === "html" ? config.copyMethod : "disabled"') && read("src/lib/exportConfig.test.ts").includes("forces attachment export off for TXT and JSONL exports"));
 const diagnosticParser = read("src/lib/diagnostics.ts");
 check("diagnostics parser scopes warnings to relevant lines", diagnosticParser.includes("relevant") && diagnosticParser.includes("hasWarning(line.lower)") && read("src/lib/diagnostics.test.ts").includes("keeps converter warnings from contaminating other sections"));
 const exportSummary = read("src/lib/exportSummary.ts");
@@ -193,7 +200,7 @@ check("export presets preserve source secrets", read("src/lib/exportPresets.ts")
 check("recovery hints classify known failure modes", read("src/lib/recoveryHints.ts").includes("备份密码可能不正确") && read("src/lib/recoveryHints.test.ts").includes("classifies known failure modes"));
 check(
   "recovery hints classify exporter option compatibility failures",
-  read("src/lib/recoveryHints.ts").includes("导出引擎参数不兼容") &&
+  read("src/lib/recoveryHints.ts").includes("导出引擎选项不兼容") &&
     read("src/lib/recoveryHints.ts").includes("requires --format") &&
     read("src/lib/recoveryHints.ts").includes("unexpected argument") &&
     read("src/lib/recoveryHints.test.ts").includes("classifies exporter option compatibility failures"),
@@ -237,14 +244,14 @@ check("styles include About dialog and updater progress", styles.includes(".abou
 check("styles omit redundant export engine setup card", !styles.includes(".engine-setup-card") && !styles.includes(".engine-setup-steps") && styles.includes(".primary-button.compact"));
 check("styles make language and theme controls discoverable", styles.includes("grid-template-columns: repeat(2, minmax(46px, auto))") && styles.includes("grid-template-columns: repeat(3, 38px)") && styles.includes("var(--accent-soft)"));
 check("styles keep topbar controls legible in dark mode", styles.includes(':root[data-theme="dark"] .language-toggle') && styles.includes(':root[data-theme="dark"] .theme-toggle button.selected'));
-check("styles keep preflight cards on theme variables", styles.includes(".preflight-card.command-card") && styles.includes(".preflight-card.summary-card") && styles.includes(".empty-state") && styles.includes("var(--surface-strong)"));
+check("styles keep preflight cards on theme variables", !styles.includes(".preflight-card.command-card") && styles.includes(".preflight-card.summary-card") && styles.includes(".empty-state") && styles.includes("var(--surface-strong)"));
 check("styles use wide desktop workspace", styles.includes("width: min(100%, 1480px)") && styles.includes("margin: 0 auto 24px"));
 check("styles include diagnostic detail text", styles.includes(".diagnostic-tile small"));
 check("styles include password clear row", styles.includes(".password-row") && styles.includes("grid-template-columns: minmax(0, 1fr) auto"));
 check("styles include source blockers", styles.includes(".source-blockers") && styles.includes("#fff8e7"));
 check("styles include export review panel", styles.includes(".review-panel") && styles.includes(".risk-pill"));
 check("styles include run preflight summary", styles.includes(".run-preflight-summary") && styles.includes(".preflight-facts") && styles.includes(".preflight-checklist"));
-check("styles constrain command preview inside run preflight cards", styles.includes(".preflight-card .command-box") && styles.includes("width: 100%") && styles.includes("box-sizing: border-box"));
+check("styles omit command preview chrome", !styles.includes(".command-box") && !workspaceSteps.includes("命令预览") && workspaceSteps.includes("导出设置、结果文件和输出位置"));
 check("styles include conversation picker", styles.includes(".conversation-picker") && styles.includes(".conversation-picker-tools") && styles.includes(".conversation-picker-warning") && styles.includes(".manual-conversation-filter") && styles.includes(".text-button"));
 check("styles use workspace navigation naming", styles.includes(".workspace-nav") && styles.includes(".workspace-nav-button") && !styles.includes(".step-list") && !styles.includes(".step-button"));
 check("styles keep selected option cards symmetric", !styles.includes("inset 0 -3px 0") && styles.includes(".segment-grid button.selected:hover") && styles.includes(".preset-grid button.selected:hover"));
@@ -255,29 +262,26 @@ check("styles include environment fix list", styles.includes(".env-fix-list") &&
 check("styles include resource link pills", styles.includes(".resource-links") && styles.includes("border-radius: 999px"));
 check("styles include cancelled job state", styles.includes(".result-strip.cancelled") && styles.includes(".job-outcome-notice"));
 check("styles include export summary panel", styles.includes(".export-summary-panel") && styles.includes(".summary-grid"));
-check("styles include generated archive, preset, log, report, and empty-state polish", styles.includes(".inline-actions") && styles.includes(".preset-grid") && styles.includes(".log-tools") && styles.includes(".report-buffer") && styles.includes(".backup-empty-guidance"));
-
-const cli = read("src-tauri/src/cli.rs");
-const diagnosticsArgsStart = cli.indexOf("pub fn diagnostics_args");
-const exportArgsStart = cli.indexOf("pub fn export_args");
-const diagnosticsArgsBody = diagnosticsArgsStart >= 0 && exportArgsStart > diagnosticsArgsStart ? cli.slice(diagnosticsArgsStart, exportArgsStart) : "";
-check("CLI keeps no-progress off diagnostics", diagnosticsArgsBody.includes('"-d".to_string()') && !diagnosticsArgsBody.includes("--no-progress"));
-check("CLI maps no-lazy to -l", cli.includes('args.push("-l".to_string())'));
-check("CLI only maps no-lazy for HTML", cli.includes("ExportFormat::Html") && cli.includes("ignores_print_friendly_mode_for_txt_exports"));
-check("CLI maps encrypted backup password", cli.includes('"--cleartext-password".to_string()'));
-check("CLI redacts password preview", cli.includes('"[redacted]".to_string()'));
-check("CLI never exposes attachment root for iOS v1", !cli.includes("attachment-root") && !cli.includes('"-r"'));
-check("CLI rejects export inside backup", cli.includes("Export path cannot be inside the iOS backup directory"));
-check("CLI rejects reversed date ranges", cli.includes("validate_date_range") && cli.includes("End date cannot be earlier than start date"));
-check("CLI rejects impossible dates", cli.includes("valid_calendar_date") && cli.includes("Start date must use a real YYYY-MM-DD date"));
-check("CLI no longer resolves external exporter executables", !cli.includes("resolve_exporter_path") && !cli.includes("find_on_path") && !cli.includes("EXPORTER_BASENAME") && !cli.includes("executable_candidates"));
-check("CLI no longer resolves bundled sidecar paths", !cli.includes("sidecar_path") && !cli.includes("sidecar_target_triple"));
+check("styles centralize status colors for light and dark modes", styles.includes("--warn-bg") && styles.includes("--error-bg") && styles.includes("--ok-bg") && styles.includes(".interrupted-export-actions"));
+check("styles include generated archive, preset, report, and empty-state polish", styles.includes(".inline-actions") && styles.includes(".preset-grid") && styles.includes(".report-buffer") && styles.includes(".backup-empty-guidance") && !styles.includes(".log-tools"));
 
 const commands = read("src-tauri/src/commands.rs");
 const models = read("src-tauri/src/models.rs");
+const engine = read("src-tauri/src/engine.rs");
+const lib = read("src-tauri/src/lib.rs");
+check("backend removed legacy CLI preview module", !existsSync(join(root, "src-tauri/src/cli.rs")) && !lib.includes("mod cli") && !models.includes("CommandPreview"));
+check("backend starts jobs from engine options directly", commands.includes("engine::diagnostics_options(&source)") && commands.includes("engine::export_options(&config)") && !commands.includes("preview_export_command"));
+check("backend stages exports before publishing final results", read("src-tauri/src/jobs.rs").includes("staging_export_path") && read("src-tauri/src/jobs.rs").includes(".partial") && commands.includes("spawn_export(app, options)") && commands.includes("未完成的临时导出目录"));
+check("backend preflights staged publish conflicts before moving entries", read("src-tauri/src/jobs.rs").includes("collect::<Result<Vec<_>, String>>()") && read("src-tauri/src/jobs.rs").includes("for (_, destination) in &entries") && read("src-tauri/src/jobs.rs").includes("a-new-chat.html"));
+check("backend maps export formats into engine options", engine.includes("fn export_type") && engine.includes("ExportType::Html") && engine.includes("ExportType::Txt") && engine.includes("ExportType::Jsonl"));
+check("backend maps attachment copy methods into engine options", engine.includes("fn copy_method") && engine.includes("AttachmentManagerMode::Disabled") && engine.includes("AttachmentManagerMode::Clone") && engine.includes("AttachmentManagerMode::Basic") && engine.includes("AttachmentManagerMode::Full"));
+check("backend disables attachment export for TXT and JSONL", engine.includes("!matches!(config.format, ExportFormat::Html)") && engine.includes("export_options_disables_attachment_export_for_txt_and_jsonl"));
+check("backend keeps engine validation instead of command validation", engine.includes("validate_source") && engine.includes("validate_export_path") && engine.includes("End date cannot be earlier than start date"));
 check("backend can open first exported result file", commands.includes("open_first_result") && commands.includes("find_first_result_file"));
 check("backend inspects export path before running", commands.includes("inspect_export_path") && commands.includes("contains_attachments"));
+check("backend can safely delete unfinished partial exports", commands.includes("delete_interrupted_export") && commands.includes("is_interrupted_export_path") && read("src-tauri/src/lib.rs").includes("delete_interrupted_export"));
 check("backend export path inspection probes write access and disk space", models.includes("available_bytes") && models.includes("writable") && commands.includes("probe_directory_writable") && commands.includes("available_space_for_path"));
+check("backend hides Windows console windows for converter probes", read("src-tauri/src/environment.rs").includes("CREATE_NO_WINDOW") && read("src-tauri/vendor/imessage-exporter/imessage-exporter/src/app/compatibility/converters/common.rs").includes("CREATE_NO_WINDOW"));
 check("backend opens only known bundled resources", commands.includes("open_resource_file") && commands.includes("ResourceFile"));
 check("backend has dev fallback for bundled resources", commands.includes("resolve_resource_file") && commands.includes('current_dir.join("..").join(file_name)'));
 check("backend exposes app diagnostics", commands.includes("get_app_diagnostics") && models.includes("struct AppDiagnostics") && read("src-tauri/src/lib.rs").includes("get_app_diagnostics"));
@@ -312,11 +316,10 @@ check("Windows packaging script filters current app installers", packageWindows.
 const installedSmoke = read("scripts/smoke-installed-windows.ps1");
 check("installed smoke installs and launches NSIS artifact", installedSmoke.includes("/S") && installedSmoke.includes("/D=$InstallDir") && installedSmoke.includes("Start-Process") && installedSmoke.includes("Installed executable launched successfully"));
 check(
-  "Rust tests cover built-in exporter command matrix",
-  cli.includes("built_in_exporter_command_matrix_stays_compatible") &&
-    cli.includes("GUI-generated command matrix") &&
-    cli.includes("ExportFormat::Jsonl") &&
-    cli.includes('pair == ["-f", "jsonl"]') &&
+  "Rust tests cover direct engine option mapping",
+  engine.includes("export_options_maps_gui_formats_to_engine_export_types") &&
+    engine.includes("export_options_maps_copy_methods_to_attachment_manager_modes") &&
+    engine.includes("export_options_keeps_no_lazy_html_only") &&
     !verifyScript.includes("smoke-exporter-cli.ps1"),
 );
 const updaterManifestScript = read("scripts/create-updater-manifest.ps1");
@@ -384,8 +387,10 @@ check("smoke verifies diagnostic details", read("scripts/smoke-mock-ui.mjs").inc
 check("smoke verifies format-specific controls", read("scripts/smoke-mock-ui.mjs").includes("assertFormatSpecificControls"));
 check("smoke verifies conversation picker", read("scripts/smoke-mock-ui.mjs").includes("assertConversationPicker"));
 check("smoke verifies TXT result file action", read("scripts/smoke-mock-ui.mjs").includes("assertTxtResultsExposeTxtAction") && read("scripts/smoke-mock-ui.mjs").includes("打开首个 TXT"));
+check("smoke verifies JSONL quick search", read("scripts/smoke-mock-ui.mjs").includes("assertJsonlQuickSearch") && read("scripts/smoke-mock-ui.mjs").includes(".jsonl-preview") && read("src/api/tauri.ts").includes("mockJsonlMatches"));
 check("smoke verifies built-in exporter status", read("scripts/smoke-mock-ui.mjs").includes("assertBuiltInExporterStatus") && !read("scripts/smoke-mock-ui.mjs").includes("assertMissingExporterBlocksExport"));
 check("smoke verifies theme switching", read("scripts/smoke-mock-ui.mjs").includes("assertThemeToggle"));
+check("smoke verifies engine logs stay hidden", read("scripts/smoke-mock-ui.mjs").includes("assertNoVisibleEngineLogs") && read("scripts/smoke-mock-ui.mjs").includes("Engine logs should not be visible"));
 check("smoke verifies export cancellation", read("scripts/smoke-mock-ui.mjs").includes("assertCancelledOutcome") && read("scripts/smoke-mock-ui.mjs").includes(".result-strip.cancelled"));
 check("smoke verifies export summary panel", read("scripts/smoke-mock-ui.mjs").includes("assertExportSummary") && read("scripts/smoke-mock-ui.mjs").includes("导出摘要"));
 check("smoke verifies run preflight start guards", read("scripts/smoke-mock-ui.mjs").includes("assertRunStartBlockedWithoutExportPath") && read("scripts/smoke-mock-ui.mjs").includes("assertRunPageDoesNotTreatDiagnosticsAsExport"));
@@ -398,7 +403,7 @@ check(
     "assertGeneratedArchiveDirectory",
     "assertExportPresets",
     "assertFailureRecoveryHint",
-    "assertLogSearchAndFilter",
+    "assertNoVisibleEngineLogs",
     "assertDiagnosticReportDoesNotLeak",
     "assertPathCopyActions",
     "assertFirstUseEmptyState",

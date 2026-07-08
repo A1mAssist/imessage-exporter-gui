@@ -55,6 +55,13 @@ pub const ABOUT: &str = concat!(
 );
 
 // MARK: Options
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FilenameMode {
+    ContactName,
+    ContactNameWithCallerId,
+    ChatIdentifier,
+}
+
 #[derive(PartialEq, Eq)]
 pub struct Options {
     /// Database file or iOS backup root.
@@ -77,6 +84,8 @@ pub struct Options {
     pub custom_name: Option<String>,
     /// Whether to use the database owner's caller ID instead of `Me`.
     pub use_caller_id: bool,
+    /// How per-conversation output files are named.
+    pub filename_mode: FilenameMode,
     /// Database source platform.
     pub platform: Platform,
     /// Whether to disable the free disk space check.
@@ -89,6 +98,10 @@ pub struct Options {
     pub contacts_path: Option<PathBuf>,
     /// Whether to show the export progress bar when the terminal supports it.
     pub show_progress: bool,
+    /// Whether GUI-managed exports should resume from a matching checkpoint.
+    pub resume_export: bool,
+    /// Stable GUI config fingerprint used to reject stale checkpoints.
+    pub resume_fingerprint: Option<String>,
 }
 
 // Redact the cleartext backup password from debug output.
@@ -105,6 +118,7 @@ impl std::fmt::Debug for Options {
             .field("no_lazy", &self.no_lazy)
             .field("custom_name", &self.custom_name)
             .field("use_caller_id", &self.use_caller_id)
+            .field("filename_mode", &self.filename_mode)
             .field("platform", &self.platform)
             .field("ignore_disk_space", &self.ignore_disk_space)
             .field("conversation_filter", &self.conversation_filter)
@@ -115,6 +129,8 @@ impl std::fmt::Debug for Options {
             )
             .field("contacts_path", &self.contacts_path)
             .field("show_progress", &self.show_progress)
+            .field("resume_export", &self.resume_export)
+            .field("resume_fingerprint", &self.resume_fingerprint)
             .finish()
     }
 }
@@ -296,12 +312,15 @@ impl Options {
             no_lazy,
             custom_name: custom_name.cloned(),
             use_caller_id,
+            filename_mode: FilenameMode::ContactName,
             platform,
             ignore_disk_space,
             conversation_filter: conversation_filter.cloned(),
             cleartext_password: cleartext_password.cloned(),
             contacts_path: contacts_path.cloned().map(PathBuf::from),
             show_progress,
+            resume_export: false,
+            resume_fingerprint: None,
         })
     }
 
@@ -528,12 +547,15 @@ impl Options {
             no_lazy: false,
             custom_name: None,
             use_caller_id: false,
+            filename_mode: FilenameMode::ContactName,
             platform: Platform::macOS,
             ignore_disk_space: false,
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
+            resume_export: false,
+            resume_fingerprint: None,
         }
     }
 }
@@ -552,7 +574,7 @@ mod arg_tests {
     use crate::app::{
         compatibility::attachment_manager::{AttachmentManager, AttachmentManagerMode},
         export_type::ExportType,
-        options::{Options, get_command, validate_path},
+        options::{FilenameMode, Options, get_command, validate_path},
         test_dir::unique_test_dir,
     };
 
@@ -576,12 +598,15 @@ mod arg_tests {
             no_lazy: false,
             custom_name: None,
             use_caller_id: false,
+            filename_mode: FilenameMode::ContactName,
             platform: Platform::default(),
             ignore_disk_space: false,
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
+            resume_export: false,
+            resume_fingerprint: None,
         };
 
         assert_eq!(actual, expected);
@@ -652,12 +677,15 @@ mod arg_tests {
             no_lazy: false,
             custom_name: None,
             use_caller_id: false,
+            filename_mode: FilenameMode::ContactName,
             platform: Platform::default(),
             ignore_disk_space: false,
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
+            resume_export: false,
+            resume_fingerprint: None,
         };
 
         assert_eq!(actual, expected);
@@ -683,12 +711,15 @@ mod arg_tests {
             no_lazy: true,
             custom_name: None,
             use_caller_id: false,
+            filename_mode: FilenameMode::ContactName,
             platform: Platform::default(),
             ignore_disk_space: false,
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
+            resume_export: false,
+            resume_fingerprint: None,
         };
 
         assert_eq!(actual, expected);
@@ -767,12 +798,15 @@ mod arg_tests {
             no_lazy: false,
             custom_name: None,
             use_caller_id: false,
+            filename_mode: FilenameMode::ContactName,
             platform: Platform::iOS,
             ignore_disk_space: false,
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
+            resume_export: false,
+            resume_fingerprint: None,
         };
 
         assert_eq!(actual, expected);
@@ -806,12 +840,15 @@ mod arg_tests {
             no_lazy: false,
             custom_name: None,
             use_caller_id: false,
+            filename_mode: FilenameMode::ContactName,
             platform: Platform::iOS,
             ignore_disk_space: false,
             conversation_filter: None,
             cleartext_password: Some("password".to_string()),
             contacts_path: None,
             show_progress: true,
+            resume_export: false,
+            resume_fingerprint: None,
         };
 
         assert_eq!(actual, expected);
@@ -859,12 +896,15 @@ mod arg_tests {
             no_lazy: false,
             custom_name: Some("Name".to_string()),
             use_caller_id: false,
+            filename_mode: FilenameMode::ContactName,
             platform: Platform::default(),
             ignore_disk_space: false,
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
+            resume_export: false,
+            resume_fingerprint: None,
         };
 
         assert_eq!(actual, expected);
@@ -890,12 +930,15 @@ mod arg_tests {
             no_lazy: false,
             custom_name: None,
             use_caller_id: true,
+            filename_mode: FilenameMode::ContactName,
             platform: Platform::default(),
             ignore_disk_space: false,
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
+            resume_export: false,
+            resume_fingerprint: None,
         };
 
         assert_eq!(actual, expected);
@@ -922,12 +965,15 @@ mod arg_tests {
             no_lazy: false,
             custom_name: None,
             use_caller_id: false,
+            filename_mode: FilenameMode::ContactName,
             platform: Platform::default(),
             ignore_disk_space: false,
             conversation_filter: Some(String::from("steve@apple.com")),
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
+            resume_export: false,
+            resume_fingerprint: None,
         };
 
         assert_eq!(actual, expected);
@@ -953,12 +999,15 @@ mod arg_tests {
             no_lazy: false,
             custom_name: None,
             use_caller_id: false,
+            filename_mode: FilenameMode::ContactName,
             platform: Platform::default(),
             ignore_disk_space: false,
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
+            resume_export: false,
+            resume_fingerprint: None,
         };
 
         assert_eq!(actual, expected);
@@ -984,12 +1033,15 @@ mod arg_tests {
             no_lazy: false,
             custom_name: None,
             use_caller_id: false,
+            filename_mode: FilenameMode::ContactName,
             platform: Platform::default(),
             ignore_disk_space: false,
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
+            resume_export: false,
+            resume_fingerprint: None,
         };
 
         assert_eq!(actual, expected);
@@ -1054,12 +1106,15 @@ mod arg_tests {
             no_lazy: false,
             custom_name: None,
             use_caller_id: false,
+            filename_mode: FilenameMode::ContactName,
             platform: Platform::default(),
             ignore_disk_space: true,
             conversation_filter: None,
             cleartext_password: None,
             contacts_path: None,
             show_progress: true,
+            resume_export: false,
+            resume_fingerprint: None,
         };
 
         assert_eq!(actual, expected);

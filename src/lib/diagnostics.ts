@@ -1,3 +1,5 @@
+import type { DiagnosticDetails } from "../types";
+
 export type DiagnosticStatus = "ok" | "warn" | "unknown";
 
 export type DiagnosticFinding = {
@@ -12,7 +14,9 @@ export type DiagnosticSummary = {
   converters: DiagnosticFinding;
 };
 
-export function summarizeDiagnostics(log: string): DiagnosticSummary {
+export function summarizeDiagnostics(log: string, details?: DiagnosticDetails): DiagnosticSummary {
+  if (details) return summarizeStructuredDiagnostics(log, details);
+
   const lines = log
     .split(/\r?\n/)
     .map((line) => ({ raw: line, lower: line.toLowerCase() }))
@@ -28,6 +32,36 @@ export function summarizeDiagnostics(log: string): DiagnosticSummary {
       [/contact diagnostic data/i, () => "联系人数据可用"],
     ]),
     converters: converterFinding(lines),
+  };
+}
+
+function summarizeStructuredDiagnostics(log: string, details: DiagnosticDetails): DiagnosticSummary {
+  return {
+    database: {
+      status: details.messages.messagesWithoutChat || details.messages.messagesInMultipleChats || details.chats.chatsWithNoHandles ? "warn" : "ok",
+      detail: `${details.messages.totalMessages} 条消息 · ${details.chats.totalChats} 个会话`,
+    },
+    attachments: {
+      status: details.attachments.missingFiles ? "warn" : "ok",
+      detail: details.attachments.missingFiles
+        ? `${details.attachments.totalAttachments} 个附件，缺失 ${details.attachments.missingFiles} 个`
+        : `${details.attachments.totalAttachments} 个附件`,
+    },
+    contacts:
+      details.contacts.totalParticipants > 0
+        ? {
+            status: details.contacts.resolvedNames ? "ok" : "warn",
+            detail: details.contacts.resolvedNames
+              ? `联系人解析可用 · ${details.contacts.resolvedNames}/${details.contacts.totalParticipants}`
+              : `0/${details.contacts.totalParticipants} 个联系人已解析`,
+          }
+        : { status: "unknown", detail: "没有可解析联系人" },
+    converters: converterFinding(
+      log
+        .split(/\r?\n/)
+        .map((line) => ({ raw: line, lower: line.toLowerCase() }))
+        .filter((line) => line.raw.trim()),
+    ),
   };
 }
 

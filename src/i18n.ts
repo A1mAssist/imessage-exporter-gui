@@ -6,6 +6,8 @@ const storageKey = "imessage-exporter-gui.language";
 let activeLanguage: AppLanguage = detectInitialLanguage();
 
 const en: Record<string, string> = {
+  "删除": "Delete",
+  "预计导出": "Export estimate",
   "数据源": "Data Source",
   "诊断": "Diagnostics",
   "选项": "Options",
@@ -14,6 +16,7 @@ const en: Record<string, string> = {
   "工作区导航": "Workspace navigation",
   "无法检查输出目录，请重新选择或确认权限。": "Could not inspect the output folder. Choose it again or check permissions.",
   "输出目录已有内容或疑似旧导出文件。继续导出会把新结果写入同一个目录，是否继续？": "The output folder already has files or looks like an old export. Continue writing the new export into this folder?",
+  "检测到上次未完成导出的临时目录。带断点记录且设置一致的会自动续写；旧半成品会保留供取回或删除。确认继续？": "An unfinished temporary export folder was found. Matching checkpointed exports will resume automatically; older partial exports are kept for recovery or deletion. Continue?",
   "输出路径已存在，但它不是文件夹。": "The output path already exists, but it is not a folder.",
   "输出目录的上级目录不存在，请重新选择。": "The parent folder for the output folder does not exist. Choose another location.",
   "归档目录的上级目录不存在，请先重新选择输出位置。": "The parent folder for the archive folder does not exist. Choose another output location first.",
@@ -24,8 +27,8 @@ const en: Record<string, string> = {
   "备份目录需要同时包含 Manifest.db 和 Info.plist。": "The backup folder must contain both Manifest.db and Info.plist.",
   "开始导出后可查看结果。": "Results are available after export starts.",
   "尚未开始": "Not started",
-  "任务已停止。可以调整选项后重新运行，已有日志会保留在本页。": "The task was stopped. You can adjust options and run it again; existing logs stay on this page.",
-  "请查看 stderr/stdout 日志。": "Check the stderr/stdout logs.",
+  "任务已停止。可以调整选项后重新运行。": "The task was stopped. You can adjust options and run it again.",
+  "任务失败。": "The task failed.",
   "修正备份路径、密码、输出目录或转换器环境后重试。": "Fix the backup path, password, output folder, or converter environment, then retry.",
   "Export Workspace": "Export Workspace",
   "当前导出状态": "Current export status",
@@ -70,8 +73,14 @@ const en: Record<string, string> = {
   "暂无日志": "No logs yet",
   "iMessage Exporter GUI 诊断报告": "iMessage Exporter GUI Diagnostic Report",
   "生成时间": "Generated At",
-  "脱敏命令": "Redacted Command",
+  "引擎调用": "Engine Invocation",
   "脱敏日志": "Redacted Logs",
+  "源数据库": "Source Database",
+  "源消息数": "Source Messages",
+  "源会话数": "Source Conversations",
+  "源附件": "Source Attachments",
+  "可读取": "Readable",
+  "内置 imessage-exporter": "Built-in imessage-exporter",
   "Mock 模式：未调用真实内置导出引擎。basic/full 附件转换仍会显示依赖提示。": "Mock mode: the real built-in export engine is not called. basic/full attachment conversion still shows dependency hints.",
   "Mock 模式：模拟导出引擎缺失，诊断和导出会被禁用。": "Mock mode: simulating a missing export engine, so diagnostics and export are disabled.",
   "仅保存路径和导出选项，不保存备份密码": "Only paths and export options are saved. Backup passwords are never saved.",
@@ -87,8 +96,8 @@ const en: Record<string, string> = {
   "内置导出引擎未能启动": "Built-in export engine could not start",
   "GUI 没能调用内置 imessage-exporter 引擎。": "The GUI could not call the built-in imessage-exporter engine.",
   "重启应用后再试；反馈问题时复制诊断报告。": "Restart the app and try again. Copy the diagnostic report when reporting the issue.",
-  "导出引擎参数不兼容": "Export engine arguments are incompatible",
-  "内置 imessage-exporter 拒绝了 GUI 生成的命令参数，通常是 GUI 后端与内置引擎源码不同步。": "The built-in imessage-exporter rejected the GUI-generated command arguments. This usually means the GUI backend and built-in engine source are out of sync.",
+  "导出引擎选项不兼容": "Export engine options are incompatible",
+  "内置 imessage-exporter 拒绝了 GUI 后端构造的导出选项，通常是 GUI 后端与内置引擎源码不同步。": "The built-in imessage-exporter rejected the export options built by the GUI backend. This usually means the GUI backend and built-in engine source are out of sync.",
   "更新 GUI 后重试；反馈问题时复制诊断报告。": "Update the GUI and retry. Copy the diagnostic report when reporting the issue.",
   "安装 basic/full 附件转换器": "Install basic/full attachment converters",
   "复制": "Copy",
@@ -101,6 +110,11 @@ const en: Record<string, string> = {
   "重试": "Retry",
   "数据准备": "Data Prep",
   "选择 iOS 备份": "Choose iOS Backup",
+  "选择 macOS chat.db": "Choose macOS chat.db",
+  "选择 Messages 数据源，不修改原始数据。": "Choose a Messages data source without modifying the original data.",
+  "iOS 备份": "iOS Backup",
+  "Apple Devices 或 iTunes 本地备份。": "Local Apple Devices or iTunes backup.",
+  "直接读取 Messages 的 chat.db 文件。": "Read the Messages chat.db file directly.",
   "从 Apple Devices 或 iTunes 的本地备份导出 Messages 数据，不修改原始备份。": "Export Messages data from a local Apple Devices or iTunes backup without modifying the original backup.",
   "诊断检查": "Diagnostics Check",
   "导出设置": "Export Settings",
@@ -165,7 +179,6 @@ const en: Record<string, string> = {
   "兼容性": "Compatibility",
   "兼容性检查": "Compatibility check",
   "等待环境检测完成": "Waiting for environment check",
-  "GUI 已直接集成 imessage-exporter 源码，命令预览仅用于核对参数。": "The GUI directly integrates the imessage-exporter source. Command preview is only for parameter review.",
   "内置导出引擎暂未就绪，请重新检测环境": "The built-in export engine is not ready yet. Check the environment again.",
   "备份目录已就绪。": "Backup folder is ready.",
   "选择包含 Manifest.db 和 Info.plist 的本机 iOS 备份根目录。": "Choose the local iOS backup root folder that contains Manifest.db and Info.plist.",
@@ -179,6 +192,10 @@ const en: Record<string, string> = {
   "稍后": "Later",
   "开始设置": "Start Setup",
   "备份根目录": "Backup Root Folder",
+  "chat.db 文件": "chat.db File",
+  "附件根目录（可选）": "Attachment Root (optional)",
+  "联系人数据库（可选）": "Contacts Database (optional)",
+  "chat.db 从别的 Mac 拷出时，可以把 Messages 附件目录和 AddressBook 数据库一并指定给内置引擎。": "When chat.db is copied from another Mac, you can also point the built-in engine at the Messages attachments folder and AddressBook database.",
   "自动发现": "Auto-discovered",
   "常见 MobileSync Backup 目录中的候选备份。": "Candidate backups found in common MobileSync Backup folders.",
   "有效": "Valid",
@@ -189,8 +206,13 @@ const en: Record<string, string> = {
   "请选择目录": "Choose a folder",
   "iPhone 旧备份": "Old iPhone Backup",
   "备份状态": "Backup Status",
+  "数据库状态": "Database Status",
+  "Messages 数据": "Messages Data",
   "存在": "Found",
   "未确认": "Not confirmed",
+  "未检查": "Not checked",
+  "等待备份目录确认": "Waiting for source folder confirmation",
+  "已选择": "Selected",
   "加密": "Encrypted",
   "是": "Yes",
   "否或未知": "No or unknown",
@@ -199,7 +221,7 @@ const en: Record<string, string> = {
   "只保存在当前内存中": "Kept only in memory",
   "清除密码": "Clear password",
   "任务结束后自动清除密码": "Clear password automatically when the task ends",
-  "密码只在本次任务中传给内置导出引擎，命令预览和日志会脱敏。": "The password is passed to the built-in export engine only for this task. Command previews and logs are redacted.",
+  "密码只在本次任务中传给内置导出引擎，日志会脱敏。": "The password is passed to the built-in export engine only for this task. Logs are redacted.",
   "运行诊断": "Run Diagnostics",
   "运行": "Run",
   "诊断前需要处理的问题": "Issues to resolve before diagnostics",
@@ -208,6 +230,8 @@ const en: Record<string, string> = {
   "内置可用": "Built in",
   "备份目录": "Backup Folder",
   "需要包含 Manifest.db 和 Info.plist": "Must contain Manifest.db and Info.plist",
+  "chat.db 已选择": "chat.db selected",
+  "选择 Messages 的 chat.db 文件": "Choose the Messages chat.db file",
   "加密密码": "Encrypted Password",
   "已输入，任务结束后自动清除": "Entered, will be cleared after the task",
   "已输入，仅保存在内存中": "Entered, kept only in memory",
@@ -228,6 +252,7 @@ const en: Record<string, string> = {
   "导出引擎可用": "Export engine is available",
   "未就绪": "Not ready",
   "需要有效的 iOS 备份根目录": "A valid iOS backup root folder is required",
+  "需要可读取的 macOS chat.db 文件": "A readable macOS chat.db file is required",
   "未检测到导出引擎": "Export engine was not detected",
   "诊断结果": "Diagnostic Result",
   "已通过": "Passed",
@@ -262,7 +287,32 @@ const en: Record<string, string> = {
   "输出目录": "Output Folder",
   "新建归档目录": "New Archive Folder",
   "生成带时间戳的新文件夹，避免导出结果混入旧目录。": "Generate a timestamped folder so new exports do not mix with old files.",
+  "生成只带时间戳的新文件夹，避免目录名暴露联系人。": "Generate a timestamp-only folder so the folder name does not expose contacts.",
   "格式": "Format",
+  "文件命名": "File Naming",
+  "联系人名": "Contact Name",
+  "联系人名 + Caller ID": "Contact Name + Caller ID",
+  "按联系人或群聊名称命名，适合直接阅读归档。": "Name files by contact or group chat, best for readable archives.",
+  "同时保留可读名称和原始会话标识，适合人工核对。": "Keep both the readable name and raw chat identifier for manual verification.",
+  "按原始会话标识命名，适合后续查验或脚本处理。": "Name files by the raw chat identifier, best for audit or scripts.",
+  "目录命名": "Folder Naming",
+  "新建归档目录命名": "New Archive Folder Naming",
+  "新建总目录命名": "New Root Folder Naming",
+  "HTML 会话文件夹命名": "HTML Conversation Folder Naming",
+  "会话 + 时间": "Conversation + Time",
+  "仅时间": "Time Only",
+  "单会话导出时把联系人或群聊名放进归档目录。": "For single-conversation exports, include the contact or group name in the archive folder.",
+  "点新建归档目录时，单会话目录带联系人或群聊名。": "When creating a new archive folder, include the contact or group name for a single-conversation export.",
+  "点新建归档目录时，只使用 Messages Export 和时间戳。": "When creating a new archive folder, use only Messages Export and a timestamp.",
+  "新建总目录时，单会话导出带联系人或群聊名。": "When creating the root folder, include the contact or group name for a single-conversation export.",
+  "新建总目录时，只使用 Messages Export 和时间戳。": "When creating the root folder, use only Messages Export and a timestamp.",
+  "HTML 会按会话建立文件夹，HTML 文件和对应附件放在同一个会话文件夹内。": "HTML exports create one folder per conversation, keeping the HTML file and its attachments together.",
+  "HTML 带附件导出时，每个会话文件夹带联系人或群聊名。": "For HTML exports with attachments, name each conversation folder with the contact or group name.",
+  "HTML 带附件导出时，每个会话文件夹只用 Messages Export 和时间戳。": "For HTML exports with attachments, name each conversation folder with only Messages Export and a timestamp.",
+  "统一使用 Messages Export 和时间戳，避免目录名暴露联系人。": "Use only Messages Export and a timestamp so folder names do not expose contacts.",
+  "TXT 和 JSONL 只写文本/结构化记录，不处理附件文件。": "TXT and JSONL write text/structured records only and do not process attachment files.",
+  "数据规模": "Data Size",
+  "附件风险": "Attachment Risk",
   "clone 不依赖本机转换器；basic/full 需要 ffmpeg 和 ImageMagick。": "clone does not depend on local converters; basic/full require ffmpeg and ImageMagick.",
   "保留更多富文本和附件引用，适合归档与打印。": "Preserves richer text and attachment references for archiving and printing.",
   "纯文本输出，更轻量，适合检索和长期保存。": "Plain text output, lighter and easier to search or store long term.",
@@ -271,6 +321,10 @@ const en: Record<string, string> = {
   "基础转换，需要 ffmpeg/ImageMagick。": "Basic conversion; requires ffmpeg/ImageMagick.",
   "完整转换，需要 ffmpeg/ImageMagick，耗时更久。": "Full conversion; requires ffmpeg/ImageMagick and takes longer.",
   "逐行结构化 JSON，适合检索、分析和二次处理。": "Line-delimited structured JSON for search, analysis, and downstream processing.",
+  "命名": "Naming",
+  "联系人/群聊名": "Contact/group name",
+  "匹配会话名 + Caller ID": "Matched conversation name + Caller ID",
+  "联系人或群聊名称 + Caller ID": "Contact or group chat name + Caller ID",
   "日期范围": "Date Range",
   "开始日期": "Start Date",
   "结束日期": "End Date",
@@ -279,15 +333,16 @@ const en: Record<string, string> = {
   "正在读取会话...": "Reading conversations...",
   "正在从备份读取会话列表。": "Reading conversations from the backup.",
   "选择一个会话，导出时会自动传入对应筛选值。": "Choose a conversation; the matching filter value will be passed to export.",
-  "会话列表不可用；手动输入后仍会把筛选值传给导出引擎。": "The conversation list is unavailable; manual entries are still passed to the export engine.",
+  "会话列表不可用；仍可手动输入筛选值来导出指定会话。": "The conversation list is unavailable; you can still enter a manual filter for this export.",
   "将使用手动筛选值导出指定会话。": "The manual filter value will be used for this export.",
   "输入联系人、手机号或聊天标识来筛选单个会话。": "Enter a contact, phone number, or chat identifier to filter one conversation.",
   "没有读取到可选择的会话；默认导出全部会话。": "No selectable conversations were found; all conversations will be exported by default.",
   "无法读取会话列表：": "Could not read the conversation list: ",
-  "。仍可手动输入联系人、手机号或聊天标识继续导出。": ". You can still enter a contact, phone number, or chat identifier manually.",
-  "这个备份暂时没有可选择的会话列表；需要筛选时可以手动输入。": "This backup does not have a selectable conversation list right now; enter a filter manually if needed.",
+  "。这只影响下拉选择；仍可手动输入联系人、手机号或聊天标识来筛选导出。": ". This only affects the picker; you can still enter a contact, phone number, or chat identifier manually.",
+  "这个备份暂时没有可选择的会话；需要筛选单个会话时，可以手动输入。": "This backup does not have selectable conversations right now; enter a filter manually if you need one conversation.",
   "无法读取 Messages 数据库，可能是备份已加密或数据库不可直接访问": "Could not read the Messages database. The backup may be encrypted or the database may not be directly accessible.",
   "搜索会话": "Search Conversations",
+  "搜索": "Search",
   "姓名、手机号、邮箱或群聊": "Name, phone number, email, or group",
   "排序": "Sort",
   "消息最多": "Most messages",
@@ -307,6 +362,8 @@ const en: Record<string, string> = {
   "忽略磁盘空间警告": "Ignore disk space warnings",
   "开始导出": "Start Export",
   "来源": "Source",
+  "附件根目录": "Attachment Root",
+  "联系人数据库": "Contacts Database",
   "日期": "Date",
   "会话": "Conversation",
   "结果文件": "Result File",
@@ -332,13 +389,20 @@ const en: Record<string, string> = {
   "检测到疑似旧导出文件，建议选择一个新的空目录。": "Old export files were detected. Choose a new empty folder.",
   "全部日期": "All dates",
   "导出与结果": "Export and Results",
-  "实时查看 imessage-exporter 输出，导出完成后打开结果目录。": "Watch imessage-exporter output in real time, then open the result folder when export finishes.",
+  "JSONL 快速搜索": "JSONL Quick Search",
+  "最近导出": "Recent Exports",
+  "搜索导出的 JSONL": "Search exported JSONL",
+  "第 ": "Line ",
+  " 行": "",
+  "正在读取 JSONL...": "Reading JSONL...",
+  "没有匹配结果": "No matches",
+  "导出完成后可打开结果目录或首个结果文件。": "Open the output folder or first result file after export finishes.",
   "导出前预览": "Export Preview",
   "导出中": "Exporting",
   "导出结果": "Export Results",
-  "正在追踪导出输出和结果。": "Tracking export output and results.",
-  "先确认命令、结果文件和输出位置，再开始导出。": "Confirm the command, result files, and output location before starting export.",
-  "查看导出摘要、日志和结果入口。": "Review the export summary, logs, and result actions.",
+  "正在处理导出任务。": "Export is running.",
+  "先确认导出设置、结果文件和输出位置，再开始导出。": "Confirm the export settings, result files, and output location before starting export.",
+  "查看导出摘要和结果入口。": "Review the export summary and result actions.",
   "结果总览": "Result Overview",
   "导出总览": "Export Overview",
   "开始前": "Before Starting",
@@ -363,11 +427,11 @@ const en: Record<string, string> = {
   "项目": "Items",
   "耗时": "Duration",
   "下一步": "Next Step",
-  "日志未报告": "Not reported in logs",
+  "未报告结果": "Result not reported",
   "未报告": "Not reported",
   "任务已成功结束。": "The task finished successfully.",
-  "任务已停止，已保留当前日志。": "The task stopped and current logs were kept.",
-  "请查看日志中的错误信息。": "Check the error details in the logs.",
+  "任务已停止。": "The task stopped.",
+  "请查看失败提示。": "Check the failure hint.",
   "开始前先确认设置和输出位置。": "Confirm settings and output location before starting.",
   "开始前先看一眼将要导出的设置和结果位置。": "Review the export settings and result location before starting.",
   "打开首个 HTML 或输出目录检查结果。": "Open the first HTML file or the output folder to review results.",
@@ -377,21 +441,11 @@ const en: Record<string, string> = {
   "调整选项后可重新导出。": "Adjust options, then export again.",
   "保持窗口打开，必要时可取消任务。": "Keep this window open; cancel the task if needed.",
   "确认无误后开始导出。": "Start export after everything looks right.",
-  "命令预览": "Command Preview",
-  "暂时还没有命令预览。": "No command preview yet.",
-  "密码和敏感值已脱敏。": "Passwords and sensitive values are redacted.",
-  "复制命令": "Copy Command",
+  "导出或诊断正在运行，已阻止退出；请先等待完成或取消任务。": "Export or diagnostics is running, so quitting was blocked. Wait for it to finish or cancel it first.",
+  "任务运行中不能安装更新；请先等待完成或取消任务。": "Updates cannot be installed while a task is running. Wait for it to finish or cancel it first.",
   "诊断报告": "Diagnostic Report",
   "复制诊断报告": "Copy Diagnostic Report",
   "下载诊断报告 .txt": "Download Diagnostic Report .txt",
-  "日志": "Logs",
-  "滚动到最新日志": "Scroll to latest log",
-  "最新": "Latest",
-  "复制日志": "Copy Logs",
-  "搜索日志": "Search logs",
-  "日志类型过滤": "Log type filters",
-  "没有匹配的日志。": "No matching logs.",
-  "任务日志会显示在这里。": "Task logs appear here.",
   "已确认": "Confirmed",
   "需注意": "Needs attention",
   "未解析": "Not parsed",
@@ -475,11 +529,41 @@ export function translateText(language: AppLanguage, text: string): string {
   const exact = en[text];
   if (exact) return exact;
 
+  const loadedConversations = text.match(/^已读取 ([\d,]+) 个会话；默认显示前 ([\d,]+) 个，搜索会查全部。$/);
+  if (loadedConversations) return `${loadedConversations[1]} conversations loaded. Showing the first ${loadedConversations[2]} by default; search checks all.`;
+
+  const exportEstimate = text.match(/^([\d,]+) 条消息 · ([\d,]+) 个底层会话$/);
+  if (exportEstimate) return `${exportEstimate[1]} messages · ${exportEstimate[2]} underlying chat(s)`;
+
+  const deletePath = text.match(/^删除 (.+)$/);
+  if (deletePath) return `Delete ${deletePath[1]}`;
+
+  const diagnosticText = text
+    .replace(/源数据库:/g, "Source Database:")
+    .replace(/源附件:/g, "Source Attachments:")
+    .replace(/数据库:/g, "Database:")
+    .replace(/附件:/g, "Attachments:")
+    .replace(/联系人:/g, "Contacts:")
+    .replace(/诊断发现 ([\d,]+) 个附件缺失；导出会继续，但对应附件可能无法打开。/g, "Diagnostics found $1 missing attachments; export can continue, but those files may not open.")
+    .replace(/可读取/g, "Readable")
+    .replace(/([\d,]+) 个 \/ ([\d.]+ [A-Z]+)/g, "$1 items / $2")
+    .replace(/([\d,]+) 条 · ([\d.]+ [A-Z]+)/g, "$1 messages · $2")
+    .replace(/([\d,]+) 个，缺失 ([\d,]+) 个/g, "$1 attachments, $2 missing")
+    .replace(/(\d+) 条消息 · (\d+) 个会话/g, "$1 messages · $2 conversations")
+    .replace(/(\d+) 个附件，缺失 (\d+) 个/g, "$1 attachments, $2 missing")
+    .replace(/(\d+) 个附件/g, "$1 attachments")
+    .replace(/联系人解析可用/g, "Contact parsing available")
+    .replace(/(\d+)\/(\d+) 个联系人已解析/g, "$1/$2 contacts resolved");
+  if (diagnosticText !== text) return diagnosticText;
+
   const updateAvailable = text.match(/^发现新版本 (.+)，当前版本 (.+)。$/);
   if (updateAvailable) return `Version ${updateAvailable[1]} is available. Current version: ${updateAvailable[2]}.`;
 
   const updateInstalling = text.match(/^正在下载 (.+)，安装后会重启应用。$/);
   if (updateInstalling) return `Downloading ${updateInstalling[1]}. The app will restart after installation.`;
+
+  const jsonlLine = text.match(/^第 ([\d,]+) 行$/);
+  if (jsonlLine) return `Line ${jsonlLine[1]}`;
 
   const updateCurrent = text.match(/^当前已经是最新版本 (.+)。$/);
   if (updateCurrent) return `You are already on the latest version, ${updateCurrent[1]}.`;
@@ -501,9 +585,9 @@ export function translateText(language: AppLanguage, text: string): string {
   const versionUnknown = text.match(/^已验证 (.+) · 当前版本未识别$/);
   if (versionUnknown) return `Verified ${versionUnknown[1]} · Current version unknown`;
 
-  const conversationScanFailure = text.match(/^无法读取会话列表：(.+)。仍可手动输入联系人、手机号或聊天标识继续导出。$/);
+  const conversationScanFailure = text.match(/^无法读取会话列表：(.+)。这只影响下拉选择；仍可手动输入联系人、手机号或聊天标识来筛选导出。$/);
   if (conversationScanFailure) {
-    return `Could not read the conversation list: ${translateText(language, conversationScanFailure[1])}. You can still enter a contact, phone number, or chat identifier manually.`;
+    return `Could not read the conversation list: ${translateText(language, conversationScanFailure[1])}. This only affects the picker; you can still enter a contact, phone number, or chat identifier manually.`;
   }
 
   const conversationFilterCount = text.match(/^已筛出 (.+) 个会话。$/);
@@ -523,6 +607,9 @@ export function translateText(language: AppLanguage, text: string): string {
 
   const perConversationDescription = text.match(/^每个联系人或群聊各生成一个 (.+)$/);
   if (perConversationDescription) return `One file will be generated per contact or group chat: ${translateText(language, perConversationDescription[1])}`;
+
+  const mergedConversationDescription = text.match(/^每个合并后的会话各生成一个 (.+)$/);
+  if (mergedConversationDescription) return `One file will be generated per merged conversation: ${translateText(language, mergedConversationDescription[1])}`;
 
   const selectedResultName = text.match(/^以“(.+)”命名(\.[a-z0-9]+)$/i);
   if (selectedResultName) return `Named with "${selectedResultName[1]}"${selectedResultName[2]}`;
@@ -569,8 +656,17 @@ export function translateText(language: AppLanguage, text: string): string {
   const messages = text.match(/^(.+) 条消息$/);
   if (messages) return `${messages[1]} messages`;
 
+  const elapsed = text.match(/^已用 (.+) · 预计还需 (.+)$/);
+  if (elapsed) return `Elapsed ${translateText(language, elapsed[1])} · remaining ${translateText(language, elapsed[2])}`;
+
+  const spent = text.match(/^耗时 (.+)$/);
+  if (spent) return `Took ${translateText(language, spent[1])}`;
+
   const attachments = text.match(/^(.+) 个附件$/);
   if (attachments) return `${attachments[1]} attachments`;
+
+  const itemsWithSize = text.match(/^(.+) 个 \/ (.+)$/);
+  if (itemsWithSize) return `${itemsWithSize[1]} items / ${itemsWithSize[2]}`;
 
   const genericItems = text.match(/^(.+) 项$/);
   if (genericItems) return `${genericItems[1]} item(s)`;

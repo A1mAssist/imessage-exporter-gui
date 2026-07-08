@@ -43,8 +43,8 @@ export function recoveryHintForFailure(logs: LogLine[], outcomeMessage?: string)
   if (matches(lower, ["requires --format", "invalid command line options", "invalid options", "unexpected argument", "unrecognized option"])) {
     return {
       category: "exporter",
-      title: "导出引擎参数不兼容",
-      detail: "内置 imessage-exporter 拒绝了 GUI 生成的命令参数，通常是 GUI 后端与内置引擎源码不同步。",
+      title: "导出引擎选项不兼容",
+      detail: "内置 imessage-exporter 拒绝了 GUI 后端构造的导出选项，通常是 GUI 后端与内置引擎源码不同步。",
       action: "更新 GUI 后重试；反馈问题时复制诊断报告。",
     };
   }
@@ -70,8 +70,8 @@ export function recoveryHintForFailure(logs: LogLine[], outcomeMessage?: string)
   return {
     category: "generic",
     title: "任务失败",
-    detail: "日志没有匹配到已知错误类型。",
-    action: "查看 stderr/stdout 的最后几行，修正路径、密码或环境后重试。",
+    detail: "未识别到已知错误类型。",
+    action: "修正路径、密码或环境后重试；反馈问题时复制诊断报告。",
   };
 }
 

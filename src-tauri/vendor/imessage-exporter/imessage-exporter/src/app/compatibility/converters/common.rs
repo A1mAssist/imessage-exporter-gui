@@ -3,7 +3,7 @@
 */
 use std::{
     ffi::OsStr,
-    fs::{File, FileTimes, copy, create_dir_all, metadata, read_dir},
+    fs::{File, FileTimes, copy, create_dir_all, metadata, read_dir, remove_file, rename},
     path::Path,
     process::{Command, Stdio},
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -20,13 +20,15 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
-    match Command::new(command)
+    let mut convert = Command::new(command);
+    convert
         .args(args)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
-        .stdin(Stdio::null())
-        .spawn()
-    {
+        .stdin(Stdio::null());
+    hide_console_window(&mut convert);
+
+    match convert.spawn() {
         Ok(mut convert) => match convert.wait() {
             Ok(status) if status.success() => Some(()),
             Ok(status) => {
@@ -45,6 +47,17 @@ where
     }
 }
 
+#[cfg(windows)]
+fn hide_console_window(command: &mut Command) {
+    use std::os::windows::process::CommandExt;
+
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    command.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(windows))]
+fn hide_console_window(_: &mut Command) {}
+
 /// Ensure the parent directory of `to` exists, creating it if necessary.
 pub(super) fn ensure_output_dir(to: &Path) -> Option<()> {
     if let Some(folder) = to.parent()
@@ -55,6 +68,16 @@ pub(super) fn ensure_output_dir(to: &Path) -> Option<()> {
         return None;
     }
     Some(())
+}
+
+pub(super) fn partial_path(to: &Path) -> std::path::PathBuf {
+    to.with_extension(format!(
+        "{}partial",
+        to.extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| format!("{ext}."))
+            .unwrap_or_default()
+    ))
 }
 
 /// Copy a file or directory without altering it.
@@ -95,7 +118,10 @@ pub(crate) fn copy_raw(from: &Path, to: &Path) {
             return;
         }
 
-        if let Err(why) = copy(from, to) {
+        let temp_path = partial_path(to);
+        let _ = remove_file(&temp_path);
+        if let Err(why) = copy(from, &temp_path).and_then(|_| rename(&temp_path, to)) {
+            let _ = remove_file(&temp_path);
             eprintln!(
                 "Unable to copy {} to {}: {why}",
                 from.display(),

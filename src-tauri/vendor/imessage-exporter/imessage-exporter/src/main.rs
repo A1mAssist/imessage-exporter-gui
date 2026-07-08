@@ -1,9 +1,6 @@
 use std::process::ExitCode;
 
-use imessage_exporter::{
-    options::{Options, from_command_line},
-    run_with_options,
-};
+use imessage_exporter::{Options, app::options::from_command_line, run_with_options};
 
 fn main() -> ExitCode {
     // Get args from command line

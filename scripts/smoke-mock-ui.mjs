@@ -88,7 +88,7 @@ try {
   await waitForExitZero(page);
   await assertHealthyApp(page, "diagnostics");
   await assertNoVisibleTextLeak(page, "mock-password");
-  await assertCommandIsRedacted(page);
+  await assertNoCommandPreview(page);
   await assertDiagnosticSummaryPanel(page);
   await assertDiagnosticDetails(page);
   await assertCopyActions(page);
@@ -98,7 +98,7 @@ try {
   await page.getByRole("button", { name: /继续设置/ }).click();
   await page.getByRole("button", { name: /选择输出目录/ }).click();
   await assertHealthyApp(page, "options");
-  await assertCommandIsRedacted(page);
+  await assertNoCommandPreview(page);
   await assertPersistedSettingsDoNotLeak(page, "mock-password");
   await assertOutputDirectoryIsSafe(page);
   await assertOutputDirectoryWarning(page);
@@ -106,7 +106,7 @@ try {
   await assertFormatSpecificControls(page);
   await assertConversationPicker(page);
   await page.locator(".workspace-nav").getByRole("button", { name: /^导出$/ }).click();
-  await assertRunPreflight(page, ["Alex Chen.html", "会按匹配到的会话生成", "已生成，可复制检查"]);
+  await assertRunPreflight(page, ["Alex Chen.html", "会按匹配到的会话生成"]);
   await page.locator(".workspace-nav").getByRole("button", { name: /^选项$/ }).click();
   await page.screenshot({ path: join(previewDir, "react-mock-options.png"), fullPage: true });
   await page.setViewportSize({ width: 720, height: 1000 });
@@ -133,7 +133,7 @@ try {
   await assertHealthyApp(page, "results");
   await assertNoVisibleTextLeak(page, "mock-password");
   await assertPersistedSettingsDoNotLeak(page, "mock-password");
-  await assertCommandIsRedacted(page);
+  await assertNoCommandPreview(page);
   await assertExportSummary(page, ["导出完成", "HTML", "clone", "Messages Export"]);
   await assertCopyActions(page);
   await page.screenshot({ path: join(previewDir, "react-mock-results.png"), fullPage: true });
@@ -145,14 +145,16 @@ try {
   console.log("smoke: built-in exporter status passed");
   await assertTxtResultsExposeTxtAction(browser);
   console.log("smoke: txt result passed");
+  await assertJsonlQuickSearch(browser);
+  console.log("smoke: jsonl quick search passed");
   await assertGeneratedArchiveDirectory(browser);
   console.log("smoke: archive directory passed");
   await assertExportPresets(browser);
   console.log("smoke: presets passed");
   await assertFailureRecoveryHint(browser);
   console.log("smoke: recovery hint passed");
-  await assertLogSearchAndFilter(browser);
-  console.log("smoke: log search/filter passed");
+  await assertNoVisibleEngineLogs(browser);
+  console.log("smoke: hidden engine logs passed");
   await assertDiagnosticReportDoesNotLeak(browser);
   console.log("smoke: diagnostic report passed");
   await assertPathCopyActions(browser);
@@ -223,17 +225,21 @@ async function assertNoVisibleTextLeak(page, secret) {
   if (leaked) throw new Error("Visible app text leaked the cleartext password");
 }
 
-async function assertCommandIsRedacted(page) {
-  const commandText = await page.locator(".command-box code").textContent();
-  if (!commandText?.includes("[redacted]")) throw new Error("Command preview did not redact the password");
-  if (commandText.includes("mock-password")) throw new Error("Command preview leaked the cleartext password");
+async function assertNoCommandPreview(page) {
+  if ((await page.locator(".command-box").count()) !== 0) {
+    throw new Error("Command preview should not be visible in the built-in engine workflow");
+  }
+  const text = await page.locator(".app-shell").textContent();
+  if (text?.includes("命令预览") || text?.includes("复制命令")) {
+    throw new Error("Built-in engine workflow should not expose command preview UI");
+  }
 }
 
 async function assertOutputDirectoryIsSafe(page) {
-  const commandText = await page.locator(".command-box code").textContent();
-  if (!commandText?.includes("Messages Export")) throw new Error("Mock output directory was not selected");
-  if (commandText.includes("-o C:\\Users\\A1mAssist\\Apple\\MobileSync\\Backup\\00008110-demo")) {
-    throw new Error("Mock output directory points at the backup directory");
+  const exportPath = await page.locator(".path-field input").last().inputValue();
+  if (!exportPath.includes("Messages Export")) throw new Error("Mock output directory was not selected");
+  if (exportPath.includes("C:\\Users\\A1mAssist\\Apple\\MobileSync\\Backup\\00008110-demo")) {
+    throw new Error("Export path points at the backup directory");
   }
 }
 
@@ -589,7 +595,7 @@ async function assertIncompleteBackupBlocksDiagnostics(page) {
     throw new Error("Run section should explain the incomplete backup blocker");
   }
   await page.locator(".workspace-nav").getByRole("button", { name: /^数据源$/ }).click();
-  await page.getByRole("button", { name: /A1mAssist 的 iPhone/ }).click();
+  await page.getByRole("button", { name: /00008110-demo/ }).click();
 }
 
 async function assertRunStartBlockedWithoutExportPath(page) {
@@ -608,7 +614,7 @@ async function assertRunStartBlockedWithoutExportPath(page) {
 }
 
 async function assertRunPageDoesNotTreatDiagnosticsAsExport(page) {
-  await page.locator(".log-state").filter({ hasText: "运行中" }).waitFor({ timeout: 5000 });
+  await page.getByRole("button", { name: /取消诊断/ }).waitFor({ timeout: 5000 });
   const nav = page.locator(".workspace-nav");
   await nav.getByRole("button", { name: /导出/ }).click();
   await assertRunPreflight(page, ["导出前预览", "未设置", "开始导出"]);
@@ -690,17 +696,36 @@ async function assertBuiltInExporterStatus(browser) {
 async function assertExportReview(page) {
   const text = await page.locator(".review-panel").textContent();
   if (!text?.includes("导出前复核")) throw new Error("Export review panel was not rendered");
-  if (!text.includes("HTML") || !text.includes("附件 clone")) {
+  const hasHtmlAttachmentSummary = /HTML · 附件 (disabled|clone|basic|full)/.test(text);
+  const hasTextAttachmentSummary = /(TXT|JSONL) · 不导出附件/.test(text);
+  if (!hasHtmlAttachmentSummary && !hasTextAttachmentSummary) {
     throw new Error("Export review panel did not summarize format and attachment options");
   }
+}
+
+async function assertTextFormatsDisableAttachments(page) {
+  for (const format of ["TXT", "JSONL"]) {
+    await page.getByRole("button", { name: new RegExp(`^${format}`) }).click();
+    const text = await page.locator(".app-shell").textContent();
+    if (!text?.includes("附件") || !text.includes("disabled") || !text.includes("不导出附件")) {
+      throw new Error(`${format} should expose disabled attachment export`);
+    }
+    if (text.includes("附件 clone") || text.includes("附件 basic") || text.includes("附件 full")) {
+      throw new Error(`${format} should not expose attachment copy or conversion choices`);
+    }
+  }
+  await page.getByRole("button", { name: /^HTML/ }).click();
 }
 
 async function assertRunPreflight(page, expectedTexts) {
   const preflight = page.locator(".export-preflight.idle");
   await preflight.waitFor({ timeout: 5000 });
   const text = await preflight.textContent();
-  for (const expected of ["导出前预览", "导出总览", "命令预览", "输出目录", "结果文件", "开始导出"]) {
+  for (const expected of ["导出前预览", "导出总览", "输出目录", "结果命名", "开始导出"]) {
     if (!text?.includes(expected)) throw new Error(`Run preflight did not include ${expected}`);
+  }
+  if (text?.includes("命令预览") || text?.includes("复制命令")) {
+    throw new Error("Run preflight should not expose command preview UI");
   }
   if (text?.includes("还没有开始导出")) {
     throw new Error("Run preflight should not fall back to the old empty state copy");
@@ -716,13 +741,16 @@ async function assertFormatSpecificControls(page) {
   if (!(await printFriendly.isDisabled())) {
     throw new Error("HTML print-friendly mode should be disabled for TXT exports");
   }
-  await page.waitForFunction(() => document.querySelector(".command-box code")?.textContent?.includes("-f txt"));
-  const txtCommand = await page.locator(".command-box code").textContent();
-  if (!txtCommand?.includes("-f txt")) throw new Error("Command preview did not switch to TXT format");
-  if (txtCommand.includes(" -l")) throw new Error("TXT command preview should not include the HTML no-lazy flag");
+  await page.waitForFunction(() => document.querySelector(".review-panel")?.textContent?.includes("TXT"));
+  let reviewText = await page.locator(".review-panel").textContent();
+  if (!reviewText?.includes("TXT")) throw new Error("Review panel did not switch to TXT format");
+  if (!reviewText.includes("不导出附件")) throw new Error("TXT review should state that attachments are not exported");
+  await assertTextFormatsDisableAttachments(page);
 
   await page.getByRole("button", { name: /^HTML/ }).click();
-  await page.waitForFunction(() => document.querySelector(".command-box code")?.textContent?.includes("-f html"));
+  await page.waitForFunction(() => document.querySelector(".review-panel")?.textContent?.includes("HTML"));
+  reviewText = await page.locator(".review-panel").textContent();
+  if (!reviewText?.includes("HTML")) throw new Error("Review panel did not switch back to HTML format");
 }
 
 async function assertConversationPicker(page) {
@@ -732,16 +760,10 @@ async function assertConversationPicker(page) {
   if (!filteredText?.includes("已筛出 1 个会话")) {
     throw new Error("Conversation search did not report the filtered result count");
   }
-  await picker.selectOption("alerts@example.com");
-  await page.waitForFunction(() => document.querySelector(".command-box code")?.textContent?.includes("-t alerts@example.com"));
+  await picker.selectOption("8");
   await page.getByLabel("搜索会话").fill("");
   await page.getByLabel("排序").selectOption("recent");
-  await picker.selectOption("+15551234567");
-  await page.waitForFunction(() => document.querySelector(".command-box code")?.textContent?.includes("-t +15551234567"));
-  const commandText = await page.locator(".command-box code").textContent();
-  if (!commandText?.includes("-t +15551234567")) {
-    throw new Error("Conversation picker did not update the command preview");
-  }
+  await picker.selectOption("17");
   const reviewText = await page.locator(".review-panel").textContent();
   if (!reviewText?.includes("Alex Chen")) {
     throw new Error("Conversation picker selection was not reflected in the review panel");
@@ -779,8 +801,7 @@ async function assertDiagnosticSummaryPanel(page) {
 async function assertCancelledOutcome(page) {
   const text = await page.locator(".job-outcome-notice").textContent();
   if (!text?.includes("导出已取消")) throw new Error("Cancelled export outcome was not rendered");
-  const logState = await page.locator(".log-state").textContent();
-  if (!logState?.includes("已取消")) throw new Error("Log state did not show cancellation");
+  await page.locator(".result-strip.cancelled").waitFor({ timeout: 5000 });
   const firstHtmlDisabled = await page.getByRole("button", { name: /打开首个 HTML/ }).isDisabled();
   if (!firstHtmlDisabled) throw new Error("Open first HTML action should be disabled after cancellation");
 }
@@ -804,7 +825,7 @@ async function assertTxtResultsExposeTxtAction(browser) {
   await page.getByRole("button", { name: /^TXT/ }).click();
   await page.getByRole("button", { name: /^开始导出$/ }).click();
   await page.locator(".result-strip.success").waitFor({ timeout: 10000 });
-  await assertExportSummary(page, ["导出完成", "TXT", "clone", "Messages Export"]);
+  await assertExportSummary(page, ["导出完成", "TXT", "不导出附件", "Messages Export"]);
 
   const txtButton = page.getByRole("button", { name: /打开首个 TXT/ });
   if (await txtButton.isDisabled()) {
@@ -817,11 +838,38 @@ async function assertTxtResultsExposeTxtAction(browser) {
   await page.close();
 }
 
+async function assertJsonlQuickSearch(browser) {
+  const page = await openOptionsPage(browser, baseUrl, "jsonl-password");
+  page.on("dialog", async (dialog) => {
+    if (!dialog.message().includes("输出目录已有内容")) {
+      throw new Error(`Unexpected dialog in JSONL flow: ${dialog.message()}`);
+    }
+    await dialog.accept();
+  });
+
+  await page.getByRole("button", { name: /^JSONL/ }).click();
+  if ((await page.locator(".jsonl-preview").count()) !== 0) {
+    throw new Error("JSONL quick search should only appear after a successful JSONL export");
+  }
+  await page.getByRole("button", { name: /^开始导出/ }).click();
+  await page.locator(".result-strip.success").waitFor({ timeout: 10000 });
+  await page.locator(".jsonl-preview").waitFor({ timeout: 5000 });
+  await page.locator(".jsonl-preview input").fill("Dinner");
+  await page.locator(".jsonl-preview").getByRole("button").click();
+  await page.waitForFunction(() => document.querySelector(".jsonl-preview")?.textContent?.includes("Dinner at 7?"));
+
+  const text = await page.locator(".jsonl-preview").textContent();
+  if (!text?.includes("Dinner at 7?") || text.includes("IMG_2042.HEIC")) {
+    throw new Error("JSONL quick search did not filter exported JSONL rows");
+  }
+  await page.close();
+}
+
 async function assertGeneratedArchiveDirectory(browser) {
   const secret = "archive-password";
   const page = await openOptionsPage(browser, `${baseUrl}&archiveCollision=1`, secret);
   await assertOutputDirectoryWarning(page);
-  await page.getByLabel("会话筛选").selectOption("chat-42");
+  await page.getByLabel("会话筛选").selectOption("42");
 
   await page.getByRole("button", { name: "新建归档目录" }).click();
   await page.waitForFunction(() => /家庭群 - Messages Export \d{4}-\d{2}-\d{2} \d{4} \(2\)/.test(document.querySelector(".path-field input")?.value ?? ""));
@@ -839,15 +887,8 @@ async function assertGeneratedArchiveDirectory(browser) {
   if ((await page.locator(".path-inspection.warn").count()) !== 0) {
     throw new Error("Generated archive directory should not keep the old-output warning");
   }
-  await page.waitForFunction(
-    (path) => document.querySelector(".command-box code")?.textContent?.includes(path),
-    regeneratedPath,
-    { timeout: 5000 },
-  );
-  const commandText = await page.locator(".command-box code").textContent();
-  if (!commandText?.includes(regeneratedPath)) {
-    throw new Error("Command preview did not use the generated archive directory");
-  }
+  const reviewText = await page.locator(".review-panel").textContent();
+  if (!reviewText?.includes("Messages Export")) throw new Error("Review panel did not use the generated archive directory");
   await assertPersistedSettingsDoNotLeak(page, secret);
   await page.close();
 }
@@ -857,22 +898,18 @@ async function assertExportPresets(browser) {
   const page = await openOptionsPage(browser, baseUrl, secret);
 
   await page.getByRole("button", { name: /轻量文本/ }).click();
-  await page.waitForFunction(() => document.querySelector(".command-box code")?.textContent?.includes("-f txt"));
-  let commandText = await page.locator(".command-box code").textContent();
-  if (!commandText?.includes("-c disabled")) throw new Error("Text preset did not switch attachment strategy to disabled");
-  if (commandText.includes(" -l")) throw new Error("Text preset should not keep no-lazy mode");
+  await page.waitForFunction(() => document.querySelector(".review-panel")?.textContent?.includes("TXT · 不导出附件"));
 
   await page.getByRole("button", { name: /打印准备/ }).click();
-  await page.waitForFunction(() => document.querySelector(".command-box code")?.textContent?.includes("-l"));
-  commandText = await page.locator(".command-box code").textContent();
-  if (!commandText?.includes("-f html") || !commandText.includes("-c clone")) {
-    throw new Error("Print preset did not switch to HTML + clone");
-  }
+  await page.waitForFunction(() => {
+    const text = document.querySelector(".review-panel")?.textContent ?? "";
+    return text.includes("HTML · 附件 clone") && text.includes("HTML 打印友好模式");
+  });
 
   await page.getByRole("button", { name: /快速归档/ }).click();
   await page.waitForFunction(() => {
-    const text = document.querySelector(".command-box code")?.textContent ?? "";
-    return text.includes("-f html") && text.includes("-c clone") && !text.includes(" -l");
+    const text = document.querySelector(".review-panel")?.textContent ?? "";
+    return text.includes("HTML · 附件 clone") && !text.includes("HTML 打印友好模式");
   });
   await page.getByRole("button", { name: /^数据源$/ }).click();
   const passwordValue = await page.getByLabel("备份密码").inputValue();
@@ -906,22 +943,20 @@ async function assertFailureRecoveryHint(browser) {
   await page.close();
 }
 
-async function assertLogSearchAndFilter(browser) {
-  const page = await openOptionsPage(browser, `${baseUrl}&fail=password`, "log-filter-password");
+async function assertNoVisibleEngineLogs(browser) {
+  const page = await openOptionsPage(browser, `${baseUrl}&fail=password`, "hidden-log-password");
   page.on("dialog", async (dialog) => {
     await dialog.accept();
   });
   await page.getByRole("button", { name: /^开始导出$/ }).click();
   await page.locator(".result-strip.failed").waitFor({ timeout: 10000 });
 
-  const allLines = await page.locator(".log-line").count();
-  if (allLines < 3) throw new Error(`Expected multiple log lines before filtering, got ${allLines}`);
-  await page.getByLabel("搜索日志").fill("Incorrect password");
-  await page.waitForFunction(() => document.querySelectorAll(".log-line").length === 1);
-  await page.getByLabel("搜索日志").fill("");
-  await page.getByRole("button", { name: "stdout" }).click();
-  const filteredLines = await page.locator(".log-line").count();
-  if (filteredLines >= allLines) throw new Error("Log kind filter did not reduce the visible line count");
+  if ((await page.locator(".log-panel, .log-line").count()) !== 0) {
+    throw new Error("Engine logs should not be visible in the product UI");
+  }
+  if ((await page.getByRole("button", { name: "复制日志" }).count()) !== 0) {
+    throw new Error("Copy log action should not be rendered");
+  }
   await page.close();
 }
 
@@ -941,8 +976,11 @@ async function assertDiagnosticReportDoesNotLeak(browser) {
     throw new Error("Download diagnostic report action was not rendered");
   }
   const report = await page.locator(".report-buffer").inputValue();
-  if (!report.includes("诊断报告") || !report.includes("脱敏命令") || !report.includes("[redacted]")) {
-    throw new Error("Diagnostic report did not include the expected redacted sections");
+  if (!report.includes("诊断报告") || !report.includes("引擎调用") || !report.includes("内置 imessage-exporter") || !report.includes("脱敏日志")) {
+    throw new Error("Diagnostic report did not include the expected built-in engine sections");
+  }
+  if (report.includes("脱敏命令") || report.includes("命令预览")) {
+    throw new Error("Diagnostic report should not expose legacy command preview sections");
   }
   if (report.includes(secret)) throw new Error("Diagnostic report leaked the cleartext password");
   await assertNoVisibleTextLeak(page, secret);
@@ -1029,7 +1067,7 @@ async function assertConversationPickerFallbacks(browser) {
   }
   await emptyPage.getByRole("button", { name: "手动输入筛选值" }).click();
   await emptyPage.getByLabel("手动筛选值").fill("alerts@example.com");
-  await emptyPage.waitForFunction(() => document.querySelector(".command-box code")?.textContent?.includes("-t alerts@example.com"));
+  await emptyPage.waitForFunction(() => document.querySelector(".review-panel")?.textContent?.includes("alerts@example.com"));
   await emptyPage.close();
 
   const failedPage = await openOptionsPage(browser, `${baseUrl}&conversationError=1`, "failed-conversation-password");
@@ -1038,15 +1076,15 @@ async function assertConversationPickerFallbacks(browser) {
     throw new Error("Conversation scan failure should explain the manual fallback");
   }
   await failedPage.getByLabel("手动筛选值").fill("+15550001111");
-  await failedPage.waitForFunction(() => document.querySelector(".command-box code")?.textContent?.includes("-t +15550001111"));
+  await failedPage.waitForFunction(() => document.querySelector(".review-panel")?.textContent?.includes("+15550001111"));
   await failedPage.close();
 }
 
 async function assertCopyActions(page) {
-  const commandButtons = await page.getByRole("button", { name: "复制命令" }).count();
   const logButtons = await page.getByRole("button", { name: "复制日志" }).count();
-  if (commandButtons < 1) throw new Error("Copy command action was not rendered");
-  if (logButtons < 1) throw new Error("Copy log action was not rendered");
+  const commandButtons = await page.getByRole("button", { name: "复制命令" }).count();
+  if (commandButtons !== 0) throw new Error("Copy command action should not be rendered");
+  if (logButtons !== 0) throw new Error("Copy log action should not be rendered");
 }
 
 async function openOptionsPage(browser, url, secret) {
@@ -1058,7 +1096,7 @@ async function openOptionsPage(browser, url, secret) {
   await waitForExitZero(page);
   await page.getByRole("button", { name: /继续设置/ }).click();
   await page.getByRole("button", { name: /选择输出目录/ }).click();
-  await assertCommandIsRedacted(page);
+  await assertNoCommandPreview(page);
   await assertPersistedSettingsDoNotLeak(page, secret);
   return page;
 }
@@ -1070,9 +1108,9 @@ function sourceDiagnosticsButton(page) {
 async function waitForExitZero(page) {
   await page.waitForFunction(
     () => {
-      const state = document.querySelector(".log-state")?.textContent ?? "";
-      const exitLines = Array.from(document.querySelectorAll(".log-line.exit pre")).map((node) => node.textContent ?? "");
-      return state.includes("0") || exitLines.some((text) => text.includes("0"));
+      return Array.from(document.querySelectorAll("button")).some((button) => {
+        return /(继续设置|Continue to Options)/.test(button.textContent ?? "") && !button.disabled;
+      });
     },
     undefined,
     { timeout: 10000 },

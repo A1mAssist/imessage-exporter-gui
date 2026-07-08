@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   Database,
   Download,
+  Loader2,
   MessageSquareText,
   RefreshCcw,
   Search,
@@ -30,6 +31,8 @@ export function OnboardingDialog({
   config,
   diagnosticsSucceeded,
   diagnosticsBlockers,
+  choosingBackup,
+  startingDiagnostics,
   onChooseBackup,
   onRunDiagnostics,
   onClose,
@@ -39,6 +42,8 @@ export function OnboardingDialog({
   config: ExportConfig;
   diagnosticsSucceeded: boolean;
   diagnosticsBlockers: string[];
+  choosingBackup?: boolean;
+  startingDiagnostics?: boolean;
   onChooseBackup: () => void;
   onRunDiagnostics: () => void;
   onClose: () => void;
@@ -92,8 +97,8 @@ export function OnboardingDialog({
           ))}
         </div>
         <div className="oobe-actions" aria-label="首次设置操作">
-          <button className="ghost-button" type="button" onClick={onChooseBackup}>
-            <Database size={15} />
+          <button className="ghost-button" type="button" onClick={onChooseBackup} disabled={choosingBackup} aria-busy={choosingBackup || undefined}>
+            {choosingBackup ? <Loader2 className="spin" size={15} /> : <Database size={15} />}
             选择备份
           </button>
           <button
@@ -103,9 +108,10 @@ export function OnboardingDialog({
               onRunDiagnostics();
               onClose();
             }}
-            disabled={!canRunDiagnostics}
+            disabled={!canRunDiagnostics || startingDiagnostics}
+            aria-busy={startingDiagnostics || undefined}
           >
-            <Search size={15} />
+            {startingDiagnostics ? <Loader2 className="spin" size={15} /> : <Search size={15} />}
             运行诊断
           </button>
         </div>
@@ -237,6 +243,7 @@ export function AboutDialog({
 export function EnvironmentDialog({
   environment,
   settingsSaveState,
+  refreshingEnvironment,
   onRefresh,
   onClearSettings,
   onOpenResource,
@@ -245,6 +252,7 @@ export function EnvironmentDialog({
 }: {
   environment?: EnvironmentStatus;
   settingsSaveState: SettingsSaveState;
+  refreshingEnvironment?: boolean;
   onRefresh: () => void;
   onClearSettings: () => void;
   onOpenResource: (file: "license" | "thirdPartyNotices") => void;
@@ -280,8 +288,8 @@ export function EnvironmentDialog({
             <Fact label="兼容状态" value={exporterCompatibilityLabel(environment)} />
           </div>
           <div className="panel-actions">
-            <button className="ghost-button" type="button" onClick={onRefresh}>
-              <RefreshCcw size={15} />
+            <button className="ghost-button" type="button" onClick={onRefresh} disabled={refreshingEnvironment} aria-busy={refreshingEnvironment || undefined}>
+              {refreshingEnvironment ? <Loader2 className="spin" size={15} /> : <RefreshCcw size={15} />}
               重新检测
             </button>
           </div>

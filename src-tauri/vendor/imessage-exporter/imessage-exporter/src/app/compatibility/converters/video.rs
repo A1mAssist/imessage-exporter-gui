@@ -4,13 +4,14 @@
 
 use std::{
     ffi::OsStr,
+    fs::{remove_file, rename},
     path::{Path, PathBuf},
 };
 
 use imessage_database::tables::attachment::MediaType;
 
 use crate::app::compatibility::{
-    converters::common::{copy_raw, ensure_output_dir, run_command},
+    converters::common::{copy_raw, ensure_output_dir, partial_path, run_command},
     models::{Converter, HardwareEncoder, VideoConverter, VideoType},
 };
 
@@ -97,16 +98,19 @@ fn convert_mov(
     hardware_encoder: Option<&HardwareEncoder>,
 ) -> Option<()> {
     ensure_output_dir(to)?;
+    let temp_path = partial_path(to);
+    let _ = remove_file(&temp_path);
 
     // First, try remuxing into MP4 container without re-encoding
-    let remux_args = build_remux_args(from, to);
+    let remux_args = build_remux_args(from, &temp_path);
     if run_command(converter.name(), remux_args).is_some() {
-        return Some(());
+        return rename(temp_path, to).ok();
     }
+    let _ = remove_file(&temp_path);
 
     // Remux failed; fallback to re-encoding
-    let encode_args = build_encode_args(from, to, hardware_encoder);
-    run_command(converter.name(), encode_args)
+    let encode_args = build_encode_args(from, &temp_path, hardware_encoder);
+    run_command(converter.name(), encode_args).and_then(|_| rename(temp_path, to).ok())
 }
 
 #[cfg(test)]
