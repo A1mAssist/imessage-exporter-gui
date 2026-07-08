@@ -6,15 +6,17 @@ import { check, type DownloadEvent, type Update } from "@tauri-apps/plugin-updat
 import type {
   AppDiagnostics,
   BackupCandidate,
-  CommandPreview,
   ConversationCandidate,
+  DiagnosticDetails,
   EnvironmentStatus,
   ExportConfig,
   ExportFormat,
   ExportPathStatus,
+  JsonlSearchMatch,
   JobEvent,
   JobStarted,
   SourceConfig,
+  SourceInspection,
   UpdateInfo,
 } from "../types";
 
@@ -22,8 +24,9 @@ type Unlisten = () => void;
 
 const mockListeners = new Set<(event: JobEvent) => void>();
 const mockTimers = new Map<string, number[]>();
+const deletedMockInterruptedExports = new Set<string>();
 let pendingUpdate: Update | null = null;
-type MockLine = string | { kind: JobEvent["kind"]; text: string };
+type MockLine = string | { kind: Exclude<JobEvent["kind"], "progress">; text: string };
 
 function usingMockApi() {
   if (typeof window === "undefined") return false;
@@ -74,15 +77,25 @@ export function scanIosBackups() {
   return invoke<BackupCandidate[]>("scan_ios_backups");
 }
 
-export function scanConversations(backupPath: string) {
+export function scanConversations(source: SourceConfig) {
   if (usingMockApi()) {
     try {
-      return Promise.resolve(mockConversations(backupPath));
+      return Promise.resolve(mockConversations(source.backupPath));
     } catch (err) {
       return Promise.reject(err);
     }
   }
-  return invoke<ConversationCandidate[]>("scan_conversations", { backupPath });
+  return invoke<ConversationCandidate[]>("scan_conversations", { source });
+}
+
+export function inspectSource(source: SourceConfig) {
+  if (usingMockApi()) return Promise.resolve(mockSourceInspection(source));
+  return invoke<SourceInspection>("inspect_source", { source });
+}
+
+export function inspectDiagnostics(source: SourceConfig) {
+  if (usingMockApi()) return Promise.resolve(mockDiagnosticDetails());
+  return invoke<DiagnosticDetails>("inspect_diagnostics", { source });
 }
 
 export function validateBackupPath(path: string) {
@@ -152,14 +165,18 @@ export function openResourceFile(file: ResourceFile) {
   return invoke<void>("open_resource_file", { file });
 }
 
-export function previewExportCommand(config: ExportConfig) {
-  if (usingMockApi()) return Promise.resolve(mockPreview(config));
-  return invoke<CommandPreview>("preview_export_command", { config });
-}
-
 export function inspectExportPath(path: string) {
   if (usingMockApi()) return Promise.resolve(mockExportPathStatus(path));
   return invoke<ExportPathStatus>("inspect_export_path", { path });
+}
+
+export function deleteInterruptedExport(path: string) {
+  if (usingMockApi()) {
+    console.info("[mock] delete interrupted export", path);
+    deletedMockInterruptedExports.add(path);
+    return Promise.resolve();
+  }
+  return invoke<void>("delete_interrupted_export", { path });
 }
 
 export function onJobEvent(handler: (event: JobEvent) => void) {
@@ -172,16 +189,31 @@ export function onJobEvent(handler: (event: JobEvent) => void) {
   return listen<JobEvent>("job:event", (event) => handler(event.payload));
 }
 
-export async function pickDirectory(defaultPath?: string, purpose: "backup" | "export" = "backup"): Promise<string | undefined> {
+export function onAppQuitBlocked(handler: () => void) {
+  if (usingMockApi()) return Promise.resolve(() => {});
+  return listen("app:quit-blocked", () => handler());
+}
+
+export async function pickDirectory(defaultPath?: string, purpose: "backup" | "export" | "sourceFile" | "attachmentRoot" | "contactsFile" = "backup"): Promise<string | undefined> {
   if (usingMockApi()) {
+    if (purpose === "sourceFile") return "C:\\Users\\A1mAssist\\Library\\Messages\\chat.db";
+    if (purpose === "attachmentRoot") return "C:\\Users\\A1mAssist\\Library\\Messages";
+    if (purpose === "contactsFile") return "C:\\Users\\A1mAssist\\Library\\Application Support\\AddressBook\\Sources\\demo\\AddressBook-v22.abcddb";
     if (purpose === "export") return "C:\\Users\\A1mAssist\\Documents\\Messages Export";
     return defaultPath || "C:\\Users\\A1mAssist\\Apple\\MobileSync\\Backup\\00008110-demo";
   }
 
+  const fileFilters =
+    purpose === "sourceFile"
+      ? [{ name: "Messages database", extensions: ["db"] }]
+      : purpose === "contactsFile"
+        ? [{ name: "Contacts database", extensions: ["abcddb", "sqlitedb", "db"] }]
+        : undefined;
   const selected = await open({
-    directory: true,
+    directory: purpose !== "sourceFile" && purpose !== "contactsFile",
     multiple: false,
     defaultPath,
+    filters: fileFilters,
   });
   return typeof selected === "string" ? selected : undefined;
 }
@@ -195,6 +227,15 @@ function mockExportPathStatus(path: string): ExportPathStatus {
   const collidesWithGeneratedArchive = params.has("archiveCollision") && looksLikeGeneratedArchive && !generatedArchiveMatch?.[1];
   const exists = looksLikeExport && (!looksLikeGeneratedArchive || collidesWithGeneratedArchive);
   const parentExists = /^[a-z]:\//.test(normalized) || normalized.startsWith("/");
+  const interruptedExports =
+    params.has("partialExport") && looksLikeExport
+      ? [`C:\\Users\\A1mAssist\\Documents\\.imessage-exporter-gui-Messages Export-demo.partial`]
+      : [];
+  const visibleInterruptedExports = interruptedExports.filter((partial) => !deletedMockInterruptedExports.has(partial));
+  if (visibleInterruptedExports.length !== interruptedExports.length) {
+    interruptedExports.length = 0;
+    interruptedExports.push(...visibleInterruptedExports);
+  }
   return {
     path,
     exists,
@@ -207,9 +248,11 @@ function mockExportPathStatus(path: string): ExportPathStatus {
     containsHtml: exists,
     containsTxt: false,
     containsAttachments: exists,
-    warnings: exists
-      ? ["输出目录已有 3 个项目，导出结果可能会与旧文件混在一起。", "检测到疑似旧导出文件，建议选择一个新的空目录。"]
-      : [],
+    interruptedExports: visibleInterruptedExports,
+    warnings: [
+      ...(exists ? ["输出目录已有 3 个项目，导出结果可能会与旧文件混在一起。", "检测到疑似旧导出文件，建议选择一个新的空目录。"] : []),
+      ...interruptedExports.map((partial) => `检测到上次未完成的临时导出目录：${partial}。`),
+    ],
   };
 }
 
@@ -228,6 +271,11 @@ function mockEnvironment(): EnvironmentStatus {
     ],
     warnings: ["Mock 模式：未调用真实内置导出引擎。basic/full 附件转换仍会显示依赖提示。"],
   };
+}
+
+export function searchJsonlResult(exportPath: string, query: string, limit = 20) {
+  if (usingMockApi()) return Promise.resolve(mockJsonlMatches(query, limit));
+  return invoke<JsonlSearchMatch[]>("search_jsonl_result", { exportPath, query, limit });
 }
 
 function mockAppDiagnostics(): AppDiagnostics {
@@ -290,7 +338,8 @@ function mockConversations(_backupPath: string): ConversationCandidate[] {
 
   return [
     {
-      id: "chat-42",
+      id: "42",
+      chatIds: [42, 43],
       title: "家庭群",
       subtitle: "+15551230001、+15551230002、mom@example.com",
       filterValue: "chat-42",
@@ -300,7 +349,8 @@ function mockConversations(_backupPath: string): ConversationCandidate[] {
       isGroup: true,
     },
     {
-      id: "chat-17",
+      id: "17",
+      chatIds: [17],
       title: "Alex Chen",
       subtitle: "+15551234567",
       filterValue: "+15551234567",
@@ -310,7 +360,19 @@ function mockConversations(_backupPath: string): ConversationCandidate[] {
       isGroup: false,
     },
     {
-      id: "chat-8",
+      id: "18",
+      chatIds: [18, 19],
+      title: "Merged Caller",
+      subtitle: "+15551230001",
+      filterValue: "+15551230001",
+      service: "iMessage + SMS",
+      messageCount: 269795,
+      lastMessageAt: "2026-07-07T08:00:00Z",
+      isGroup: false,
+    },
+    {
+      id: "8",
+      chatIds: [8],
       title: "Bank Alerts",
       subtitle: "alerts@example.com",
       filterValue: "alerts@example.com",
@@ -323,23 +385,7 @@ function mockConversations(_backupPath: string): ConversationCandidate[] {
 }
 
 function startMockDiagnostics(source: SourceConfig): Promise<JobStarted> {
-  const preview = mockPreview({
-    ...source,
-    exportPath: "diagnostics",
-    format: "html",
-    copyMethod: "disabled",
-  });
-  preview.redacted = [
-    "imessage-exporter",
-    "-d",
-    "-p",
-    quote(source.backupPath),
-    "-a",
-    "iOS",
-    "--no-progress",
-    ...(source.encrypted ? ["--cleartext-password", "[redacted]"] : []),
-  ].join(" ");
-  const job = mockJob(preview, [
+  const job = mockJob([
     "iMessage Database Diagnostics",
     "Message diagnostic data: Total messages: 128482",
     "Attachment diagnostic data: Total attachments: 9421",
@@ -352,19 +398,20 @@ function startMockDiagnostics(source: SourceConfig): Promise<JobStarted> {
 function startMockExport(config: ExportConfig): Promise<JobStarted> {
   const failure = mockFailureScenario();
   if (failure) {
-    return Promise.resolve(mockJob(mockPreview(config), failure.lines, failure.code));
+    return Promise.resolve(mockJob(failure.lines, failure.code));
   }
+  const copyMethod = config.format === "html" ? config.copyMethod : "disabled";
 
   return Promise.resolve(
-    mockJob(mockPreview(config), [
+    mockJob([
       "Building cache...",
       "  [1/5] Caching chats...",
       "  [2/5] Caching chatrooms...",
       "  [3/5] Caching participants...",
       `Exporting 42 conversations as ${config.format.toUpperCase()}...`,
-      `Copied attachments with ${config.copyMethod} strategy.`,
+      `Copied attachments with ${copyMethod} strategy.`,
       `Export complete: ${config.exportPath}`,
-    ]),
+    ], 0, 1000),
   );
 }
 
@@ -409,7 +456,7 @@ function mockFailureScenario(): { code: number; lines: MockLine[] } | undefined 
   return undefined;
 }
 
-function mockJob(preview: CommandPreview, lines: MockLine[], exitCode = 0): JobStarted {
+function mockJob(lines: MockLine[], exitCode = 0, progressTotal = 0): JobStarted {
   const jobId = `mock-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const timers: number[] = [];
   mockTimers.set(jobId, timers);
@@ -422,6 +469,15 @@ function mockJob(preview: CommandPreview, lines: MockLine[], exitCode = 0): JobS
       }, 300 + index * 420),
     );
   });
+  if (progressTotal > 0) {
+    for (let current = 0; current <= progressTotal; current += 100) {
+      timers.push(
+        window.setTimeout(() => {
+          emitMock({ jobId, kind: "progress", current, total: progressTotal });
+        }, 1300 + current * 1.5),
+      );
+    }
+  }
   timers.push(
     window.setTimeout(() => {
       emitMock({ jobId, kind: "exit", code: exitCode });
@@ -429,7 +485,78 @@ function mockJob(preview: CommandPreview, lines: MockLine[], exitCode = 0): JobS
     }, 450 + lines.length * 420),
   );
 
-  return { jobId, preview };
+  return { jobId };
+}
+
+function mockSourceInspection(source: SourceConfig): SourceInspection {
+  const params = new URLSearchParams(window.location.search);
+  if (params.has("sourceNotReady")) {
+    return {
+      ready: false,
+      databaseReadable: false,
+      encrypted: source.encrypted,
+      warnings: [],
+      error: "无法读取 Messages 数据库，备份可能不完整或密码不正确",
+    };
+  }
+  return {
+    ready: true,
+    databaseReadable: true,
+    encrypted: source.encrypted,
+    deviceName: "A1mAssist 的 iPhone",
+    productVersion: source.encrypted ? "18.5" : undefined,
+    messageCount: 128482,
+    chatCount: 421,
+    attachmentCount: 9421,
+    attachmentBytes: 18 * 1024 * 1024 * 1024,
+    warnings: [],
+  };
+}
+
+function mockDiagnosticDetails(): DiagnosticDetails {
+  return {
+    handles: {
+      totalHandles: 426,
+      handlesWithMultipleIds: 18,
+      totalDuplicated: 24,
+    },
+    messages: {
+      totalMessages: 128482,
+      messagesWithoutChat: 0,
+      messagesInMultipleChats: 0,
+      recoverableMessages: 12,
+    },
+    attachments: {
+      totalAttachments: 9421,
+      totalBytesReferenced: 18 * 1024 * 1024 * 1024,
+      totalBytesOnDisk: 17.6 * 1024 * 1024 * 1024,
+      missingFiles: 7,
+      noPathProvided: 2,
+      noFileLocated: 5,
+      missingPercent: 0.07,
+    },
+    chats: {
+      totalChats: 421,
+      totalDuplicated: 28,
+      chatsWithNoHandles: 0,
+    },
+    contacts: {
+      resolvedNames: 318,
+      totalParticipants: 402,
+    },
+    databaseBytes: 980 * 1024 * 1024,
+    warnings: [],
+  };
+}
+
+function mockJsonlMatches(query: string, limit: number): JsonlSearchMatch[] {
+  const rows = [
+    { lineNumber: 1, preview: '{"type":"message","sender":"Alex Chen","text":"Dinner at 7?"}' },
+    { lineNumber: 2, preview: '{"type":"message","sender":"Me","text":"Yes, see you there."}' },
+    { lineNumber: 3, preview: '{"type":"attachment","filename":"IMG_2042.HEIC","mime":"image/heic"}' },
+  ];
+  const needle = query.trim().toLowerCase();
+  return rows.filter((row) => !needle || row.preview.toLowerCase().includes(needle)).slice(0, limit);
 }
 
 function cancelMockJob(jobId: string) {
@@ -441,39 +568,4 @@ function cancelMockJob(jobId: string) {
 function emitMock(event: Omit<JobEvent, "timestamp">) {
   const payload = { ...event, timestamp: Date.now() } as JobEvent;
   for (const listener of mockListeners) listener(payload);
-}
-
-function mockPreview(config: ExportConfig): CommandPreview {
-  const args = [
-    "-p",
-    config.backupPath,
-    "-a",
-    "iOS",
-    "-o",
-    config.exportPath,
-    "-f",
-    config.format,
-    "-c",
-    config.copyMethod,
-    "--no-progress",
-  ];
-
-  if (config.encrypted) args.push("--cleartext-password", "[redacted]");
-  if (config.startDate) args.push("-s", config.startDate);
-  if (config.endDate) args.push("-e", config.endDate);
-  if (config.conversationFilter) args.push("-t", config.conversationFilter);
-  if (config.format === "html" && config.noLazy) args.push("-l");
-  if (config.customName) args.push("-m", config.customName);
-  if (config.useCallerId) args.push("-i");
-  if (config.ignoreDiskWarning) args.push("-b");
-
-  return {
-    executable: "built-in imessage-exporter",
-    args,
-    redacted: ["built-in imessage-exporter", ...args.map(quote)].join(" "),
-  };
-}
-
-function quote(value: string) {
-  return /\s/.test(value) ? `"${value.replace(/"/g, "\\\"")}"` : value;
 }

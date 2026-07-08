@@ -87,7 +87,7 @@ impl AttachmentTarget {
     ) -> Option<(PathBuf, Option<MediaType<'static>>)> {
         // A raw copy keeps the source extension, or no extension for a directory.
         let candidate = self.raw_path(attachment);
-        if candidate.exists() {
+        if self.complete_existing_raw_copy(&candidate) {
             return Some((candidate, None));
         }
 
@@ -96,12 +96,28 @@ impl AttachmentTarget {
         let mime_type = attachment.mime_type();
         for &ext in conversion_output_extensions(&mime_type) {
             let converted = candidate.with_extension(ext);
-            if converted.exists() {
+            if converted.is_file() {
                 return Some((converted, converted_media_type(&mime_type, ext)));
             }
         }
 
         None
+    }
+
+    fn complete_existing_raw_copy(&self, candidate: &Path) -> bool {
+        if !candidate.exists() {
+            return false;
+        }
+        if self.source_is_dir {
+            return candidate.is_dir();
+        }
+        let Ok(source) = self.source.metadata() else {
+            return false;
+        };
+        let Ok(copy) = candidate.metadata() else {
+            return false;
+        };
+        copy.is_file() && copy.len() == source.len()
     }
 }
 

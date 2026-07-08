@@ -27,6 +27,7 @@ use crate::{
     },
     exporters::shared::{
         attachment::prepare_attachment,
+        checkpoint::{ExportCheckpoint, remove_checkpoint, save_checkpoint},
         driver::ExportState,
         message::MessageContext,
         part::{AttachmentResolver, resolve_run},
@@ -54,7 +55,18 @@ impl<'a> JSONL<'a> {
             self.config.options.export_path.display(),
         );
 
-        let mut current_message_row = -1;
+        let mut current_message_row = self
+            .state
+            .checkpoint
+            .as_ref()
+            .map(|checkpoint| checkpoint.last_rowid)
+            .unwrap_or(-1);
+        let resume_completed = self
+            .state
+            .checkpoint
+            .as_ref()
+            .map(|checkpoint| checkpoint.completed)
+            .unwrap_or(0);
         let mut current_message = 0;
         let mut failures: u64 = 0;
         let total_messages = Message::get_count(
@@ -62,6 +74,10 @@ impl<'a> JSONL<'a> {
             &self.config.options.query_context,
         )?;
         self.state.pb.start(total_messages);
+        self.state.pb.set_position(resume_completed);
+        if resume_completed > 0 {
+            eprintln!("Resuming export at message {resume_completed} of {total_messages}...");
+        }
 
         let mut statement = Message::stream_rows(
             self.config.data_source.db(),
@@ -72,11 +88,16 @@ impl<'a> JSONL<'a> {
             self.config.check_cancelled()?;
             let mut msg = message?;
 
-            if msg.rowid == current_message_row {
+            if current_message < resume_completed {
+                current_message += 1;
+                continue;
+            }
+
+            if i64::from(msg.rowid) == current_message_row {
                 self.advance_progress(&mut current_message);
                 continue;
             }
-            current_message_row = msg.rowid;
+            current_message_row = i64::from(msg.rowid);
 
             if let Err(why) = self.write_message(&mut msg) {
                 failures += 1;
@@ -87,15 +108,22 @@ impl<'a> JSONL<'a> {
             }
 
             self.advance_progress(&mut current_message);
+            if ExportCheckpoint::should_update(current_message) {
+                self.persist_checkpoint(current_message, current_message_row)?;
+            }
         }
         self.state.pb.finish();
-        self.config.check_cancelled()?;
+        if self.config.check_cancelled().is_err() {
+            self.persist_checkpoint(current_message, current_message_row)?;
+            return Err(RuntimeError::Cancelled);
+        }
 
         if failures > 0 {
             eprintln!("{failures} messages skipped due to JSONL export errors.");
         }
 
         self.flush_all()?;
+        remove_checkpoint(&self.config.options.export_path)?;
         Ok(())
     }
 
@@ -362,9 +390,7 @@ impl<'a> JSONL<'a> {
 
     fn advance_progress(&self, current_message: &mut u64) {
         *current_message += 1;
-        if current_message.is_multiple_of(99) {
-            self.state.pb.set_position(*current_message);
-        }
+        self.state.pb.set_position(*current_message);
     }
 
     fn flush_all(&mut self) -> Result<(), RuntimeError> {
@@ -373,6 +399,24 @@ impl<'a> JSONL<'a> {
         }
         self.state.orphaned.flush()?;
         Ok(())
+    }
+
+    fn persist_checkpoint(
+        &mut self,
+        current_message: u64,
+        current_message_row: i64,
+    ) -> Result<(), RuntimeError> {
+        let fingerprint = self.config.options.resume_fingerprint.clone();
+        save_checkpoint(
+            &self.config.options.export_path,
+            "jsonl",
+            fingerprint.as_deref(),
+            current_message,
+            current_message_row,
+            &mut self.state.files,
+            &mut self.state.orphaned,
+            "orphaned.jsonl",
+        )
     }
 }
 
@@ -383,11 +427,16 @@ fn get_or_create_jsonl_file_for<'a, 'b>(
     match writer.config.conversation(message) {
         Some((chatroom, _)) => {
             let chatroom_rowid = chatroom.rowid;
-            let filename = match writer.state.route.get(&chatroom_rowid) {
+            let route_id = *writer
+                .config
+                .real_chatrooms
+                .get(&chatroom_rowid)
+                .unwrap_or(&chatroom_rowid);
+            let filename = match writer.state.route.get(&route_id) {
                 Some(name) => name.clone(),
                 None => {
                     let name = writer.config.filename(chatroom);
-                    writer.state.route.insert(chatroom_rowid, name.clone());
+                    writer.state.route.insert(route_id, name.clone());
                     name
                 }
             };
@@ -639,9 +688,11 @@ mod tests {
     };
     use imessage_database::{
         message_types::text_effects::text_effect::TextEffect,
+        tables::chat::Chat,
         tables::messages::models::{AttributedRange, BubbleComponent},
     };
     use serde_json::Value;
+    use std::fs;
 
     #[test]
     fn can_create() {
@@ -697,5 +748,52 @@ mod tests {
         let parsed: Value = serde_json::from_str(&line).unwrap();
 
         assert_eq!(parsed["guid"], "json-guid");
+    }
+
+    #[test]
+    fn jsonl_routes_merged_chats_to_one_file() {
+        let mut options = Options::fake_options(ExportType::Jsonl);
+        let root = std::env::temp_dir().join(format!(
+            "imessage-exporter-jsonl-route-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        options.export_path = root.clone();
+        let mut config = Config::fake_app(options);
+        config.chatrooms.insert(
+            1,
+            Chat {
+                rowid: 1,
+                chat_identifier: "+15551230001".to_string(),
+                service_name: Some("iMessage".to_string()),
+                display_name: None,
+            },
+        );
+        config.chatrooms.insert(
+            2,
+            Chat {
+                rowid: 2,
+                chat_identifier: "+15551230001".to_string(),
+                service_name: Some("SMS".to_string()),
+                display_name: None,
+            },
+        );
+        config.real_chatrooms.insert(1, 1);
+        config.real_chatrooms.insert(2, 1);
+
+        let mut exporter = JSONL::new(&config).unwrap();
+        let mut first = Config::fake_message();
+        first.chat_id = Some(1);
+        let mut second = Config::fake_message();
+        second.chat_id = Some(2);
+
+        super::get_or_create_jsonl_file_for(&mut exporter, &first).unwrap();
+        super::get_or_create_jsonl_file_for(&mut exporter, &second).unwrap();
+
+        assert_eq!(exporter.state.files.len(), 1);
+        fs::remove_dir_all(root).unwrap();
     }
 }

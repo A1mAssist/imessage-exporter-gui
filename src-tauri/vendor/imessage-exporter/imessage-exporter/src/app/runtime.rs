@@ -31,8 +31,12 @@ use imessage_database::{
 use crate::{
     CancellationToken, HTML, JSONL, NoopCancellationToken, TXT,
     app::{
-        compatibility::attachment_manager::AttachmentManagerMode, contacts::Name,
-        data_source::DataSource, error::RuntimeError, export_type::ExportType, options::Options,
+        compatibility::attachment_manager::AttachmentManagerMode,
+        contacts::Name,
+        data_source::DataSource,
+        error::RuntimeError,
+        export_type::ExportType,
+        options::{FilenameMode, Options},
         sanitizers::sanitize_filename,
     },
     exporters::shared::driver::run_export,
@@ -40,6 +44,29 @@ use crate::{
 
 // Maximum filename length before accounting for the export path.
 const MAX_LENGTH: usize = 235;
+
+fn filename_stem(value: &str, max_len: usize) -> String {
+    let truncated_len = value.floor_char_boundary(min(max_len, value.len()));
+    value[..truncated_len].to_string()
+}
+
+fn canonical_chatroom_participants(
+    chatroom_participants: &HashMap<i32, BTreeSet<i32>>,
+    real_participants: &HashMap<i32, i32>,
+) -> HashMap<i32, BTreeSet<i32>> {
+    chatroom_participants
+        .iter()
+        .map(|(chat_id, participants)| {
+            (
+                *chat_id,
+                participants
+                    .iter()
+                    .map(|id| real_participants.get(id).copied().unwrap_or(*id))
+                    .collect(),
+            )
+        })
+        .collect()
+}
 
 // MARK: Config
 /// Cached application state used during export.
@@ -106,8 +133,35 @@ impl Config {
     /// Return the export attachment directory.
     pub fn attachment_path(&self) -> PathBuf {
         let mut path = self.options.export_path.clone();
+        if self.uses_per_chat_html_dirs() {
+            return path;
+        }
         path.push(ATTACHMENTS_DIR);
         path
+    }
+
+    pub(crate) fn uses_per_chat_html_dirs(&self) -> bool {
+        matches!(self.options.export_type, Some(ExportType::Html))
+            && !matches!(
+                self.options.attachment_manager.mode,
+                AttachmentManagerMode::Disabled
+            )
+    }
+
+    pub(crate) fn conversation_dir_name(&self, chatroom: &Chat) -> String {
+        let filename = self.filename(chatroom);
+        filename
+            .strip_suffix(".html")
+            .unwrap_or(&filename)
+            .to_string()
+    }
+
+    pub(crate) fn output_filename(&self, chatroom: &Chat) -> String {
+        let filename = self.filename(chatroom);
+        if self.uses_per_chat_html_dirs() {
+            return format!("{}/{filename}", self.conversation_dir_name(chatroom));
+        }
+        filename
     }
 
     /// Return the per-conversation attachment directory name.
@@ -115,7 +169,19 @@ impl Config {
         if let Some(chat_id) = chat_id
             && let Some(real_id) = self.real_chatrooms.get(&chat_id)
         {
+            if self.uses_per_chat_html_dirs()
+                && let Some(chatroom) = self.chatrooms.get(&chat_id)
+            {
+                return format!(
+                    "{}/{}",
+                    self.conversation_dir_name(chatroom),
+                    ATTACHMENTS_DIR
+                );
+            }
             return real_id.to_string();
+        }
+        if self.uses_per_chat_html_dirs() {
+            return format!("{ORPHANED}/{ATTACHMENTS_DIR}");
         }
         String::from(ORPHANED)
     }
@@ -128,7 +194,15 @@ impl Config {
         match &attachment.copied_path {
             Some(path) => {
                 if let Ok(relative_path) = path.strip_prefix(&self.options.export_path) {
-                    return relative_path.display().to_string();
+                    if self.uses_per_chat_html_dirs() {
+                        let mut components = relative_path.components();
+                        components.next();
+                        let chat_relative_path = components.as_path();
+                        if !chat_relative_path.as_os_str().is_empty() {
+                            return chat_relative_path.display().to_string().replace('\\', "/");
+                        }
+                    }
+                    return relative_path.display().to_string().replace('\\', "/");
                 }
                 path.display().to_string()
             }
@@ -166,8 +240,33 @@ impl Config {
         // Account for the export path so the full output path stays under the limit.
         let export_path_len = self.options.export_path.as_os_str().len();
         let max_len = MAX_LENGTH.saturating_sub(export_path_len + 1);
+        let chatroom = self.filename_chatroom(chatroom);
 
-        let mut filename = match &chatroom.display_name() {
+        let mut filename = match self.options.filename_mode {
+            FilenameMode::ChatIdentifier => filename_stem(&chatroom.chat_identifier, max_len),
+            FilenameMode::ContactNameWithCallerId => {
+                let contact_name = self.contact_filename_base_stem(chatroom, max_len);
+                let caller_id = filename_stem(&chatroom.chat_identifier, max_len);
+                let combined = if caller_id.is_empty() || caller_id == contact_name {
+                    contact_name
+                } else {
+                    format!("{contact_name} - {caller_id}")
+                };
+                filename_stem(&combined, max_len)
+            }
+            FilenameMode::ContactName => self.contact_filename_stem(chatroom, max_len),
+        };
+
+        // Add the extension to the filename
+        if let Some(export_type) = &self.options.export_type {
+            filename.push_str(export_type.extension());
+        }
+
+        sanitize_filename(&filename)
+    }
+
+    fn contact_filename_stem(&self, chatroom: &Chat, max_len: usize) -> String {
+        match &chatroom.display_name() {
             // If there is a display name, use that
             Some(name) => {
                 let truncated_len = name.floor_char_boundary(min(max_len, name.len()));
@@ -181,8 +280,15 @@ impl Config {
                 )
             }
             // Fallback if there is no name set
+            None => self.contact_filename_base_stem(chatroom, max_len),
+        }
+    }
+
+    fn contact_filename_base_stem(&self, chatroom: &Chat, max_len: usize) -> String {
+        match &chatroom.display_name() {
+            Some(name) => filename_stem(name, max_len),
             None => {
-                if let Some(participants) = self.chatroom_participants.get(&chatroom.rowid) {
+                if let Some(participants) = self.filename_participants(chatroom) {
                     self.filename_from_participants(participants)
                 } else {
                     eprintln!(
@@ -192,14 +298,39 @@ impl Config {
                     chatroom.chat_identifier.clone()
                 }
             }
-        };
-
-        // Add the extension to the filename
-        if let Some(export_type) = &self.options.export_type {
-            filename.push_str(export_type.extension());
         }
+    }
 
-        sanitize_filename(&filename)
+    fn filename_participants(&self, chatroom: &Chat) -> Option<&BTreeSet<i32>> {
+        if let Some(participants) = self.chatroom_participants.get(&chatroom.rowid) {
+            return Some(participants);
+        }
+        let real_id = self.real_chatrooms.get(&chatroom.rowid)?;
+        self.real_chatrooms
+            .iter()
+            .filter(|(_, id)| *id == real_id)
+            .filter_map(|(chat_id, _)| {
+                self.chatroom_participants
+                    .get(chat_id)
+                    .map(|participants| (*chat_id, participants))
+            })
+            .min_by_key(|(chat_id, _)| *chat_id)
+            .map(|(_, participants)| participants)
+    }
+
+    fn filename_chatroom<'a>(&'a self, chatroom: &'a Chat) -> &'a Chat {
+        let Some(real_id) = self.real_chatrooms.get(&chatroom.rowid) else {
+            return chatroom;
+        };
+        self.real_chatrooms
+            .iter()
+            .filter_map(|(chat_id, id)| {
+                (id == real_id)
+                    .then(|| self.chatrooms.get(chat_id))
+                    .flatten()
+            })
+            .min_by_key(|chatroom| chatroom.rowid)
+            .unwrap_or(chatroom)
     }
 
     /// Build a filename from participant names, truncating when needed.
@@ -217,7 +348,7 @@ impl Config {
         let mut out_s = String::with_capacity(max_len);
         for participant_id in participants {
             let participant_details = match self.resolve_participant(*participant_id) {
-                Some(name) => name.details.as_str(),
+                Some(name) => name.get_display_name(),
                 None => UNKNOWN,
             };
 
@@ -274,14 +405,19 @@ impl Config {
         eprintln!("  [2/5] Caching chatrooms...");
         let chatroom_participants = ChatToHandle::cache(data_source.db())?;
         let chat_handle_lookup = ChatToHandle::get_chat_lookup_map(data_source.db())?;
-        let real_chatrooms = ChatToHandle::dedupe(&chatroom_participants, &chat_handle_lookup)?;
 
         if cancellation.is_cancelled() {
             return Err(RuntimeError::Cancelled);
         }
         eprintln!("  [3/5] Caching participants...");
         let participants = Handle::cache(data_source.db())?;
-        let real_participants = Handle::dedupe(&participants);
+        let real_participants = data_source
+            .contacts_index
+            .canonicalize_deduped_handles(&participants, &Handle::dedupe(&participants));
+        let canonical_chatroom_participants =
+            canonical_chatroom_participants(&chatroom_participants, &real_participants);
+        let real_chatrooms =
+            ChatToHandle::dedupe(&canonical_chatroom_participants, &chat_handle_lookup)?;
         let participants_map = data_source
             .contacts_index
             .build_participants_map(&participants, &real_participants);
@@ -692,6 +828,7 @@ impl Config {
             options,
             offset: get_offset(),
             data_source,
+            cancellation: Arc::new(NoopCancellationToken),
         }
     }
 
@@ -754,12 +891,19 @@ impl Config {
 mod filename_tests {
     use crate::{
         Config, Options,
-        app::{contacts::Name, runtime::MAX_LENGTH},
+        app::{
+            contacts::Name,
+            options::FilenameMode,
+            runtime::{MAX_LENGTH, canonical_chatroom_participants},
+        },
     };
 
     use imessage_database::tables::chat::Chat;
 
-    use std::{collections::BTreeSet, path::PathBuf};
+    use std::{
+        collections::{BTreeSet, HashMap},
+        path::PathBuf,
+    };
 
     pub fn fake_chat() -> Chat {
         Chat {
@@ -768,6 +912,18 @@ mod filename_tests {
             service_name: Some(String::new()),
             display_name: None,
         }
+    }
+
+    #[test]
+    fn chatroom_dedupe_uses_canonical_participants() {
+        let chatroom_participants =
+            HashMap::from([(1, BTreeSet::from([10])), (2, BTreeSet::from([11]))]);
+        let real_participants = HashMap::from([(10, 7), (11, 7)]);
+
+        let canonical = canonical_chatroom_participants(&chatroom_participants, &real_participants);
+
+        assert_eq!(canonical.get(&1), Some(&BTreeSet::from([7])));
+        assert_eq!(canonical.get(&2), Some(&BTreeSet::from([7])));
     }
 
     #[test]
@@ -978,6 +1134,124 @@ mod filename_tests {
 
         let filename = app.filename(&chat);
         assert_eq!(filename, "Default.html");
+    }
+
+    #[test]
+    fn can_get_filename_chat_identifier_mode() {
+        let mut options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        options.filename_mode = FilenameMode::ChatIdentifier;
+        let app = Config::fake_app(options);
+
+        let mut chat = fake_chat();
+        chat.chat_identifier = "+1/555:123".to_string();
+
+        let filename = app.filename(&chat);
+        assert_eq!(filename, "+1_555_123.html");
+    }
+
+    #[test]
+    fn can_get_filename_chat_identifier_mode_uses_merged_representative() {
+        let mut options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        options.filename_mode = FilenameMode::ChatIdentifier;
+        let mut app = Config::fake_app(options);
+
+        let mut first = fake_chat();
+        first.rowid = 10;
+        first.chat_identifier = "imessage-id".to_string();
+        let mut second = fake_chat();
+        second.rowid = 20;
+        second.chat_identifier = "sms-id".to_string();
+        app.chatrooms.insert(first.rowid, first);
+        app.chatrooms.insert(second.rowid, second);
+        app.real_chatrooms.insert(10, 0);
+        app.real_chatrooms.insert(20, 0);
+
+        let filename = app.filename(app.chatrooms.get(&20).unwrap());
+        assert_eq!(filename, "imessage-id.html");
+    }
+
+    #[test]
+    fn can_get_filename_contact_name_mode_uses_merged_participants() {
+        let mut options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        options.filename_mode = FilenameMode::ContactName;
+        let mut app = Config::fake_app(options);
+
+        let mut first = fake_chat();
+        first.rowid = 10;
+        first.chat_identifier = "+15551230001".to_string();
+        let mut second = fake_chat();
+        second.rowid = 20;
+        second.chat_identifier = "alex@example.com".to_string();
+        app.chatrooms.insert(first.rowid, first);
+        app.chatrooms.insert(second.rowid, second);
+        app.real_chatrooms.insert(10, 0);
+        app.real_chatrooms.insert(20, 0);
+        app.participants.insert(99, Name::fake_name("Alex"));
+        app.real_participants.insert(99, 99);
+        app.chatroom_participants.insert(20, BTreeSet::from([99]));
+
+        let filename = app.filename(app.chatrooms.get(&10).unwrap());
+
+        assert_eq!(filename, "Alex.html");
+    }
+
+    #[test]
+    fn contact_name_mode_prefers_contact_display_name_over_handle_details() {
+        let mut options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        options.filename_mode = FilenameMode::ContactName;
+        let mut app = Config::fake_app(options);
+
+        let mut chat = fake_chat();
+        chat.chat_identifier = "+15551230001".to_string();
+        app.chatroom_participants
+            .insert(chat.rowid, BTreeSet::from([10]));
+        app.real_participants.insert(10, 10);
+        app.participants.insert(
+            10,
+            Name {
+                first: "Alex".to_string(),
+                last: "Chen".to_string(),
+                full: "Alex Chen".to_string(),
+                details: "+15551230001".to_string(),
+                handle_ids: BTreeSet::from([10]).into_iter().collect(),
+                contact_key: Some("ios:1".to_string()),
+            },
+        );
+
+        let filename = app.filename(&chat);
+
+        assert_eq!(filename, "Alex Chen.html");
+    }
+
+    #[test]
+    fn can_get_filename_contact_name_with_caller_id_mode() {
+        let mut options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        options.filename_mode = FilenameMode::ContactNameWithCallerId;
+        let mut app = Config::fake_app(options);
+
+        let mut chat = fake_chat();
+        chat.chat_identifier = "+1/555:123".to_string();
+        app.participants.insert(10, Name::fake_name("Alex"));
+        app.real_participants.insert(10, 10);
+        app.chatroom_participants
+            .insert(chat.rowid, BTreeSet::from([10]));
+
+        let filename = app.filename(&chat);
+        assert_eq!(filename, "Alex - +1_555_123.html");
+    }
+
+    #[test]
+    fn contact_name_with_caller_id_mode_does_not_add_group_rowid() {
+        let mut options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        options.filename_mode = FilenameMode::ContactNameWithCallerId;
+        let app = Config::fake_app(options);
+
+        let mut chat = fake_chat();
+        chat.display_name = Some("Family".to_string());
+        chat.chat_identifier = "chat-family".to_string();
+
+        let filename = app.filename(&chat);
+        assert_eq!(filename, "Family - chat-family.html");
     }
 
     #[test]
@@ -1220,7 +1494,13 @@ mod who_tests {
 
 #[cfg(test)]
 mod directory_tests {
-    use crate::{Config, Options};
+    use crate::{
+        Config, Options,
+        app::{
+            compatibility::attachment_manager::{AttachmentManager, AttachmentManagerMode},
+            runtime::filename_tests::fake_chat,
+        },
+    };
     use std::path::PathBuf;
 
     #[test]
@@ -1284,6 +1564,56 @@ mod directory_tests {
         let result = app.message_attachment_path(&attachment);
         let expected = String::from("attachments/d.jpg");
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn html_with_attachments_uses_per_conversation_output_paths() {
+        let mut options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        options.attachment_manager = AttachmentManager::from(AttachmentManagerMode::Clone);
+        options.export_path = PathBuf::from("/Users/ReagentX/exports");
+
+        let mut app = Config::fake_app(options);
+        let chat = fake_chat();
+        app.chatrooms.insert(chat.rowid, chat);
+        app.real_chatrooms.insert(0, 0);
+
+        let chat = app.chatrooms.get(&0).unwrap();
+        assert_eq!(app.output_filename(chat), "Default/Default.html");
+        assert_eq!(
+            app.conversation_attachment_path(Some(0)),
+            "Default/attachments"
+        );
+    }
+
+    #[test]
+    fn html_with_attachments_references_paths_relative_to_chat_file() {
+        let mut options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        options.attachment_manager = AttachmentManager::from(AttachmentManagerMode::Clone);
+        options.export_path = PathBuf::from("/Users/ReagentX/exports");
+
+        let app = Config::fake_app(options);
+        let mut attachment = Config::fake_attachment();
+        attachment.copied_path = Some(PathBuf::from(
+            "/Users/ReagentX/exports/Default/attachments/0.jpg",
+        ));
+
+        assert_eq!(
+            app.message_attachment_path(&attachment),
+            "attachments/0.jpg"
+        );
+    }
+
+    #[test]
+    fn html_with_attachments_keeps_orphaned_attachments_with_orphaned_file() {
+        let mut options = Options::fake_options(crate::app::export_type::ExportType::Html);
+        options.attachment_manager = AttachmentManager::from(AttachmentManagerMode::Clone);
+
+        let app = Config::fake_app(options);
+
+        assert_eq!(
+            app.conversation_attachment_path(None),
+            "orphaned/attachments"
+        );
     }
 
     #[test]

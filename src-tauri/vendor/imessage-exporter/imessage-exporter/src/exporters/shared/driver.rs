@@ -3,7 +3,7 @@ use std::{
         HashMap,
         hash_map::Entry::{Occupied, Vacant},
     },
-    fs::File,
+    fs::{File, create_dir_all},
     io::{BufWriter, IsTerminal, Write, stderr},
 };
 
@@ -18,6 +18,11 @@ use crate::{
     exporters::formatter::{MessageFormatter, RenderContext},
 };
 
+use super::checkpoint::{
+    ExportCheckpoint, load_checkpoint, remove_checkpoint, save_checkpoint,
+    truncate_checkpoint_files,
+};
+
 /// Capacity for each chat file's [`BufWriter`].
 const FILE_BUFFER_CAPACITY: usize = 64 * 1024;
 
@@ -29,12 +34,16 @@ const FILE_BUFFER_CAPACITY: usize = 64 * 1024;
 pub struct ExportState {
     /// One open [`BufWriter`] per resolved chat filename.
     pub files: HashMap<String, BufWriter<File>>,
-    /// Cache each chat's resolved filename by chat rowid
+    /// Cache each resolved chat's filename by deduplicated chat id.
     pub route: HashMap<i32, String>,
     /// Destination for messages that don't have a conversation route.
     pub orphaned: BufWriter<File>,
     /// Drives the on-screen progress indicator.
     pub pb: ExportProgress,
+    /// Matching resumable checkpoint loaded from the export directory.
+    pub checkpoint: Option<ExportCheckpoint>,
+    /// File extension used by this exporter.
+    pub extension: String,
 }
 
 impl ExportState {
@@ -42,7 +51,24 @@ impl ExportState {
     /// `config.options.export_path` with the supplied extension, then build
     /// the empty file cache and progress bar.
     pub fn new(config: &Config, extension: &str) -> Result<Self, RuntimeError> {
+        let checkpoint = if config.options.resume_export {
+            load_checkpoint(
+                &config.options.export_path,
+                extension,
+                config.options.resume_fingerprint.as_deref(),
+            )?
+        } else {
+            None
+        };
+        if let Some(checkpoint) = &checkpoint {
+            truncate_checkpoint_files(&config.options.export_path, checkpoint)?;
+        }
+
         let mut orphaned = config.options.export_path.clone();
+        if config.uses_per_chat_html_dirs() {
+            orphaned.push(ORPHANED);
+            create_dir_all(&orphaned)?;
+        }
         orphaned.push(ORPHANED);
         orphaned.set_extension(extension);
         let file = File::options().append(true).create(true).open(&orphaned)?;
@@ -54,7 +80,16 @@ impl ExportState {
             route: HashMap::new(),
             orphaned: BufWriter::with_capacity(FILE_BUFFER_CAPACITY, file),
             pb: ExportProgress::new(pb_enabled),
+            checkpoint,
+            extension: extension.to_string(),
         })
+    }
+
+    fn checkpoint_completed(&self) -> u64 {
+        self.checkpoint
+            .as_ref()
+            .map(|checkpoint| checkpoint.completed)
+            .unwrap_or(0)
     }
 }
 
@@ -117,15 +152,19 @@ where
     match config.conversation(message) {
         Some((chatroom, _)) => {
             let chatroom_rowid = chatroom.rowid;
+            let route_id = *config
+                .real_chatrooms
+                .get(&chatroom_rowid)
+                .unwrap_or(&chatroom_rowid);
             let state = writer.state_mut();
             // Reuse the chat's filename if we've already resolved it; otherwise
             // compute it once and memoize. `config`/`chatroom` are `&'a` and
             // independent of the `state` borrow.
-            let filename = match state.route.get(&chatroom_rowid) {
+            let filename = match state.route.get(&route_id) {
                 Some(name) => name.clone(),
                 None => {
-                    let name = config.filename(chatroom);
-                    state.route.insert(chatroom_rowid, name.clone());
+                    let name = config.output_filename(chatroom);
+                    state.route.insert(route_id, name.clone());
                     name
                 }
             };
@@ -134,6 +173,9 @@ where
                 Vacant(entry) => {
                     let mut path = config.options.export_path.clone();
                     path.push(entry.key());
+                    if let Some(parent) = path.parent() {
+                        create_dir_all(parent)?;
+                    }
                     // If the file already exists, don't write the headers again.
                     // This can happen if multiple chats use the same group name.
                     let file_exists = path.exists();
@@ -152,9 +194,7 @@ where
 
 fn advance_progress(pb: &ExportProgress, current_message: &mut u64) {
     *current_message += 1;
-    if current_message.is_multiple_of(99) {
-        pb.set_position(*current_message);
-    }
+    pb.set_position(*current_message);
 }
 
 /// Stream every message in the database, dispatching announcements and
@@ -180,9 +220,13 @@ where
         W::LABEL,
     );
 
-    W::write_file_header(&mut writer.state_mut().orphaned)?;
-
-    let mut current_message_row = -1;
+    let mut current_message_row = writer
+        .state()
+        .checkpoint
+        .as_ref()
+        .map(|checkpoint| checkpoint.last_rowid)
+        .unwrap_or(-1);
+    let resume_completed = writer.state().checkpoint_completed();
     let mut current_message = 0;
     let mut failures: u64 = 0;
     let total_messages = Message::get_count(
@@ -190,6 +234,13 @@ where
         &writer.config().options.query_context,
     )?;
     writer.state().pb.start(total_messages);
+    writer.state().pb.set_position(resume_completed);
+
+    if resume_completed > 0 {
+        eprintln!("Resuming export at message {resume_completed} of {total_messages}...");
+    } else {
+        W::write_file_header(&mut writer.state_mut().orphaned)?;
+    }
 
     let mut statement = Message::stream_rows(
         writer.config().data_source.db(),
@@ -204,13 +255,18 @@ where
         writer.config().check_cancelled()?;
         let mut msg = message?;
 
+        if current_message < resume_completed {
+            current_message += 1;
+            continue;
+        }
+
         // Early escape if we try and render the same message GUID twice
         // See https://github.com/ReagentX/imessage-exporter/issues/135
-        if msg.rowid == current_message_row {
+        if i64::from(msg.rowid) == current_message_row {
             advance_progress(&writer.state().pb, &mut current_message);
             continue;
         }
-        current_message_row = msg.rowid;
+        current_message_row = i64::from(msg.rowid);
 
         // Tapbacks, poll votes, and poll updates are rendered in context by
         // their parent messages, never at the top level, so we can skip them here
@@ -245,9 +301,15 @@ where
             }
         }
         advance_progress(&writer.state().pb, &mut current_message);
+        if ExportCheckpoint::should_update(current_message) {
+            persist_checkpoint(writer, current_message, current_message_row)?;
+        }
     }
     writer.state().pb.finish();
-    writer.config().check_cancelled()?;
+    if writer.config().check_cancelled().is_err() {
+        persist_checkpoint(writer, current_message, current_message_row)?;
+        return Err(RuntimeError::Cancelled);
+    }
 
     if failures > 0 {
         eprintln!("{failures} messages skipped due to formatting errors.");
@@ -265,6 +327,37 @@ where
     }
     W::write_file_footer(&mut state.orphaned)?;
     state.orphaned.flush()?;
+    remove_checkpoint(&writer.config().options.export_path)?;
 
     Ok(())
+}
+
+fn persist_checkpoint<'a, W>(
+    writer: &mut W,
+    current_message: u64,
+    current_message_row: i64,
+) -> Result<(), RuntimeError>
+where
+    W: MessageWriter<'a>,
+{
+    let export_path = writer.config().options.export_path.clone();
+    let fingerprint = writer.config().options.resume_fingerprint.clone();
+    let format = writer.state().extension.clone();
+    let orphaned_name = if writer.config().uses_per_chat_html_dirs() {
+        format!("{ORPHANED}/{ORPHANED}.{format}")
+    } else {
+        format!("{ORPHANED}.{format}")
+    };
+    let state = writer.state_mut();
+
+    save_checkpoint(
+        &export_path,
+        &format,
+        fingerprint.as_deref(),
+        current_message,
+        current_message_row,
+        &mut state.files,
+        &mut state.orphaned,
+        &orphaned_name,
+    )
 }

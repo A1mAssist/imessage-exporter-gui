@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
   AlertCircle,
@@ -20,12 +20,12 @@ import {
   Settings2,
   ShieldAlert,
   TerminalSquare,
+  Trash2,
   UserRound,
 } from "lucide-react";
 
 import {
   Badge,
-  CommandBox,
   CopyButton,
   DiagnosticReportActions,
   DiagnosticTile,
@@ -33,7 +33,6 @@ import {
   FooterActions,
   Header,
   JobOutcomeNotice,
-  LogPanel,
   PathField,
   SegmentedControl,
   jobOutcomeLabel,
@@ -44,21 +43,25 @@ import { ConversationPicker, DateRangeField } from "./ExportOptionFields";
 import { compactPath } from "./ShellPanels";
 import { localizeMultiline } from "../i18n";
 import { buildDiagnosticReport } from "../lib/diagnosticReport";
-import { copyMethods, exportFormats } from "../lib/exportConfig";
+import { archiveNameModes, copyMethods, exportFormats, filenameModes } from "../lib/exportConfig";
 import { summarizeDiagnostics } from "../lib/diagnostics";
 import { exportPresets } from "../lib/exportPresets";
 import type { ExportPresetId } from "../lib/exportPresets";
-import { summarizeExportResult } from "../lib/exportSummary";
-import type { ExportSummary } from "../lib/exportSummary";
+import { exportProgress, exportProgressTiming, summarizeExportResult } from "../lib/exportSummary";
+import type { ExportProgress, ExportSummary } from "../lib/exportSummary";
 import type {
   BackupCandidate,
-  CommandPreview,
   ConversationCandidate,
+  DiagnosticDetails,
   EnvironmentStatus,
   ExportConfig,
+  ExportHistoryEntry,
   ExportPathStatus,
   JobStarted,
+  JobProgress,
+  JsonlSearchMatch,
   LogLine,
+  SourceInspection,
 } from "../types";
 
 export function blockingExportPathErrors(status?: ExportPathStatus): string[] {
@@ -71,9 +74,16 @@ export function blockingExportPathErrors(status?: ExportPathStatus): string[] {
 }
 
 export function needsExportPathConfirmation(status?: ExportPathStatus): boolean {
-  if (!status?.exists || !status.isDirectory) return false;
+  if (!status) return false;
+  if (status.interruptedExports.length > 0) return true;
+  if (!status.exists || !status.isDirectory) return false;
   return Boolean((status.entryCount ?? 0) > 0 || status.containsHtml || status.containsTxt || status.containsAttachments);
 }
+
+const sourceKindOptions: Array<{ value: ExportConfig["kind"]; label: string; description: string }> = [
+  { value: "iosBackup", label: "iOS 备份", description: "Apple Devices 或 iTunes 本地备份。" },
+  { value: "macosChatDb", label: "macOS chat.db", description: "直接读取 Messages 的 chat.db 文件。" },
+];
 
 
 export function SourceStep({
@@ -81,8 +91,17 @@ export function SourceStep({
   selectedBackup,
   config,
   environment,
+  sourceInspection,
+  checkingSource,
+  choosingBackup,
+  choosingAttachmentRoot,
+  choosingContactsPath,
+  refreshingEnvironment,
+  startingDiagnostics,
   diagnosticsSucceeded,
   onChooseBackup,
+  onChooseAttachmentRoot,
+  onChooseContactsPath,
   onSelectBackup,
   onChange,
   onClearPassword,
@@ -93,26 +112,37 @@ export function SourceStep({
   selectedBackup?: BackupCandidate;
   config: ExportConfig;
   environment?: EnvironmentStatus;
+  sourceInspection?: SourceInspection;
+  checkingSource: boolean;
+  choosingBackup?: boolean;
+  choosingAttachmentRoot?: boolean;
+  choosingContactsPath?: boolean;
+  refreshingEnvironment?: boolean;
+  startingDiagnostics?: boolean;
   diagnosticsSucceeded: boolean;
   onChooseBackup: () => void;
+  onChooseAttachmentRoot: () => void;
+  onChooseContactsPath: () => void;
   onSelectBackup: (backup: BackupCandidate) => void;
   onChange: (patch: Partial<ExportConfig>) => void;
   onClearPassword: () => void;
   onRunDiagnostics: () => void;
   onRefreshEnvironment: () => void;
 }) {
-  const diagnosticsBlockers = sourceDiagnosticsBlockers(config, selectedBackup, environment);
+  const diagnosticsBlockers = sourceDiagnosticsBlockers(config, selectedBackup, environment, sourceInspection, checkingSource);
   const canRunDiagnostics = diagnosticsBlockers.length === 0;
 
   return (
     <div className="page">
-      <Header eyebrow="数据准备" title="选择 iOS 备份" description="从 Apple Devices 或 iTunes 的本地备份导出 Messages 数据，不修改原始备份。" />
+      <Header eyebrow="数据准备" title={config.kind === "macosChatDb" ? "选择 macOS chat.db" : "选择 iOS 备份"} description="选择 Messages 数据源，不修改原始数据。" />
 
       <FirstRunGuide
         backup={selectedBackup}
         config={config}
         diagnosticsSucceeded={diagnosticsSucceeded}
         diagnosticsBlockers={diagnosticsBlockers}
+        choosingBackup={choosingBackup}
+        startingDiagnostics={startingDiagnostics}
         onChooseBackup={onChooseBackup}
         onRunDiagnostics={onRunDiagnostics}
       />
@@ -121,35 +151,57 @@ export function SourceStep({
         backup={selectedBackup}
         config={config}
         environment={environment}
+        sourceInspection={sourceInspection}
+        checkingSource={checkingSource}
+        refreshing={refreshingEnvironment}
         onRefresh={onRefreshEnvironment}
       />
 
+      <SegmentedControl
+        label="数据源"
+        value={config.kind}
+        options={sourceKindOptions}
+        onChange={(kind) => onChange({ kind, backupPath: "", attachmentRoot: "", contactsPath: "", encrypted: false, cleartextPassword: "", conversationFilter: "", conversationId: undefined, conversationIds: undefined })}
+      />
+
       <div className="toolbar">
-        <PathField label="备份根目录" value={config.backupPath} onBrowse={onChooseBackup} />
+        <PathField label={config.kind === "macosChatDb" ? "chat.db 文件" : "备份根目录"} value={config.backupPath} onBrowse={onChooseBackup} loading={choosingBackup} />
       </div>
 
-      <section className="content-band">
+      {config.kind === "macosChatDb" ? (
+        <section className="content-band form-grid">
+          <PathField label="附件根目录（可选）" value={config.attachmentRoot ?? ""} onBrowse={onChooseAttachmentRoot} loading={choosingAttachmentRoot} />
+          <PathField label="联系人数据库（可选）" value={config.contactsPath ?? ""} onBrowse={onChooseContactsPath} loading={choosingContactsPath} />
+          <p className="muted">chat.db 从别的 Mac 拷出时，可以把 Messages 附件目录和 AddressBook 数据库一并指定给内置引擎。</p>
+        </section>
+      ) : null}
+
+      {config.kind === "iosBackup" ? (
+        <section className="content-band">
         <div className="section-heading">
           <h2>自动发现</h2>
           <p>常见 MobileSync Backup 目录中的候选备份。</p>
         </div>
         <div className="backup-grid">
           {backups.length ? (
-            backups.map((backup) => (
+            backups.map((backup) => {
+              const checkingThisBackup = checkingSource && backup.path === selectedBackup?.path;
+              return (
               <button
                 className={`backup-card ${backup.path === selectedBackup?.path ? "selected" : ""}`}
                 key={backup.path}
                 onClick={() => onSelectBackup(backup)}
                 type="button"
               >
-                <HardDrive size={21} />
+                {checkingThisBackup ? <Loader2 className="spin" size={21} /> : <HardDrive size={21} />}
                 <span>
                   <strong>{backup.displayName}</strong>
                   <small>{backup.path}</small>
                 </span>
                 <Badge tone={backup.valid ? "ok" : "warn"}>{backup.valid ? "有效" : "不完整"}</Badge>
               </button>
-            ))
+              );
+            })
           ) : (
             <div className="empty-state backup-empty-guidance">
               <strong>没有自动发现本机 iOS 备份</strong>
@@ -160,25 +212,38 @@ export function SourceStep({
             </div>
           )}
         </div>
-      </section>
+        </section>
+      ) : null}
 
       <section className="content-band two-columns">
         <div>
           <div className="section-heading">
-            <h2>备份状态</h2>
+            <h2>{config.kind === "macosChatDb" ? "数据库状态" : "备份状态"}</h2>
           </div>
           <div className="fact-list">
-            <Fact label="Manifest.db" value={selectedBackup?.hasManifestDb ? "存在" : "未确认"} />
-            <Fact label="Info.plist" value={selectedBackup?.hasInfoPlist ? "存在" : "未确认"} />
-            <Fact label="加密" value={config.encrypted ? "是" : "否或未知"} />
+            {config.kind === "iosBackup" ? (
+              <>
+                <Fact label="Manifest.db" value={selectedBackup?.hasManifestDb ? "存在" : "未确认"} />
+                <Fact label="Info.plist" value={selectedBackup?.hasInfoPlist ? "存在" : "未确认"} />
+                <Fact label="加密" value={config.encrypted ? "是" : "否或未知"} />
+              </>
+            ) : (
+              <Fact label="chat.db" value={config.backupPath ? "已选择" : "未选择"} />
+            )}
+            <Fact label="Messages DB" value={checkingSource ? "检查中" : sourceInspection?.ready ? "可读取" : sourceInspection?.error ? "不可读取" : "未检查"} />
+            {sourceInspection?.messageCount !== undefined ? <Fact label="消息数" value={sourceInspection.messageCount.toLocaleString()} /> : null}
+            {sourceInspection?.chatCount !== undefined ? <Fact label="会话数" value={sourceInspection.chatCount.toLocaleString()} /> : null}
+            {sourceInspection?.attachmentCount !== undefined ? <Fact label="附件" value={`${sourceInspection.attachmentCount.toLocaleString()} 个 · ${formatBytes(sourceInspection.attachmentBytes ?? 0)}`} /> : null}
           </div>
         </div>
         <div>
-          <label className="checkbox-row">
-            <input type="checkbox" checked={config.encrypted} onChange={(event) => onChange({ encrypted: event.target.checked })} />
-            <span>这是加密 iOS 备份</span>
-          </label>
-          {config.encrypted ? (
+          {config.kind === "iosBackup" ? (
+            <label className="checkbox-row">
+              <input type="checkbox" checked={config.encrypted} onChange={(event) => onChange({ encrypted: event.target.checked })} />
+              <span>这是加密 iOS 备份</span>
+            </label>
+          ) : null}
+          {config.kind === "iosBackup" && config.encrypted ? (
             <div className="password-block">
               <label>
                 <span>备份密码</span>
@@ -204,7 +269,7 @@ export function SourceStep({
               </label>
               <p className="warning-text">
                 <ShieldAlert size={15} />
-                密码只在本次任务中传给内置导出引擎，命令预览和日志会脱敏。
+                密码只在本次任务中传给内置导出引擎，日志会脱敏。
               </p>
             </div>
           ) : null}
@@ -216,6 +281,7 @@ export function SourceStep({
         primaryIcon={<Search size={17} />}
         onPrimary={onRunDiagnostics}
         primaryDisabled={!canRunDiagnostics}
+        primaryLoading={startingDiagnostics || checkingSource}
       />
       {diagnosticsBlockers.length ? (
         <div className="source-blockers" aria-label="诊断前需要处理的问题">
@@ -236,6 +302,8 @@ function FirstRunGuide({
   config,
   diagnosticsSucceeded,
   diagnosticsBlockers,
+  choosingBackup,
+  startingDiagnostics,
   onChooseBackup,
   onRunDiagnostics,
 }: {
@@ -243,20 +311,28 @@ function FirstRunGuide({
   config: ExportConfig;
   diagnosticsSucceeded: boolean;
   diagnosticsBlockers: string[];
+  choosingBackup?: boolean;
+  startingDiagnostics?: boolean;
   onChooseBackup: () => void;
   onRunDiagnostics: () => void;
 }) {
-  const backupReady = Boolean(config.backupPath.trim() && backup?.valid);
+  const sourceReady = config.kind === "macosChatDb" ? Boolean(config.backupPath.trim()) : Boolean(config.backupPath.trim() && backup?.valid);
   const passwordReady = !config.encrypted || Boolean(config.cleartextPassword?.trim());
   const canRunDiagnostics = diagnosticsBlockers.length === 0;
   const items: Array<{ label: string; detail: string; done: boolean; actions: ReactNode }> = [
     {
-      label: "选择 iOS 备份",
-      detail: backupReady ? backup?.displayName ?? "备份目录已就绪" : "选择包含 Manifest.db 和 Info.plist 的 iOS 备份根目录",
-      done: backupReady && passwordReady,
+      label: config.kind === "macosChatDb" ? "选择 macOS chat.db" : "选择 iOS 备份",
+      detail: sourceReady
+        ? config.kind === "macosChatDb"
+          ? "chat.db 已选择"
+          : backup?.displayName ?? "备份目录已就绪"
+        : config.kind === "macosChatDb"
+          ? "选择 Messages 的 chat.db 文件"
+          : "选择包含 Manifest.db 和 Info.plist 的 iOS 备份根目录",
+      done: sourceReady && passwordReady,
       actions: (
-        <button className="ghost-button" type="button" onClick={onChooseBackup}>
-          <Database size={15} />
+        <button className="ghost-button" type="button" onClick={onChooseBackup} disabled={choosingBackup} aria-busy={choosingBackup || undefined}>
+          {choosingBackup ? <Loader2 className="spin" size={15} /> : <Database size={15} />}
           选择
         </button>
       ),
@@ -266,8 +342,8 @@ function FirstRunGuide({
       detail: diagnosticsSucceeded ? "诊断已通过，可以继续设置导出选项" : "确认数据库、附件、联系人和转换器状态",
       done: diagnosticsSucceeded,
       actions: (
-        <button className="ghost-button" type="button" onClick={onRunDiagnostics} disabled={!canRunDiagnostics}>
-          <Search size={15} />
+        <button className="ghost-button" type="button" onClick={onRunDiagnostics} disabled={!canRunDiagnostics || startingDiagnostics} aria-busy={startingDiagnostics || undefined}>
+          {startingDiagnostics ? <Loader2 className="spin" size={15} /> : <Search size={15} />}
           运行
         </button>
       ),
@@ -298,23 +374,33 @@ function FirstRunGuide({
   );
 }
 
-export function sourceDiagnosticsBlockers(config: ExportConfig, backup?: BackupCandidate, environment?: EnvironmentStatus): string[] {
+export function sourceDiagnosticsBlockers(
+  config: ExportConfig,
+  backup?: BackupCandidate,
+  environment?: EnvironmentStatus,
+  sourceInspection?: SourceInspection,
+  checkingSource = false,
+): string[] {
   const blockers: string[] = [];
 
   if (!environment?.exporterAvailable) blockers.push("内置导出引擎暂未就绪，暂时不能运行诊断。");
-  blockers.push(...sourceSelectionBlockers(config, backup));
+  blockers.push(...sourceSelectionBlockers(config, backup, sourceInspection, checkingSource));
   if (config.encrypted && !config.cleartextPassword?.trim()) blockers.push("加密备份需要输入密码。");
 
   return blockers;
 }
 
-export function sourceSelectionBlockers(config: ExportConfig, backup?: BackupCandidate): string[] {
+export function sourceSelectionBlockers(config: ExportConfig, backup?: BackupCandidate, sourceInspection?: SourceInspection, checkingSource = false): string[] {
   const blockers: string[] = [];
 
   if (!config.backupPath.trim()) {
-    blockers.push("请选择 iOS 备份根目录。");
-  } else if (!backup?.valid) {
+    blockers.push(config.kind === "macosChatDb" ? "请选择 macOS chat.db 文件。" : "请选择 iOS 备份根目录。");
+  } else if (config.kind === "iosBackup" && !backup?.valid) {
     blockers.push("备份目录需要同时包含 Manifest.db 和 Info.plist。");
+  } else if (checkingSource) {
+    blockers.push("正在检查 Messages 数据库，请稍候。");
+  } else if (sourceInspection && !sourceInspection.ready) {
+    blockers.push(sourceInspection.error ?? "Messages 数据库暂不可读取。");
   }
 
   return blockers;
@@ -324,11 +410,17 @@ function ReadinessBand({
   backup,
   config,
   environment,
+  sourceInspection,
+  checkingSource,
+  refreshing,
   onRefresh,
 }: {
   backup?: BackupCandidate;
   config: ExportConfig;
   environment?: EnvironmentStatus;
+  sourceInspection?: SourceInspection;
+  checkingSource: boolean;
+  refreshing?: boolean;
   onRefresh: () => void;
 }) {
   const items: Array<{
@@ -340,14 +432,27 @@ function ReadinessBand({
   }> = [
     {
       key: "backup",
-      label: "备份目录",
+      label: config.kind === "macosChatDb" ? "chat.db 文件" : "备份目录",
       detail: !config.backupPath.trim()
         ? "未选择"
-        : backup?.valid
+        : config.kind === "macosChatDb"
+          ? compactPath(config.backupPath)
+          : backup?.valid
           ? backup.displayName
           : "需要包含 Manifest.db 和 Info.plist",
-      tone: !config.backupPath.trim() ? "neutral" : backup?.valid ? "ok" : "warn",
-      icon: backup?.valid ? <CheckCircle2 size={17} /> : <HardDrive size={17} />,
+      tone: !config.backupPath.trim() ? "neutral" : config.kind === "macosChatDb" || backup?.valid ? "ok" : "warn",
+      icon: config.kind === "macosChatDb" || backup?.valid ? <CheckCircle2 size={17} /> : <HardDrive size={17} />,
+    },
+    {
+      key: "messages-db",
+      label: "Messages 数据",
+      detail: checkingSource
+        ? "正在检查数据库"
+        : sourceInspection?.ready
+          ? `${sourceInspection.messageCount?.toLocaleString() ?? 0} 条消息`
+          : sourceInspection?.error ?? "等待备份目录确认",
+      tone: sourceInspection?.ready ? "ok" : checkingSource ? "neutral" : "warn",
+      icon: sourceInspection?.ready ? <CheckCircle2 size={17} /> : <Database size={17} />,
     },
     {
       key: "password",
@@ -378,8 +483,8 @@ function ReadinessBand({
     <section className="readiness-band" aria-label="启动就绪检查">
       <div className="readiness-title">
         <span>就绪检查</span>
-        <button className="ghost-button" type="button" onClick={onRefresh}>
-          <RefreshCcw size={15} />
+        <button className="ghost-button" type="button" onClick={onRefresh} disabled={refreshing} aria-busy={refreshing || undefined}>
+          {refreshing ? <Loader2 className="spin" size={15} /> : <RefreshCcw size={15} />}
           重新检查
         </button>
       </div>
@@ -400,12 +505,16 @@ function ReadinessBand({
 
 function DiagnosticSummaryPanel({
   diagnostics,
+  config,
   backup,
+  sourceInspection,
   environment,
   canContinue,
 }: {
   diagnostics: ReturnType<typeof summarizeDiagnostics>;
+  config: ExportConfig;
   backup?: BackupCandidate;
+  sourceInspection?: SourceInspection;
   environment?: EnvironmentStatus;
   canContinue: boolean;
 }) {
@@ -413,13 +522,20 @@ function DiagnosticSummaryPanel({
   const hasDiagnosticOutput = diagnosticFindings.some((finding) => finding.status !== "unknown");
   const hasDiagnosticWarning = diagnosticFindings.some((finding) => finding.status === "warn");
   const convertersReady = Boolean(environment?.ffmpegAvailable && environment?.imagemagickAvailable);
+  const sourceReady = config.kind === "macosChatDb" ? Boolean(sourceInspection?.ready) : Boolean(backup?.valid);
   const diagnosticDetail = canContinue ? "诊断已通过，可以继续设置导出选项。" : hasDiagnosticOutput ? "诊断已完成，但仍有项目需要处理。" : "运行诊断后会汇总检查结果。";
   const items: Array<{ label: string; value: string; detail: string; tone: "ok" | "warn" | "error" | "neutral"; icon: ReactNode }> = [
     {
-      label: "备份目录",
-      value: backup?.valid ? "已就绪" : "未就绪",
-      detail: backup?.valid ? backup.displayName : "需要有效的 iOS 备份根目录",
-      tone: backup?.valid ? "ok" : "warn",
+      label: config.kind === "macosChatDb" ? "chat.db 文件" : "备份目录",
+      value: sourceReady ? "已就绪" : "未就绪",
+      detail: sourceReady
+        ? config.kind === "macosChatDb"
+          ? `${sourceInspection?.messageCount?.toLocaleString() ?? 0} 条消息`
+          : backup?.displayName ?? "备份目录已就绪"
+        : config.kind === "macosChatDb"
+          ? "需要可读取的 macOS chat.db 文件"
+          : "需要有效的 iOS 备份根目录",
+      tone: sourceReady ? "ok" : "warn",
       icon: <Database size={17} />,
     },
     {
@@ -469,9 +585,11 @@ export function DiagnosticsStep({
   config,
   language,
   backup,
+  sourceInspection,
   environment,
   running,
-  exitCode,
+  startingDiagnostics,
+  cancelling,
   outcome,
   canContinue,
   onRunDiagnostics,
@@ -486,9 +604,11 @@ export function DiagnosticsStep({
   config: ExportConfig;
   language: "en" | "zh-CN";
   backup?: BackupCandidate;
+  sourceInspection?: SourceInspection;
   environment?: EnvironmentStatus;
   running: boolean;
-  exitCode?: number;
+  startingDiagnostics?: boolean;
+  cancelling?: boolean;
   outcome: JobOutcome;
   canContinue: boolean;
   onRunDiagnostics: () => void;
@@ -504,29 +624,27 @@ export function DiagnosticsStep({
         buildDiagnosticReport({
           environment,
           backup,
+          sourceInspection,
           config,
           diagnostics,
-          preview: job?.preview,
           logs,
           secrets: [config.cleartextPassword],
         }),
       ),
-    [backup, config, diagnostics, environment, job?.preview, language, logs],
+    [backup, config, diagnostics, environment, language, logs, sourceInspection],
   );
 
   return (
     <div className="page">
       <Header eyebrow="诊断检查" title="诊断备份" description="先让 imessage-exporter 检查数据库、附件、联系人和转换器状态。" />
-      <DiagnosticSummaryPanel diagnostics={diagnostics} backup={backup} environment={environment} canContinue={canContinue} />
+      <DiagnosticSummaryPanel diagnostics={diagnostics} config={config} backup={backup} sourceInspection={sourceInspection} environment={environment} canContinue={canContinue} />
       <div className="diagnostic-grid">
         <DiagnosticTile label="数据库" status={diagnostics.database} />
         <DiagnosticTile label="附件" status={diagnostics.attachments} />
         <DiagnosticTile label="联系人" status={diagnostics.contacts} />
         <DiagnosticTile label="转换器" status={diagnostics.converters} />
       </div>
-      {job?.preview ? <CommandBox preview={job.preview} /> : null}
-      <LogPanel logs={logs} running={running} exitCode={exitCode} outcome={outcome} />
-      <DiagnosticReportActions report={report} disabled={!logs.length && !job?.preview} />
+      <DiagnosticReportActions report={report} disabled={!logs.length} />
       <JobOutcomeNotice
         outcome={outcome}
         context="diagnostics"
@@ -541,6 +659,7 @@ export function DiagnosticsStep({
         secondaryLabel={running ? "取消诊断" : "重新诊断"}
         secondaryIcon={running ? <CircleStop size={17} /> : <RefreshCcw size={17} />}
         onSecondary={running ? onCancel : onRunDiagnostics}
+        secondaryLoading={running ? cancelling : startingDiagnostics}
         primaryLabel="继续设置"
         primaryIcon={<Settings2 size={17} />}
         onPrimary={onNext}
@@ -563,35 +682,48 @@ export function OptionsStep({
   environment,
   warnings,
   errors,
-  preview,
   exportPathStatus,
   checkingExportPath,
+  choosingExport,
+  generatingExportPath,
+  startingExport,
   conversations,
   loadingConversations,
   conversationError,
+  diagnosticDetails,
   onChange,
   onChooseExport,
   onGenerateExport,
   onApplyPreset,
+  onOpenPath,
+  deletingInterruptedExportPath,
+  onDeleteInterruptedExport,
   onStart,
 }: {
   config: ExportConfig;
   environment?: EnvironmentStatus;
   warnings: string[];
   errors: string[];
-  preview?: CommandPreview;
   exportPathStatus?: ExportPathStatus;
   checkingExportPath: boolean;
+  choosingExport?: boolean;
+  generatingExportPath?: boolean;
+  startingExport?: boolean;
   conversations: ConversationCandidate[];
   loadingConversations: boolean;
   conversationError?: string;
+  diagnosticDetails?: DiagnosticDetails;
   onChange: (patch: Partial<ExportConfig>) => void;
   onChooseExport: () => void;
   onGenerateExport: () => void;
   onApplyPreset: (presetId: ExportPresetId) => void;
+  onOpenPath: (path: string) => void;
+  deletingInterruptedExportPath?: string;
+  onDeleteInterruptedExport: (path: string) => void;
   onStart: () => void;
 }) {
-  const selectedConversation = selectedConversationForFilter(config.conversationFilter, conversations);
+  const selectedConversation = selectedConversationForConfig(config, conversations);
+  const handlesAttachments = config.format === "html";
 
   return (
     <div className="page">
@@ -621,34 +753,47 @@ export function OptionsStep({
         <div className="section-heading">
           <h2>输出</h2>
         </div>
-        <PathField label="输出目录" value={config.exportPath} onBrowse={onChooseExport} />
+        <PathField label="输出目录" value={config.exportPath} onBrowse={onChooseExport} loading={choosingExport} />
         <div className="inline-actions">
-          <button className="ghost-button" type="button" onClick={onGenerateExport}>
-            <Archive size={15} />
+          <button className="ghost-button" type="button" onClick={onGenerateExport} disabled={generatingExportPath} aria-busy={generatingExportPath || undefined}>
+            {generatingExportPath ? <Loader2 className="spin" size={15} /> : <Archive size={15} />}
             新建归档目录
           </button>
-          <small>{selectedConversation ? `生成带“${selectedConversation.title}”和时间戳的新文件夹。` : "生成带时间戳的新文件夹，避免导出结果混入旧目录。"}</small>
+          <small>{archivePathHint(config, selectedConversation)}</small>
         </div>
-        <ExportPathNotice status={exportPathStatus} checking={checkingExportPath} />
+        <ExportPathNotice
+          status={exportPathStatus}
+          checking={checkingExportPath}
+          onOpenPath={onOpenPath}
+          deletingInterruptedExportPath={deletingInterruptedExportPath}
+          onDeleteInterruptedExport={onDeleteInterruptedExport}
+        />
         <SegmentedControl
           label="格式"
           value={config.format}
           options={exportFormats}
-          onChange={(format) => onChange(format === "html" ? { format } : { format, noLazy: false })}
+          onChange={(format) => onChange(format === "html" ? { format, copyMethod: "clone" } : { format, copyMethod: "disabled", noLazy: false })}
         />
-        <SegmentedControl
-          label="附件"
-          value={config.copyMethod}
-          options={copyMethods}
-          onChange={(copyMethod) => onChange({ copyMethod })}
-        />
+        <SegmentedControl label="文件命名" value={config.filenameMode ?? "contactName"} options={filenameModes} onChange={(filenameMode) => onChange({ filenameMode })} />
+        <SegmentedControl label="新建总目录命名" value={config.archiveNameMode ?? "conversationTimestamp"} options={archiveNameModes} onChange={(archiveNameMode) => onChange({ archiveNameMode })} />
+        {handlesAttachments ? (
+          <SegmentedControl
+            label="附件"
+            value={config.copyMethod}
+            options={copyMethods}
+            onChange={(copyMethod) => onChange({ copyMethod })}
+          />
+        ) : (
+          <p className="muted">TXT 和 JSONL 只写文本/结构化记录，不处理附件文件。</p>
+        )}
+        {shouldProcessAttachments(config) ? <p className="muted">HTML 会按会话建立文件夹，HTML 文件和对应附件放在同一个会话文件夹内。</p> : null}
         {warnings.map((warning) => (
           <div className="notice warn" key={warning}>
             <AlertCircle size={17} />
             <span>{warning}</span>
           </div>
         ))}
-        {config.copyMethod !== "clone" && environment && !environment.ffmpegAvailable ? (
+        {shouldProcessAttachments(config) && config.copyMethod !== "clone" && environment && !environment.ffmpegAvailable ? (
           <p className="muted">clone 不依赖本机转换器；basic/full 需要 ffmpeg 和 ImageMagick。</p>
         ) : null}
       </section>
@@ -657,10 +802,11 @@ export function OptionsStep({
         <DateRangeField config={config} onChange={onChange} />
         <ConversationPicker
           value={config.conversationFilter ?? ""}
+          selectedId={config.conversationId}
           conversations={conversations}
           loading={loadingConversations}
           error={conversationError}
-          onChange={(conversationFilter) => onChange({ conversationFilter })}
+          onChange={(conversationFilter, conversationId, conversationIds) => onChange({ conversationFilter, conversationId, conversationIds })}
         />
         <label>
           <span>我的显示名</span>
@@ -693,9 +839,14 @@ export function OptionsStep({
         </label>
       </section>
 
-      <ExportReview config={config} environment={environment} exportPathStatus={exportPathStatus} selectedConversation={selectedConversation} />
+      <ExportReview
+        config={config}
+        environment={environment}
+        exportPathStatus={exportPathStatus}
+        selectedConversation={selectedConversation}
+        diagnosticDetails={diagnosticDetails}
+      />
 
-      {preview ? <CommandBox preview={preview} /> : null}
       {errors.map((message) => (
         <div className="notice error" key={message}>
           <AlertCircle size={17} />
@@ -703,7 +854,13 @@ export function OptionsStep({
         </div>
       ))}
 
-      <FooterActions primaryLabel="开始导出" primaryIcon={<Play size={17} />} onPrimary={onStart} primaryDisabled={errors.length > 0 || checkingExportPath} />
+      <FooterActions
+        primaryLabel="开始导出"
+        primaryIcon={<Play size={17} />}
+        onPrimary={onStart}
+        primaryDisabled={errors.length > 0 || checkingExportPath}
+        primaryLoading={startingExport || checkingExportPath}
+      />
     </div>
   );
 }
@@ -713,13 +870,15 @@ function ExportReview({
   environment,
   exportPathStatus,
   selectedConversation,
+  diagnosticDetails,
 }: {
   config: ExportConfig;
   environment?: EnvironmentStatus;
   exportPathStatus?: ExportPathStatus;
   selectedConversation?: ConversationCandidate;
+  diagnosticDetails?: DiagnosticDetails;
 }) {
-  const notes = exportReviewNotes(config, environment, exportPathStatus);
+  const notes = exportReviewNotes(config, environment, exportPathStatus, diagnosticDetails);
   const conversationName = conversationExportName(config.conversationFilter, selectedConversation);
   const items: Array<{ label: string; value: string; icon: ReactNode }> = [
     {
@@ -727,6 +886,24 @@ function ExportReview({
       value: config.backupPath ? compactPath(config.backupPath) : "未选择",
       icon: <Database size={17} />,
     },
+    ...(config.kind === "macosChatDb" && config.attachmentRoot?.trim()
+      ? [
+          {
+            label: "附件根目录",
+            value: compactPath(config.attachmentRoot),
+            icon: <Archive size={17} />,
+          },
+        ]
+      : []),
+    ...(config.kind === "macosChatDb" && config.contactsPath?.trim()
+      ? [
+          {
+            label: "联系人数据库",
+            value: compactPath(config.contactsPath),
+            icon: <UserRound size={17} />,
+          },
+        ]
+      : []),
     {
       label: "输出",
       value: config.exportPath ? compactPath(config.exportPath) : "未设置",
@@ -734,9 +911,41 @@ function ExportReview({
     },
     {
       label: "格式",
-      value: `${config.format.toUpperCase()} · 附件 ${config.copyMethod}`,
+      value: config.format === "html" ? `HTML · 附件 ${config.copyMethod}` : `${config.format.toUpperCase()} · 不导出附件`,
       icon: <FileArchive size={17} />,
     },
+    {
+      label: "命名",
+      value: filenameModeLabel(config),
+      icon: <UserRound size={17} />,
+    },
+    ...(shouldProcessAttachments(config)
+      ? [
+          {
+            label: "新建总目录命名",
+            value: archiveNameModeLabel(config),
+            icon: <FolderOpen size={17} />,
+          },
+        ]
+      : []),
+    ...(diagnosticDetails
+      ? [
+          {
+            label: "数据规模",
+            value: `${diagnosticDetails.messages.totalMessages.toLocaleString()} 条 · ${formatBytes(diagnosticDetails.databaseBytes ?? 0)}`,
+            icon: <Database size={17} />,
+          },
+          ...(shouldProcessAttachments(config)
+            ? [
+                {
+                  label: "附件风险",
+                  value: diagnosticAttachmentRiskLabel(diagnosticDetails),
+                  icon: <Archive size={17} />,
+                },
+              ]
+            : []),
+        ]
+      : []),
     {
       label: "日期",
       value: dateRangeLabel(config),
@@ -758,6 +967,14 @@ function ExportReview({
       icon: <UserRound size={17} />,
     },
   ];
+
+  if (selectedConversation) {
+    items.splice(-2, 0, {
+      label: "预计导出",
+      value: `${selectedConversation.messageCount.toLocaleString()} 条消息 · ${selectedConversation.chatIds.length} 个底层会话`,
+      icon: <MessagesSquare size={17} />,
+    });
+  }
 
   return (
     <section className="content-band review-panel">
@@ -807,6 +1024,25 @@ function displayNameLabel(config: ExportConfig): string {
   return "默认解析";
 }
 
+function selectedConversationForConfig(config: ExportConfig, conversations: ConversationCandidate[] = []): ConversationCandidate | undefined {
+  if (config.conversationIds?.length) {
+    const selected = conversations.find((conversation) => sameConversationIds(conversation.chatIds, config.conversationIds));
+    if (selected) return selected;
+  }
+  if (config.conversationId !== undefined) {
+    const selected = conversations.find((conversation) => Number(conversation.id) === config.conversationId);
+    if (selected) return selected;
+  }
+  return selectedConversationForFilter(config.conversationFilter, conversations);
+}
+
+function sameConversationIds(left: number[] = [], right: number[] = []): boolean {
+  const leftSorted = [...left].sort((a, b) => a - b);
+  const rightSorted = [...right].sort((a, b) => a - b);
+  if (leftSorted.length !== rightSorted.length) return false;
+  return leftSorted.every((value, index) => value === rightSorted[index]);
+}
+
 function selectedConversationForFilter(conversationFilter?: string, conversations: ConversationCandidate[] = []): ConversationCandidate | undefined {
   const filter = conversationFilter?.trim();
   if (!filter) return undefined;
@@ -820,15 +1056,38 @@ function conversationExportName(conversationFilter?: string, selectedConversatio
 
 function resultFilenameLabel(config: ExportConfig, selectedConversation?: ConversationCandidate): string {
   const extension = config.format === "jsonl" ? ".jsonl" : config.format === "txt" ? ".txt" : ".html";
+  if ((config.filenameMode ?? "contactName") === "chatIdentifier") return `Caller ID${extension}`;
+  if ((config.filenameMode ?? "contactName") === "contactNameWithCallerId") {
+    if (selectedConversation) return `${selectedConversation.title} + Caller ID${extension}`;
+    if (config.conversationFilter?.trim()) return `匹配会话名 + Caller ID${extension}`;
+    return `联系人或群聊名称 + Caller ID${extension}`;
+  }
   if (selectedConversation) return `${selectedConversation.title}${extension}`;
   if (config.conversationFilter?.trim()) return `匹配会话名${extension}`;
   return `联系人或群聊名称${extension}`;
+}
+
+function filenameModeLabel(config: ExportConfig): string {
+  if ((config.filenameMode ?? "contactName") === "chatIdentifier") return "Caller ID";
+  if ((config.filenameMode ?? "contactName") === "contactNameWithCallerId") return "联系人名 + Caller ID";
+  return "联系人/群聊名";
+}
+
+function archiveNameModeLabel(config: ExportConfig): string {
+  return (config.archiveNameMode ?? "conversationTimestamp") === "timestamp" ? "仅时间" : "会话 + 时间";
+}
+
+function archivePathHint(config: ExportConfig, selectedConversation?: ConversationCandidate): string {
+  if ((config.archiveNameMode ?? "conversationTimestamp") === "timestamp") return "生成只带时间戳的新文件夹，避免目录名暴露联系人。";
+  if (selectedConversation) return `生成带“${selectedConversation.title}”和时间戳的新文件夹。`;
+  return "生成带时间戳的新文件夹，避免导出结果混入旧目录。";
 }
 
 function exportReviewNotes(
   config: ExportConfig,
   environment?: EnvironmentStatus,
   exportPathStatus?: ExportPathStatus,
+  diagnosticDetails?: DiagnosticDetails,
 ): Array<{ text: string; tone: "info" | "warn" }> {
   const notes: Array<{ text: string; tone: "info" | "warn" }> = [];
 
@@ -844,7 +1103,13 @@ function exportReviewNotes(
       tone: "warn",
     });
   }
-  if ((config.copyMethod === "basic" || config.copyMethod === "full") && environment) {
+  if (exportPathStatus?.interruptedExports.length) {
+    notes.push({
+      text: `检测到 ${exportPathStatus.interruptedExports.length} 个未完成导出的 .partial 临时目录；带断点记录且设置一致的会自动续写，旧半成品只保留供取回或删除。`,
+      tone: "warn",
+    });
+  }
+  if (shouldProcessAttachments(config) && (config.copyMethod === "basic" || config.copyMethod === "full") && environment) {
     if (!environment.ffmpegAvailable || !environment.imagemagickAvailable) {
       notes.push({
         text: "basic/full 附件转换依赖 ffmpeg 和 ImageMagick，当前环境不完整。",
@@ -864,8 +1129,26 @@ function exportReviewNotes(
       tone: "warn",
     });
   }
+  if (shouldProcessAttachments(config) && diagnosticDetails?.attachments.missingFiles) {
+    notes.push({
+      text: `诊断发现 ${diagnosticDetails.attachments.missingFiles.toLocaleString()} 个附件缺失；导出会继续，但对应附件可能无法打开。`,
+      tone: "warn",
+    });
+  }
 
   return notes;
+}
+
+function shouldProcessAttachments(config: ExportConfig): boolean {
+  return config.format === "html" && config.copyMethod !== "disabled";
+}
+
+function diagnosticAttachmentRiskLabel(details: DiagnosticDetails): string {
+  const total = details.attachments.totalAttachments.toLocaleString();
+  if (details.attachments.missingFiles) {
+    return `${total} 个，缺失 ${details.attachments.missingFiles.toLocaleString()} 个`;
+  }
+  return `${total} 个 · ${formatBytes(details.attachments.totalBytesReferenced)}`;
 }
 
 function presetMatchesConfig(config: ExportConfig, presetId: ExportPresetId): boolean {
@@ -874,7 +1157,19 @@ function presetMatchesConfig(config: ExportConfig, presetId: ExportPresetId): bo
   return config.format === preset.settings.format && config.copyMethod === preset.settings.copyMethod && Boolean(config.noLazy) === preset.settings.noLazy;
 }
 
-function ExportPathNotice({ status, checking }: { status?: ExportPathStatus; checking: boolean }) {
+function ExportPathNotice({
+  status,
+  checking,
+  onOpenPath,
+  deletingInterruptedExportPath,
+  onDeleteInterruptedExport,
+}: {
+  status?: ExportPathStatus;
+  checking: boolean;
+  onOpenPath: (path: string) => void;
+  deletingInterruptedExportPath?: string;
+  onDeleteInterruptedExport: (path: string) => void;
+}) {
   if (checking) {
     return (
       <div className="path-inspection neutral">
@@ -891,7 +1186,10 @@ function ExportPathNotice({ status, checking }: { status?: ExportPathStatus; che
 
   const blocking = blockingExportPathErrors(status).length > 0;
   const risky = needsExportPathConfirmation(status);
-  const tone = blocking ? "error" : risky || status.warnings.length ? "warn" : "ok";
+  const visibleWarnings = status.interruptedExports.length
+    ? status.warnings.filter((warning) => !warning.includes(".partial") && !warning.includes("未完成的临时导出目录"))
+    : status.warnings;
+  const tone = blocking ? "error" : risky || visibleWarnings.length ? "warn" : "ok";
   const summary = exportPathSummary(status);
 
   return (
@@ -901,14 +1199,68 @@ function ExportPathNotice({ status, checking }: { status?: ExportPathStatus; che
         <strong>输出目录状态</strong>
         <small>{summary}</small>
         <ExportPathFacts status={status} />
-        {status.warnings.length ? (
+        {visibleWarnings.length ? (
           <ul>
-            {status.warnings.map((warning) => (
+            {visibleWarnings.map((warning) => (
               <li key={warning}>{warning}</li>
             ))}
           </ul>
         ) : null}
+        <InterruptedExports
+          exports={status.interruptedExports}
+          onOpenPath={onOpenPath}
+          deletingInterruptedExportPath={deletingInterruptedExportPath}
+          onDeleteInterruptedExport={onDeleteInterruptedExport}
+        />
       </span>
+    </div>
+  );
+}
+
+function InterruptedExports({
+  exports,
+  onOpenPath,
+  deletingInterruptedExportPath,
+  onDeleteInterruptedExport,
+}: {
+  exports: string[];
+  onOpenPath: (path: string) => void;
+  deletingInterruptedExportPath?: string;
+  onDeleteInterruptedExport: (path: string) => void;
+}) {
+  if (!exports.length) return null;
+  return (
+    <div className="interrupted-export-list">
+      <strong>未完成导出</strong>
+      <small>带断点记录且设置一致的临时目录会自动续写；旧版半成品不会冒险续写，可打开取回或删除。</small>
+      {exports.map((path) => (
+        <div className="interrupted-export-item" key={path}>
+          <code title={path}>{compactPath(path)}</code>
+          <button className="ghost-button compact" type="button" onClick={() => onOpenPath(path)}>
+            <ExternalLink size={14} />
+            打开
+          </button>
+          <CopyButton label="复制路径" value={path} />
+        </div>
+      ))}
+      <div className="interrupted-export-actions">
+        {exports.map((path) => {
+          const deleting = deletingInterruptedExportPath === path;
+          return (
+            <button
+              className="ghost-button compact"
+              type="button"
+              key={`delete-${path}`}
+              onClick={() => onDeleteInterruptedExport(path)}
+              disabled={Boolean(deletingInterruptedExportPath)}
+              aria-busy={deleting || undefined}
+            >
+              {deleting ? <Loader2 className="spin" size={14} /> : <Trash2 size={14} />}
+              {deleting ? "正在删除" : `删除 ${compactPath(path)}`}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -929,6 +1281,7 @@ function exportPathSummary(status: ExportPathStatus): string {
   if (status.exists && !status.isDirectory) return "当前路径不可用于导出。";
   if (!status.parentExists) return "上级目录不存在。";
   if (status.writable === false) return "当前目录不可写。";
+  if (status.interruptedExports.length) return `发现 ${status.interruptedExports.length} 个上次未完成导出的临时目录。`;
   if (!status.exists) return "目录当前不存在，导出前请确认路径可创建。";
   if ((status.entryCount ?? 0) === 0) return "空文件夹，适合写入新的导出结果。";
   return `已有 ${status.entryCount ?? 0} 个项目。继续导出前建议确认这些文件可以保留。`;
@@ -947,53 +1300,77 @@ function formatBytes(bytes: number): string {
 
 export function RunStep({
   logs,
-  preview,
+  progressCounts,
   hasExportTask,
   running,
   startDisabled,
-  exitCode,
   outcome,
   config,
+  exportPathStatus,
+  exportHistory,
   conversations,
+  startingExport,
+  cancelling,
+  openingOutput,
+  openingFirstResult,
   onStart,
   onCancel,
   onBackToOptions,
   onBackToSource,
   onOpenOutput,
+  onOpenHistoryPath,
   onOpenFirstResult,
+  onSearchJsonl,
 }: {
   logs: LogLine[];
-  preview?: CommandPreview;
+  progressCounts?: JobProgress;
   hasExportTask: boolean;
   running: boolean;
   startDisabled: boolean;
-  exitCode?: number;
   outcome: JobOutcome;
   config: ExportConfig;
+  exportPathStatus?: ExportPathStatus;
+  exportHistory: ExportHistoryEntry[];
   conversations: ConversationCandidate[];
+  startingExport?: boolean;
+  cancelling?: boolean;
+  openingOutput?: boolean;
+  openingFirstResult?: boolean;
   onStart: () => void;
   onCancel: () => void;
   onBackToOptions: () => void;
   onBackToSource: () => void;
   onOpenOutput: () => void;
+  onOpenHistoryPath: (path: string) => void;
   onOpenFirstResult: () => void;
+  onSearchJsonl: (query: string) => Promise<JsonlSearchMatch[]>;
 }) {
   const visualState = running ? "running" : outcome.kind;
   const Icon = visualState === "running" ? Loader2 : visualState === "succeeded" ? CheckCircle2 : visualState === "cancelled" ? CircleStop : TerminalSquare;
   const stripText = running ? "正在导出" : jobOutcomeLabel(outcome, "export");
-  const selectedConversation = selectedConversationForFilter(config.conversationFilter, conversations);
+  const selectedConversation = selectedConversationForConfig(config, conversations);
   const summary = summarizeExportResult({ logs, running, outcome, format: config.format, copyMethod: config.copyMethod, exportPath: config.exportPath });
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!running) return;
+    setNow(Date.now());
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [running]);
+  const rawProgress = exportProgress(logs, running, outcome.kind, progressCounts);
+  const progress = rawProgress ? exportProgressTiming(rawProgress, logs, now) : undefined;
   const phase = !hasExportTask ? "preview" : running ? "running" : "finished";
   const headingTitle = phase === "preview" ? "导出前预览" : phase === "running" ? "导出中" : "导出结果";
   const headingDescription =
-    phase === "preview" ? "先确认命令、结果文件和输出位置，再开始导出。" : phase === "running" ? "正在追踪导出输出和结果。" : "查看导出摘要、日志和结果入口。";
-  const primaryActionLabel = running ? "取消导出" : hasExportTask ? "重新导出" : "开始导出";
-  const primaryActionIcon = running ? <CircleStop size={17} /> : hasExportTask ? <RefreshCcw size={17} /> : <Play size={17} />;
+    phase === "preview" ? "先确认导出设置、结果文件和输出位置，再开始导出。" : phase === "running" ? "正在处理导出任务。" : "查看导出摘要和结果入口。";
+  const primaryActionLabel = running ? "取消导出" : startingExport ? "准备导出" : hasExportTask ? "重新导出" : "开始导出";
+  const primaryActionIcon =
+    cancelling || startingExport ? <Loader2 className="spin" size={17} /> : running ? <CircleStop size={17} /> : hasExportTask ? <RefreshCcw size={17} /> : <Play size={17} />;
   const primaryAction = running ? onCancel : onStart;
 
   return (
     <div className="page">
-      <Header eyebrow="运行结果" title="导出与结果" description="实时查看 imessage-exporter 输出，导出完成后打开结果目录。" />
+      <Header eyebrow="运行结果" title="导出与结果" description="导出完成后可打开结果目录或首个结果文件。" />
       <section className={`content-band export-preflight ${hasExportTask ? "has-task" : "idle"}`}>
         <div className="section-heading">
           <div>
@@ -1005,20 +1382,13 @@ export function RunStep({
               <Settings2 size={17} />
               返回选项
             </button>
-            <button className="primary-button" type="button" onClick={primaryAction} disabled={!running && startDisabled}>
+            <button className="primary-button" type="button" onClick={primaryAction} disabled={cancelling || startingExport || (!running && startDisabled)} aria-busy={cancelling || startingExport || undefined}>
               {primaryActionIcon}
               {primaryActionLabel}
             </button>
           </div>
         </div>
         <div className="export-preflight-grid">
-          <div className="preflight-card command-card">
-            <div className="preflight-card-heading">
-              <TerminalSquare size={16} />
-              <strong>命令预览</strong>
-            </div>
-            {preview ? <CommandBox preview={preview} /> : <div className="empty-state">暂时还没有命令预览。</div>}
-          </div>
           <div className="preflight-card summary-card">
             <div className="preflight-card-heading">
               <Info size={16} />
@@ -1030,6 +1400,7 @@ export function RunStep({
                   <Icon className={visualState === "running" ? "spin" : undefined} size={20} />
                   <span>{stripText}</span>
                 </div>
+                {progress ? <ExportProgressBar progress={progress} /> : null}
                 <ExportSummaryPanel summary={summary} />
               </>
             ) : (
@@ -1043,7 +1414,6 @@ export function RunStep({
             </div>
             {hasExportTask ? (
               <>
-                <LogPanel logs={logs} running={running} exitCode={exitCode} outcome={outcome} />
                 <JobOutcomeNotice
                   outcome={outcome}
                   context="export"
@@ -1054,9 +1424,19 @@ export function RunStep({
                     onRetry: startDisabled ? undefined : onStart,
                   }}
                 />
+                <JsonlPreview
+                  enabled={!running && outcome.kind === "succeeded" && config.format === "jsonl"}
+                  onSearch={onSearchJsonl}
+                />
                 <div className="result-actions">
-                  <button className="secondary-button" type="button" onClick={onOpenFirstResult} disabled={!config.exportPath.trim() || running || outcome.kind !== "succeeded"}>
-                    <ExternalLink size={17} />
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={onOpenFirstResult}
+                    disabled={!config.exportPath.trim() || running || outcome.kind !== "succeeded" || openingFirstResult}
+                    aria-busy={openingFirstResult || undefined}
+                  >
+                    {openingFirstResult ? <Loader2 className="spin" size={17} /> : <ExternalLink size={17} />}
                     {`打开首个 ${resultFileLabel(config.format)}`}
                   </button>
                   <CopyButton label="复制路径" value={config.exportPath} disabled={!config.exportPath.trim()} title={config.exportPath ? `复制结果路径: ${config.exportPath}` : "复制结果路径"} />
@@ -1066,31 +1446,155 @@ export function RunStep({
                   secondaryIcon={running ? <CircleStop size={17} /> : <RefreshCcw size={17} />}
                   onSecondary={running ? onCancel : onStart}
                   secondaryDisabled={!running && startDisabled}
+                  secondaryLoading={running ? cancelling : startingExport}
                   primaryLabel="打开输出目录"
                   primaryIcon={<FolderOpen size={17} />}
                   onPrimary={onOpenOutput}
                   primaryDisabled={!config.exportPath.trim() || running}
+                  primaryLoading={openingOutput}
                 />
               </>
             ) : (
               <>
-                <RunPreflightNextStep config={config} selectedConversation={selectedConversation} preview={preview} />
+                <RunPreflightNextStep config={config} selectedConversation={selectedConversation} exportPathStatus={exportPathStatus} />
                 <div className="result-actions">
                   <button className="secondary-button" type="button" onClick={onBackToSource}>
                     <Database size={17} />
                     回到数据源
                   </button>
-                  <button className="primary-button" type="button" onClick={onStart} disabled={startDisabled}>
-                    <Play size={17} />
-                    开始导出
+                  <button className="primary-button" type="button" onClick={onStart} disabled={startDisabled || startingExport} aria-busy={startingExport || undefined}>
+                    {startingExport ? <Loader2 className="spin" size={17} /> : <Play size={17} />}
+                    {startingExport ? "准备导出" : "开始导出"}
                   </button>
                 </div>
               </>
             )}
           </div>
         </div>
+        {exportHistory.length ? <ExportHistoryPanel history={exportHistory} onOpenPath={onOpenHistoryPath} /> : null}
       </section>
     </div>
+  );
+}
+
+function ExportHistoryPanel({ history, onOpenPath }: { history: ExportHistoryEntry[]; onOpenPath: (path: string) => void }) {
+  return (
+    <section className="export-history" aria-label="最近导出">
+      <div className="preflight-card-heading">
+        <FolderOpen size={16} />
+        <strong>最近导出</strong>
+      </div>
+      <div className="export-history-list">
+        {history.slice(0, 5).map((entry) => (
+          <div className="export-history-item" key={entry.id}>
+            <span>
+              <strong>{entry.conversationLabel?.trim() || "全部会话"}</strong>
+              <small>
+                {entry.format.toUpperCase()} · {entry.messageCount ? `${entry.messageCount.toLocaleString()} 条 · ` : ""}
+                {formatHistoryTime(entry.finishedAt)}
+              </small>
+              <code title={entry.exportPath}>{compactPath(entry.exportPath)}</code>
+            </span>
+            <button className="ghost-button compact" type="button" onClick={() => onOpenPath(entry.exportPath)}>
+              <ExternalLink size={14} />
+              打开
+            </button>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function formatHistoryTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
+}
+
+function ExportProgressBar({ progress }: { progress: ExportProgress }) {
+  const timeDetail = progress.elapsedLabel
+    ? progress.value >= 100
+      ? `耗时 ${progress.elapsedLabel}`
+      : `已用 ${progress.elapsedLabel} · 预计还需 ${progress.remainingLabel ?? "计算中"}`
+    : undefined;
+
+  return (
+    <div className="export-progress" role="group" aria-label="导出进度">
+      <div className="export-progress-row">
+        <strong>{progress.label}</strong>
+        <span>{progress.value}%</span>
+      </div>
+      <progress value={progress.value} max={100} />
+      <small>{progress.detail}</small>
+      {timeDetail ? <small>{timeDetail}</small> : null}
+    </div>
+  );
+}
+
+function JsonlPreview({
+  enabled,
+  onSearch,
+}: {
+  enabled: boolean;
+  onSearch: (query: string) => Promise<JsonlSearchMatch[]>;
+}) {
+  const [query, setQuery] = useState("");
+  const [matches, setMatches] = useState<JsonlSearchMatch[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!enabled) {
+      setMatches([]);
+      return;
+    }
+    void runSearch("");
+  }, [enabled]);
+
+  async function runSearch(nextQuery = query) {
+    if (!enabled) return;
+    setLoading(true);
+    try {
+      setMatches(await onSearch(nextQuery));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (!enabled) return null;
+
+  return (
+    <section className="jsonl-preview" aria-label="JSONL 快速搜索">
+      <div className="jsonl-search-row">
+        <label>
+          <span>JSONL 快速搜索</span>
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") void runSearch();
+            }}
+            placeholder="搜索导出的 JSONL"
+          />
+        </label>
+        <button className="ghost-button" type="button" onClick={() => void runSearch()} disabled={loading}>
+          {loading ? <Loader2 className="spin" size={15} /> : <Search size={15} />}
+          搜索
+        </button>
+      </div>
+      <div className="jsonl-match-list">
+        {matches.length ? (
+          matches.map((match) => (
+            <div className="jsonl-match" key={`${match.lineNumber}-${match.preview}`}>
+              <small>第 {match.lineNumber.toLocaleString()} 行</small>
+              <code>{match.preview}</code>
+            </div>
+          ))
+        ) : (
+          <small>{loading ? "正在读取 JSONL..." : "没有匹配结果"}</small>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -1115,6 +1619,15 @@ function RunPreflightSummary({
       title: config.exportPath || summary.outputPath,
       icon: <FolderOpen size={16} />,
     },
+    ...(shouldProcessAttachments(config)
+      ? [
+          {
+            label: "新建总目录命名",
+            value: archiveNameModeLabel(config),
+            icon: <FolderOpen size={16} />,
+          },
+        ]
+      : []),
     {
       label: "会话",
       value: conversationExportName(config.conversationFilter, selectedConversation),
@@ -1127,7 +1640,7 @@ function RunPreflightSummary({
     },
     {
       label: "格式",
-      value: `${summary.format} · 附件 ${summary.copyMethod}`,
+      value: summary.format === "HTML" ? `${summary.format} · 附件 ${summary.copyMethod}` : `${summary.format} · 不导出附件`,
       icon: <Archive size={16} />,
     },
     {
@@ -1166,11 +1679,11 @@ function RunPreflightSummary({
 function RunPreflightNextStep({
   config,
   selectedConversation,
-  preview,
+  exportPathStatus,
 }: {
   config: ExportConfig;
   selectedConversation?: ConversationCandidate;
-  preview?: CommandPreview;
+  exportPathStatus?: ExportPathStatus;
 }) {
   const checks = [
     {
@@ -1183,11 +1696,15 @@ function RunPreflightNextStep({
       value: preflightFileDescription(config, selectedConversation),
       icon: <FileArchive size={16} />,
     },
-    {
-      label: "命令预览",
-      value: preview ? "已生成，可复制检查" : "等待备份和输出目录完整后生成",
-      icon: <TerminalSquare size={16} />,
-    },
+    ...(exportPathStatus?.interruptedExports.length
+      ? [
+          {
+            label: "未完成导出",
+            value: `发现 ${exportPathStatus.interruptedExports.length} 个 .partial 临时目录；可续写的会自动继续。`,
+            icon: <ShieldAlert size={16} />,
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -1211,7 +1728,7 @@ function ExportSummaryPanel({ summary }: { summary: ExportSummary }) {
   const items: Array<{ label: string; value: string; icon: ReactNode }> = [
     { label: "状态", value: summary.statusLabel, icon: summary.status === "succeeded" ? <CheckCircle2 size={16} /> : <Info size={16} /> },
     { label: "格式", value: summary.format, icon: <FileArchive size={16} /> },
-    { label: "附件", value: summary.copyMethod, icon: <Archive size={16} /> },
+    { label: "附件", value: summary.format === "HTML" ? summary.copyMethod : "不导出附件", icon: <Archive size={16} /> },
     { label: "项目", value: summary.itemCountLabel, icon: <MessagesSquare size={16} /> },
     { label: "耗时", value: summary.durationLabel, icon: <CalendarDays size={16} /> },
     { label: "输出", value: compactPath(summary.outputPath), icon: <FolderOpen size={16} /> },
@@ -1256,5 +1773,5 @@ function resultFileLabel(format: ExportConfig["format"]): string {
 function preflightFileDescription(config: ExportConfig, selectedConversation?: ConversationCandidate): string {
   const filename = resultFilenameLabel(config, selectedConversation);
   if (selectedConversation || config.conversationFilter?.trim()) return `会按匹配到的会话生成 ${filename}`;
-  return `每个联系人或群聊各生成一个 ${filename}`;
+  return `每个合并后的会话各生成一个 ${filename}`;
 }

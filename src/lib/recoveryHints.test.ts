@@ -18,7 +18,7 @@ describe("recoveryHintForFailure", () => {
   it("falls back to a generic hint", () => {
     const hint = recoveryHintForFailure([line("unknown export failure")]);
     expect(hint.category).toBe("generic");
-    expect(hint.action).toContain("stderr/stdout");
+    expect(hint.action).toContain("复制诊断报告");
   });
 
   it("classifies exporter option compatibility failures before missing-exporter hints", () => {
@@ -29,7 +29,7 @@ describe("recoveryHintForFailure", () => {
     ]) {
       const hint = recoveryHintForFailure([line(message)]);
       expect(hint.category).toBe("exporter");
-      expect(hint.title).toBe("导出引擎参数不兼容");
+      expect(hint.title).toBe("导出引擎选项不兼容");
       expect(hint.action).toContain("复制诊断报告");
     }
   });

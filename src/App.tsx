@@ -6,6 +6,7 @@ import {
   Database,
   Download,
   FileArchive,
+  Loader2,
   MessageSquareText,
   Search,
   Settings2,
@@ -31,17 +32,21 @@ import {
 import {
   cancelJob,
   checkForAppUpdate,
+  deleteInterruptedExport,
   getAppDiagnostics,
   getEnvironment,
   installAvailableUpdate,
+  inspectDiagnostics,
   inspectExportPath,
+  inspectSource,
+  onAppQuitBlocked,
   onJobEvent,
   openFirstResult,
   openPath,
   openResourceFile,
   pickDirectory,
-  previewExportCommand,
   runDiagnostics,
+  searchJsonlResult,
   scanConversations,
   scanIosBackups,
   startExport,
@@ -50,7 +55,8 @@ import {
 import { tx, useAppLanguage, useDocumentLocalization } from "./i18n";
 import { useAppTheme } from "./theme";
 import { timestampedArchiveSequence } from "./lib/archivePath";
-import { converterWarnings, defaultExportConfig, normalizeConfig, validateExportConfig } from "./lib/exportConfig";
+import { converterWarnings, defaultExportConfig, normalizeConfig, resolveConversationSelection, validateExportConfig } from "./lib/exportConfig";
+import { loadExportHistory, recordExportHistory } from "./lib/exportHistory";
 import { summarizeDiagnostics } from "./lib/diagnostics";
 import { applyExportPreset } from "./lib/exportPresets";
 import type { ExportPresetId } from "./lib/exportPresets";
@@ -58,15 +64,18 @@ import { clearPersistedExportConfig, loadPersistedExportConfig, persistExportCon
 import type {
   AppDiagnostics,
   BackupCandidate,
-  CommandPreview,
   ConversationCandidate,
+  DiagnosticDetails,
   EnvironmentStatus,
   ExportConfig,
+  ExportHistoryEntry,
   ExportPathStatus,
   JobEvent,
+  JobProgress,
   JobStarted,
   LogLine,
   SourceConfig,
+  SourceInspection,
   WorkspaceSectionId,
 } from "./types";
 
@@ -81,6 +90,20 @@ const maxArchivePathAttempts = 50;
 const onboardingStorageKey = "imessage-exporter-gui.oobe.dismissed.v1";
 
 type WorkspaceSectionAccess = { disabled: boolean; reason?: string };
+type PendingAction =
+  | "refreshEnvironment"
+  | "chooseBackup"
+  | "chooseAttachmentRoot"
+  | "chooseContactsPath"
+  | "chooseExport"
+  | "generateExport"
+  | "startDiagnostics"
+  | "startExport"
+  | "cancelJob"
+  | "openOutput"
+  | "openFirstResult"
+  | "deleteInterruptedExport"
+  | "installUpdate";
 
 export default function App() {
   const { language, setLanguage } = useAppLanguage();
@@ -92,20 +115,22 @@ export default function App() {
   const [backups, setBackups] = useState<BackupCandidate[]>([]);
   const [selectedBackup, setSelectedBackup] = useState<BackupCandidate>();
   const [config, setConfig] = useState<ExportConfig>(() => loadPersistedExportConfig(defaultExportConfig));
-  const [preview, setPreview] = useState<CommandPreview>();
   const [exportPathStatus, setExportPathStatus] = useState<ExportPathStatus>();
   const [checkingExportPath, setCheckingExportPath] = useState(false);
   const [conversations, setConversations] = useState<ConversationCandidate[]>([]);
   const [loadingConversations, setLoadingConversations] = useState(false);
   const [conversationError, setConversationError] = useState<string>();
+  const [sourceInspection, setSourceInspection] = useState<SourceInspection>();
+  const [checkingSource, setCheckingSource] = useState(false);
   const [diagnosticLogs, setDiagnosticLogs] = useState<LogLine[]>([]);
+  const [diagnosticDetails, setDiagnosticDetails] = useState<DiagnosticDetails>();
   const [exportLogs, setExportLogs] = useState<LogLine[]>([]);
+  const [exportProgressCounts, setExportProgressCounts] = useState<JobProgress>();
+  const [exportHistory, setExportHistory] = useState<ExportHistoryEntry[]>(() => loadExportHistory());
   const [diagnosticJob, setDiagnosticJob] = useState<JobStarted>();
   const [exportJob, setExportJob] = useState<JobStarted>();
   const [diagnosticsSucceeded, setDiagnosticsSucceeded] = useState(false);
   const [runningJobId, setRunningJobId] = useState<string>();
-  const [diagnosticExitCode, setDiagnosticExitCode] = useState<number>();
-  const [exportExitCode, setExportExitCode] = useState<number>();
   const [diagnosticOutcome, setDiagnosticOutcome] = useState<JobOutcome>({ kind: "idle" });
   const [exportOutcome, setExportOutcome] = useState<JobOutcome>({ kind: "idle" });
   const [error, setError] = useState<string>();
@@ -115,16 +140,37 @@ export default function App() {
   const [showEnvironmentDetails, setShowEnvironmentDetails] = useState(false);
   const [updateState, setUpdateState] = useState<UpdateCheckState>({ kind: "idle" });
   const [dismissedUpdateVersion, setDismissedUpdateVersion] = useState<string>();
+  const [pendingActions, setPendingActions] = useState<ReadonlySet<PendingAction>>(() => new Set());
+  const [deletingInterruptedExportTarget, setDeletingInterruptedExportTarget] = useState<string>();
   const activeLogJobIdRef = useRef<string>();
   const diagnosticJobIdRef = useRef<string>();
   const exportJobIdRef = useRef<string>();
+  const activeExportHistoryDraftRef = useRef<Omit<ExportHistoryEntry, "finishedAt">>();
   const cancelRequestedJobIdRef = useRef<string>();
+  const sourceRef = useRef<SourceConfig>();
   const didHydrateSettingsRef = useRef(false);
   const autoClearPasswordRef = useRef(Boolean(config.autoClearPassword));
   const generatedArchivePathsRef = useRef(new Set<string>());
   const onboardingTriggerRef = useRef<HTMLButtonElement>(null);
   const aboutTriggerRef = useRef<HTMLButtonElement>(null);
   const environmentDetailsTriggerRef = useRef<HTMLButtonElement>(null);
+
+  function isPending(action: PendingAction): boolean {
+    return pendingActions.has(action);
+  }
+
+  async function withPending<T>(action: PendingAction, task: () => Promise<T>): Promise<T> {
+    setPendingActions((current) => new Set(current).add(action));
+    try {
+      return await task();
+    } finally {
+      setPendingActions((current) => {
+        const next = new Set(current);
+        next.delete(action);
+        return next;
+      });
+    }
+  }
 
   useEffect(() => {
     refreshEnvironment();
@@ -137,6 +183,16 @@ export default function App() {
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
     onJobEvent(handleJobEvent).then((handler) => {
+      unsubscribe = handler;
+    });
+    return () => unsubscribe?.();
+  }, []);
+
+  useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
+    onAppQuitBlocked(() => {
+      setError("导出或诊断正在运行，已阻止退出；请先等待完成或取消任务。");
+    }).then((handler) => {
       unsubscribe = handler;
     });
     return () => unsubscribe?.();
@@ -160,23 +216,39 @@ export default function App() {
     autoClearPasswordRef.current = Boolean(config.autoClearPassword);
   }, [config.autoClearPassword]);
 
+  const source: SourceConfig = useMemo(
+    () => ({
+      kind: config.kind,
+      backupPath: config.backupPath,
+      attachmentRoot: config.attachmentRoot,
+      contactsPath: config.contactsPath,
+      encrypted: config.encrypted,
+      cleartextPassword: config.cleartextPassword,
+    }),
+    [config.kind, config.backupPath, config.attachmentRoot, config.contactsPath, config.encrypted, config.cleartextPassword],
+  );
+
+  useEffect(() => {
+    sourceRef.current = source;
+  }, [source]);
+
   useEffect(() => {
     const backupPath = config.backupPath.trim();
     setConversations([]);
     setConversationError(undefined);
-    if (!backupPath || !selectedBackup?.valid) {
+    if (!backupPath || !sourceInspection?.ready) {
       setLoadingConversations(false);
       return;
     }
 
     let cancelled = false;
     setLoadingConversations(true);
-    scanConversations(backupPath)
+    scanConversations(source)
       .then((items) => {
         if (!cancelled) setConversations(items);
       })
       .catch((err) => {
-        if (!cancelled) setConversationError(String(err));
+        if (!cancelled) setConversationError(err instanceof Error ? err.message : String(err));
       })
       .finally(() => {
         if (!cancelled) setLoadingConversations(false);
@@ -185,31 +257,16 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [config.backupPath, selectedBackup?.valid]);
+  }, [config.backupPath, source, sourceInspection?.ready]);
 
   useEffect(() => {
     setDiagnosticsSucceeded(false);
     setDiagnosticJob(undefined);
     diagnosticJobIdRef.current = undefined;
     setDiagnosticLogs([]);
-    setDiagnosticExitCode(undefined);
+    setDiagnosticDetails(undefined);
     setDiagnosticOutcome({ kind: "idle" });
-  }, [config.backupPath, config.encrypted]);
-
-  useEffect(() => {
-    if (!config.backupPath.trim() || !config.exportPath.trim()) {
-      setPreview(undefined);
-      return;
-    }
-
-    const timeout = window.setTimeout(() => {
-      previewExportCommand(normalizeConfig(config))
-        .then(setPreview)
-        .catch(() => setPreview(undefined));
-    }, 250);
-
-    return () => window.clearTimeout(timeout);
-  }, [config]);
+  }, [config.backupPath, config.kind, config.encrypted]);
 
   useEffect(() => {
     const path = config.exportPath.trim();
@@ -237,6 +294,7 @@ export default function App() {
               containsHtml: false,
               containsTxt: false,
               containsAttachments: false,
+              interruptedExports: [],
               warnings: ["无法检查输出目录，请重新选择或确认权限。"],
               error: String(err),
             });
@@ -253,15 +311,42 @@ export default function App() {
     };
   }, [config.exportPath]);
 
-  const source: SourceConfig = useMemo(
-    () => ({
-      kind: "iosBackup",
-      backupPath: config.backupPath,
-      encrypted: config.encrypted,
-      cleartextPassword: config.cleartextPassword,
-    }),
-    [config.backupPath, config.encrypted, config.cleartextPassword],
-  );
+  useEffect(() => {
+    setSourceInspection(undefined);
+    const backupPath = config.backupPath.trim();
+    if (!backupPath || (config.kind === "iosBackup" && !selectedBackup?.valid)) {
+      setCheckingSource(false);
+      return;
+    }
+    if (config.encrypted && !config.cleartextPassword?.trim()) {
+      setCheckingSource(false);
+      return;
+    }
+
+    let cancelled = false;
+    setCheckingSource(true);
+    inspectSource(source)
+      .then((inspection) => {
+        if (!cancelled) setSourceInspection(inspection);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setSourceInspection({
+            ready: false,
+            databaseReadable: false,
+            warnings: [],
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setCheckingSource(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [config.kind, config.backupPath, config.encrypted, config.cleartextPassword, selectedBackup?.valid, source]);
 
   const validationErrors = useMemo(() => validateExportConfig(config), [config]);
   const exportPathErrors = useMemo(() => blockingExportPathErrors(exportPathStatus), [exportPathStatus]);
@@ -272,16 +357,19 @@ export default function App() {
   );
   const warnings = useMemo(() => converterWarnings(config.copyMethod, environment), [config.copyMethod, environment]);
   const diagnosticsText = useMemo(() => diagnosticLogs.map((line) => line.text).join("\n"), [diagnosticLogs]);
-  const diagnostics = useMemo(() => summarizeDiagnostics(diagnosticsText), [diagnosticsText]);
+  const diagnostics = useMemo(() => summarizeDiagnostics(diagnosticsText, diagnosticDetails), [diagnosticsText, diagnosticDetails]);
   const exportRunning = Boolean(exportJob && runningJobId === exportJob.jobId);
   const diagnosticsRunning = Boolean(diagnosticJob && runningJobId === diagnosticJob.jobId);
   const exportStartDisabled = Boolean(runningJobId) || checkingExportPath || allValidationErrors.length > 0;
   const activeSection = workspaceSections.find((candidate) => candidate.id === activeSectionId) ?? workspaceSections[0];
   const updateNoticeInfo = updateState.kind === "available" && updateState.info.version !== dismissedUpdateVersion ? updateState.info : undefined;
-  const sourceSelectionErrors = useMemo(() => sourceSelectionBlockers(config, selectedBackup), [config.backupPath, selectedBackup]);
+  const sourceSelectionErrors = useMemo(
+    () => sourceSelectionBlockers(config, selectedBackup, sourceInspection, checkingSource),
+    [config.kind, config.backupPath, selectedBackup, sourceInspection, checkingSource],
+  );
   const diagnosticsNavErrors = useMemo(
-    () => sourceDiagnosticsBlockers(config, selectedBackup, environment),
-    [config.backupPath, config.encrypted, config.cleartextPassword, selectedBackup, environment],
+    () => sourceDiagnosticsBlockers(config, selectedBackup, environment, sourceInspection, checkingSource),
+    [config.kind, config.backupPath, config.encrypted, config.cleartextPassword, selectedBackup, environment, sourceInspection, checkingSource],
   );
   const sectionAccess = useMemo(
     () => workspaceSectionAccessMap(sourceSelectionErrors, diagnosticsNavErrors),
@@ -299,41 +387,45 @@ export default function App() {
   }, [activeSectionId, sourceSelectionErrors.length]);
 
   async function refreshEnvironment() {
-    setError(undefined);
-    try {
-      const [env, candidates] = await Promise.all([getEnvironment(), scanIosBackups()]);
-      setEnvironment(env);
-      setBackups(candidates);
-      const savedBackup = candidates.find((candidate) => sameConfigPath(candidate.path, config.backupPath));
-      if (savedBackup) {
-        setSelectedBackup(savedBackup);
-        setConfig((current) => ({
-          ...current,
-          backupPath: savedBackup.path,
-          encrypted: savedBackup.encrypted ?? current.encrypted,
-        }));
-      } else if (config.backupPath.trim()) {
-        const candidate = await validateBackupPath(config.backupPath);
-        setSelectedBackup(candidate);
-        setConfig((current) => ({
-          ...current,
-          backupPath: candidate.path,
-          encrypted: candidate.encrypted ?? current.encrypted,
-        }));
-      } else if (!config.backupPath && candidates[0]) {
-        applyBackup(candidates[0]);
+    return withPending("refreshEnvironment", async () => {
+      setError(undefined);
+      try {
+        const [env, candidates] = await Promise.all([getEnvironment(), scanIosBackups()]);
+        setEnvironment(env);
+        setBackups(candidates);
+        const savedBackup = candidates.find((candidate) => sameConfigPath(candidate.path, config.backupPath));
+        if (savedBackup) {
+          setSelectedBackup(savedBackup);
+          setConfig((current) => ({
+            ...current,
+            backupPath: savedBackup.path,
+            encrypted: savedBackup.encrypted ?? current.encrypted,
+          }));
+        } else if (config.kind === "iosBackup" && config.backupPath.trim()) {
+          const candidate = await validateBackupPath(config.backupPath);
+          setSelectedBackup(candidate);
+          setConfig((current) => ({
+            ...current,
+            backupPath: candidate.path,
+            encrypted: candidate.encrypted ?? current.encrypted,
+          }));
+        } else if (!config.backupPath && candidates[0]) {
+          applyBackup(candidates[0]);
+        }
+      } catch (err) {
+        setError(String(err));
       }
-    } catch (err) {
-      setError(String(err));
-    }
+    });
   }
 
   function appendJobLog(event: JobEvent, setJobLogs: Dispatch<SetStateAction<LogLine[]>>) {
+    if (event.kind === "progress") return;
+    const kind: LogLine["kind"] = event.kind;
     setJobLogs((current) => [
       ...current,
       {
         id: `${event.jobId}-${event.timestamp}-${current.length}`,
-        kind: event.kind,
+        kind,
         text: event.text ?? (event.kind === "exit" ? `进程退出，代码 ${event.code ?? "unknown"}` : ""),
         timestamp: event.timestamp,
       },
@@ -341,6 +433,17 @@ export default function App() {
   }
 
   function handleJobEvent(event: JobEvent) {
+    if (event.kind === "progress") {
+      if (
+        event.jobId === exportJobIdRef.current &&
+        typeof event.current === "number" &&
+        typeof event.total === "number"
+      ) {
+        setExportProgressCounts({ current: event.current, total: event.total });
+      }
+      return;
+    }
+
     if (event.jobId === diagnosticJobIdRef.current) {
       appendJobLog(event, setDiagnosticLogs);
     } else if (event.jobId === exportJobIdRef.current) {
@@ -353,13 +456,16 @@ export default function App() {
       const nextOutcome = terminalOutcome(event, cancelRequestedJobIdRef.current === event.jobId);
       setRunningJobId(undefined);
       if (event.jobId === diagnosticJobIdRef.current) {
-        setDiagnosticExitCode(event.code);
         setDiagnosticOutcome(nextOutcome);
-        setDiagnosticsSucceeded(event.kind === "exit" && event.code === 0 && cancelRequestedJobIdRef.current !== event.jobId);
+        const succeeded = event.kind === "exit" && event.code === 0 && cancelRequestedJobIdRef.current !== event.jobId;
+        setDiagnosticsSucceeded(succeeded);
+        if (succeeded) refreshDiagnosticDetails();
       }
       if (event.jobId === exportJobIdRef.current) {
-        setExportExitCode(event.code);
         setExportOutcome(nextOutcome);
+        if (nextOutcome.kind === "succeeded") {
+          recordSuccessfulExport();
+        }
       }
       if (autoClearPasswordRef.current) {
         clearPassword();
@@ -369,32 +475,61 @@ export default function App() {
   }
 
   async function chooseBackupPath() {
-    const selected = await pickDirectory(config.backupPath || environment?.defaultBackupRoots[0], "backup");
-    if (!selected) return;
-    const candidate = await validateBackupPath(selected);
-    applyBackup(candidate);
+    return withPending("chooseBackup", async () => {
+      const selected = await pickDirectory(config.backupPath || environment?.defaultBackupRoots[0], config.kind === "macosChatDb" ? "sourceFile" : "backup");
+      if (!selected) return;
+      if (config.kind === "macosChatDb") {
+        setSelectedBackup(undefined);
+        updateConfig({ backupPath: selected, encrypted: false, cleartextPassword: "", conversationFilter: "", conversationId: undefined, conversationIds: undefined });
+        return;
+      }
+      const candidate = await validateBackupPath(selected);
+      applyBackup(candidate);
+    });
   }
 
   async function chooseExportPath() {
-    const selected = await pickDirectory(config.exportPath, "export");
-    if (selected) updateConfig({ exportPath: selected });
+    return withPending("chooseExport", async () => {
+      const selected = await pickDirectory(config.exportPath, "export");
+      if (selected) updateConfig({ exportPath: selected });
+    });
+  }
+
+  async function chooseAttachmentRootPath() {
+    return withPending("chooseAttachmentRoot", async () => {
+      const selected = await pickDirectory(config.attachmentRoot, "attachmentRoot");
+      if (selected) updateConfig({ attachmentRoot: selected });
+    });
+  }
+
+  async function chooseContactsPath() {
+    return withPending("chooseContactsPath", async () => {
+      const selected = await pickDirectory(config.contactsPath, "contactsFile");
+      if (selected) updateConfig({ contactsPath: selected });
+    });
   }
 
   async function generateArchiveExportPath() {
-    setError(undefined);
-    const sequence = timestampedArchiveSequence({
-      exportPath: config.exportPath,
-      backupPath: config.backupPath,
-      label: archiveLabelForConversation(config.conversationFilter, conversations),
-    });
+    return withPending("generateExport", async () => {
+      setError(undefined);
+      const label =
+        (config.archiveNameMode ?? "conversationTimestamp") === "timestamp"
+          ? undefined
+          : archiveLabelForConversation(config.conversationFilter, conversations, config.conversationId, config.conversationIds);
+      const sequence = timestampedArchiveSequence({
+        exportPath: config.exportPath,
+        backupPath: config.backupPath,
+        label,
+      });
 
-    try {
-      const nextPath = await nextAvailableArchivePath(sequence.stem, sequence.startSuffix, generatedArchivePathsRef.current);
-      generatedArchivePathsRef.current.add(nextPath);
-      updateConfig({ exportPath: nextPath });
-    } catch (err) {
-      setError(String(err));
-    }
+      try {
+        const nextPath = await nextAvailableArchivePath(sequence.stem, sequence.startSuffix, generatedArchivePathsRef.current);
+        generatedArchivePathsRef.current.add(nextPath);
+        updateConfig({ exportPath: nextPath });
+      } catch (err) {
+        setError(String(err));
+      }
+    });
   }
 
   function applyPreset(presetId: ExportPresetId) {
@@ -405,8 +540,14 @@ export default function App() {
     setSelectedBackup(candidate);
     setConfig((current) => ({
       ...current,
+      kind: "iosBackup",
       backupPath: candidate.path,
+      attachmentRoot: "",
+      contactsPath: "",
       encrypted: candidate.encrypted ?? current.encrypted,
+      conversationFilter: "",
+      conversationId: undefined,
+      conversationIds: undefined,
     }));
   }
 
@@ -434,120 +575,167 @@ export default function App() {
   }
 
   async function startDiagnostics() {
-    setError(undefined);
-    if (runningJobId) {
-      setError("另一个任务正在运行，请等待完成或先取消。");
-      return;
-    }
-    setDiagnosticLogs([]);
-    setDiagnosticExitCode(undefined);
-    setDiagnosticOutcome({ kind: "idle" });
-    cancelRequestedJobIdRef.current = undefined;
-    const blockers = sourceDiagnosticsBlockers(config, selectedBackup, environment);
-    if (blockers.length) {
-      setError(blockers.join(" "));
-      return;
-    }
-    try {
-      const job = await runDiagnostics(source);
-      setDiagnosticJob(job);
-      diagnosticJobIdRef.current = job.jobId;
-      activeLogJobIdRef.current = job.jobId;
-      setRunningJobId(job.jobId);
-      setDiagnosticOutcome({ kind: "running" });
-      setDiagnosticsSucceeded(false);
-      setActiveSectionId("diagnostics");
-    } catch (err) {
-      setError(String(err));
-    }
+    return withPending("startDiagnostics", async () => {
+      setError(undefined);
+      if (runningJobId) {
+        setError("另一个任务正在运行，请等待完成或先取消。");
+        return;
+      }
+      setDiagnosticLogs([]);
+      setDiagnosticDetails(undefined);
+      setDiagnosticOutcome({ kind: "idle" });
+      cancelRequestedJobIdRef.current = undefined;
+      const blockers = sourceDiagnosticsBlockers(config, selectedBackup, environment, sourceInspection, checkingSource);
+      if (blockers.length) {
+        setError(blockers.join(" "));
+        return;
+      }
+      try {
+        const job = await runDiagnostics(source);
+        setDiagnosticJob(job);
+        diagnosticJobIdRef.current = job.jobId;
+        activeLogJobIdRef.current = job.jobId;
+        setRunningJobId(job.jobId);
+        setDiagnosticOutcome({ kind: "running" });
+        setDiagnosticsSucceeded(false);
+        setActiveSectionId("diagnostics");
+      } catch (err) {
+        setError(String(err));
+      }
+    });
   }
 
   async function startExportJob() {
-    setError(undefined);
-    if (runningJobId) {
-      setError("另一个任务正在运行，请等待完成或先取消。");
-      return;
-    }
-
-    const normalized = normalizeConfig(config);
-    let latestExportPathStatus = exportPathStatus;
-    if (normalized.exportPath.trim()) {
-      try {
-        latestExportPathStatus = await inspectExportPath(normalized.exportPath);
-        setExportPathStatus(latestExportPathStatus);
-      } catch (err) {
-        latestExportPathStatus = {
-          path: normalized.exportPath,
-          exists: false,
-          isDirectory: false,
-          parentExists: false,
-          pathLength: normalized.exportPath.length,
-          containsHtml: false,
-          containsTxt: false,
-          containsAttachments: false,
-          warnings: ["无法检查输出目录，请重新选择或确认权限。"],
-          error: String(err),
-        };
-        setExportPathStatus(latestExportPathStatus);
+    return withPending("startExport", async () => {
+      setError(undefined);
+      if (runningJobId) {
+        setError("另一个任务正在运行，请等待完成或先取消。");
+        return;
       }
-    }
 
-    const errors = [...validateExportConfig(normalized), ...blockingExportPathErrors(latestExportPathStatus), ...environmentExportBlockers(environment)];
-    if (errors.length) {
-      setError(errors.join(" "));
-      return;
-    }
-    if (needsExportPathConfirmation(latestExportPathStatus)) {
-      const ok = window.confirm(tx("输出目录已有内容或疑似旧导出文件。继续导出会把新结果写入同一个目录，是否继续？"));
-      if (!ok) return;
-    }
+      const normalized = normalizeConfig(resolveConversationSelection(config, conversations));
+      let latestExportPathStatus = exportPathStatus;
+      if (normalized.exportPath.trim()) {
+        try {
+          latestExportPathStatus = await inspectExportPath(normalized.exportPath);
+          setExportPathStatus(latestExportPathStatus);
+        } catch (err) {
+          latestExportPathStatus = {
+            path: normalized.exportPath,
+            exists: false,
+            isDirectory: false,
+            parentExists: false,
+            pathLength: normalized.exportPath.length,
+            containsHtml: false,
+            containsTxt: false,
+            containsAttachments: false,
+            interruptedExports: [],
+            warnings: ["无法检查输出目录，请重新选择或确认权限。"],
+            error: String(err),
+          };
+          setExportPathStatus(latestExportPathStatus);
+        }
+      }
 
-    try {
-      setExportLogs([]);
-      setExportExitCode(undefined);
-      setExportOutcome({ kind: "idle" });
-      cancelRequestedJobIdRef.current = undefined;
-      const job = await startExport(normalized);
-      setExportJob(job);
-      exportJobIdRef.current = job.jobId;
-      setPreview(job.preview);
-      activeLogJobIdRef.current = job.jobId;
-      setRunningJobId(job.jobId);
-      setExportOutcome({ kind: "running" });
-      setActiveSectionId("run");
-    } catch (err) {
-      setError(String(err));
-    }
+      const errors = [
+        ...sourceSelectionBlockers(normalized, selectedBackup, sourceInspection, checkingSource),
+        ...validateExportConfig(normalized),
+        ...blockingExportPathErrors(latestExportPathStatus),
+        ...environmentExportBlockers(environment),
+      ];
+      if (errors.length) {
+        setError(errors.join(" "));
+        return;
+      }
+      if (needsExportPathConfirmation(latestExportPathStatus)) {
+        const interruptedCount = latestExportPathStatus?.interruptedExports.length ?? 0;
+        const message =
+          interruptedCount > 0
+            ? "检测到上次未完成导出的临时目录。带断点记录且设置一致的会自动续写；旧半成品会保留供取回或删除。确认继续？"
+            : "输出目录已有内容或疑似旧导出文件。继续导出会把新结果写入同一个目录，是否继续？";
+        const ok = window.confirm(tx(message));
+        if (!ok) return;
+      }
+
+      try {
+        setExportLogs([]);
+        setExportProgressCounts(undefined);
+        setExportOutcome({ kind: "idle" });
+        cancelRequestedJobIdRef.current = undefined;
+        const job = await startExport(normalized);
+        const selectedConversation = selectedConversationForExport(normalized, conversations);
+        setExportJob(job);
+        exportJobIdRef.current = job.jobId;
+        activeExportHistoryDraftRef.current = {
+          id: job.jobId,
+          exportPath: normalized.exportPath,
+          format: normalized.format,
+          conversationLabel: selectedConversation?.title ?? normalized.conversationFilter,
+          messageCount: selectedConversation?.messageCount,
+        };
+        activeLogJobIdRef.current = job.jobId;
+        setRunningJobId(job.jobId);
+        setExportOutcome({ kind: "running" });
+        setActiveSectionId("run");
+      } catch (err) {
+        setError(String(err));
+      }
+    });
   }
 
   async function openOutputPath() {
-    setError(undefined);
+    return withPending("openOutput", async () => {
+      setError(undefined);
+      try {
+        await openPath(config.exportPath);
+      } catch (err) {
+        setError(String(err));
+      }
+    });
+  }
+
+  async function deleteInterruptedExportPath(path: string) {
+    setDeletingInterruptedExportTarget(path);
     try {
-      await openPath(config.exportPath);
-    } catch (err) {
-      setError(String(err));
+      return await withPending("deleteInterruptedExport", async () => {
+        setError(undefined);
+        try {
+          await deleteInterruptedExport(path);
+          if (config.exportPath.trim()) {
+            setExportPathStatus(await inspectExportPath(config.exportPath));
+          }
+        } catch (err) {
+          setError(String(err));
+        }
+      });
+    } finally {
+      setDeletingInterruptedExportTarget(undefined);
     }
   }
 
   async function openFirstResultFile() {
-    setError(undefined);
-    try {
-      await openFirstResult(config.exportPath, config.format);
-    } catch (err) {
-      setError(String(err));
-    }
+    return withPending("openFirstResult", async () => {
+      setError(undefined);
+      try {
+        await openFirstResult(config.exportPath, config.format);
+      } catch (err) {
+        setError(String(err));
+      }
+    });
   }
 
   async function stopActiveJob() {
     if (!runningJobId) return;
-    const jobId = runningJobId;
-    cancelRequestedJobIdRef.current = jobId;
-    try {
-      await cancelJob(jobId);
-    } catch (err) {
-      if (cancelRequestedJobIdRef.current === jobId) cancelRequestedJobIdRef.current = undefined;
-      setError(String(err));
-    }
+    return withPending("cancelJob", async () => {
+      const jobId = runningJobId;
+      cancelRequestedJobIdRef.current = jobId;
+      try {
+        await cancelJob(jobId);
+      } catch (err) {
+        if (cancelRequestedJobIdRef.current === jobId) cancelRequestedJobIdRef.current = undefined;
+        setError(String(err));
+      }
+    });
   }
 
   function dismissOnboarding() {
@@ -562,6 +750,30 @@ export default function App() {
 
   function openAbout() {
     setShowAbout(true);
+  }
+
+  async function searchJsonlResults(query: string) {
+    try {
+      return await searchJsonlResult(config.exportPath, query, 20);
+    } catch (err) {
+      setError(String(err));
+      return [];
+    }
+  }
+
+  function recordSuccessfulExport() {
+    const draft = activeExportHistoryDraftRef.current;
+    if (!draft) return;
+    setExportHistory(recordExportHistory({ ...draft, finishedAt: new Date().toISOString() }));
+    activeExportHistoryDraftRef.current = undefined;
+  }
+
+  async function refreshDiagnosticDetails() {
+    try {
+      setDiagnosticDetails(await inspectDiagnostics(sourceRef.current ?? source));
+    } catch (err) {
+      console.warn("Could not read structured diagnostics", err);
+    }
   }
 
   function closeAbout() {
@@ -589,25 +801,31 @@ export default function App() {
   }
 
   async function installUpdate() {
-    if (updateState.kind !== "available") return;
-    const info = updateState.info;
-    setUpdateState({ kind: "installing", info, downloadedBytes: 0 });
-    try {
-      await installAvailableUpdate((event) => {
-        if (event.event === "Started") {
-          setUpdateState({ kind: "installing", info, downloadedBytes: 0, contentLength: event.data.contentLength });
-        } else if (event.event === "Progress") {
-          setUpdateState((current) =>
-            current.kind === "installing"
-              ? { ...current, downloadedBytes: current.downloadedBytes + event.data.chunkLength }
-              : current,
-          );
-        }
-      });
-      setUpdateState({ kind: "installed", info });
-    } catch (err) {
-      setUpdateState({ kind: "failed", source: "install", message: String(err) });
-    }
+    return withPending("installUpdate", async () => {
+      if (updateState.kind !== "available") return;
+      if (runningJobId) {
+        setError("任务运行中不能安装更新；请先等待完成或取消任务。");
+        return;
+      }
+      const info = updateState.info;
+      setUpdateState({ kind: "installing", info, downloadedBytes: 0 });
+      try {
+        await installAvailableUpdate((event) => {
+          if (event.event === "Started") {
+            setUpdateState({ kind: "installing", info, downloadedBytes: 0, contentLength: event.data.contentLength });
+          } else if (event.event === "Progress") {
+            setUpdateState((current) =>
+              current.kind === "installing"
+                ? { ...current, downloadedBytes: current.downloadedBytes + event.data.chunkLength }
+                : current,
+            );
+          }
+        });
+        setUpdateState({ kind: "installed", info });
+      } catch (err) {
+        setUpdateState({ kind: "failed", source: "install", message: String(err) });
+      }
+    });
   }
 
   return (
@@ -684,7 +902,8 @@ export default function App() {
               发现新版本 {updateNoticeInfo.version ?? "unknown"}，当前版本 {updateNoticeInfo.currentVersion ?? appDiagnostics?.version ?? "unknown"}。
             </span>
             <div className="notice-actions">
-              <button className="primary-button compact" type="button" onClick={installUpdate}>
+              <button className="primary-button compact" type="button" onClick={installUpdate} disabled={isPending("installUpdate")} aria-busy={isPending("installUpdate") || undefined}>
+                {isPending("installUpdate") ? <Loader2 className="spin" size={15} /> : null}
                 下载并安装
               </button>
               <button
@@ -706,8 +925,17 @@ export default function App() {
             selectedBackup={selectedBackup}
             config={config}
             environment={environment}
+            sourceInspection={sourceInspection}
+            checkingSource={checkingSource}
+            choosingBackup={isPending("chooseBackup")}
+            choosingAttachmentRoot={isPending("chooseAttachmentRoot")}
+            choosingContactsPath={isPending("chooseContactsPath")}
+            refreshingEnvironment={isPending("refreshEnvironment")}
+            startingDiagnostics={isPending("startDiagnostics")}
             diagnosticsSucceeded={diagnosticsSucceeded}
             onChooseBackup={chooseBackupPath}
+            onChooseAttachmentRoot={chooseAttachmentRootPath}
+            onChooseContactsPath={chooseContactsPath}
             onSelectBackup={applyBackup}
             onChange={updateConfig}
             onClearPassword={clearPassword}
@@ -724,9 +952,11 @@ export default function App() {
             config={config}
             language={language}
             backup={selectedBackup}
+            sourceInspection={sourceInspection}
             environment={environment}
             running={diagnosticsRunning}
-            exitCode={diagnosticExitCode}
+            startingDiagnostics={isPending("startDiagnostics")}
+            cancelling={isPending("cancelJob")}
             outcome={diagnosticOutcome}
             canContinue={diagnosticsSucceeded}
             onRunDiagnostics={startDiagnostics}
@@ -743,16 +973,22 @@ export default function App() {
             environment={environment}
             warnings={warnings}
             errors={allValidationErrors}
-            preview={preview}
             exportPathStatus={exportPathStatus}
             checkingExportPath={checkingExportPath}
+            choosingExport={isPending("chooseExport")}
+            generatingExportPath={isPending("generateExport")}
+            startingExport={isPending("startExport")}
             conversations={conversations}
             loadingConversations={loadingConversations}
             conversationError={conversationError}
+            diagnosticDetails={diagnosticDetails}
             onChange={updateConfig}
             onChooseExport={chooseExportPath}
             onGenerateExport={generateArchiveExportPath}
             onApplyPreset={applyPreset}
+            onOpenPath={(path) => openPath(path).catch((err) => setError(String(err)))}
+            deletingInterruptedExportPath={deletingInterruptedExportTarget}
+            onDeleteInterruptedExport={deleteInterruptedExportPath}
             onStart={startExportJob}
           />
         )}
@@ -760,20 +996,27 @@ export default function App() {
         {activeSectionId === "run" && (
           <RunStep
             logs={exportLogs}
-            preview={preview ?? exportJob?.preview}
+            progressCounts={exportProgressCounts}
             hasExportTask={Boolean(exportJob)}
             running={exportRunning}
             startDisabled={exportStartDisabled}
-            exitCode={exportExitCode}
             outcome={exportOutcome}
             config={config}
+            exportPathStatus={exportPathStatus}
+            exportHistory={exportHistory}
             conversations={conversations}
+            startingExport={isPending("startExport")}
+            cancelling={isPending("cancelJob")}
+            openingOutput={isPending("openOutput")}
+            openingFirstResult={isPending("openFirstResult")}
             onStart={startExportJob}
             onCancel={stopActiveJob}
             onBackToOptions={() => setActiveSectionId("options")}
             onBackToSource={() => setActiveSectionId("source")}
             onOpenOutput={openOutputPath}
+            onOpenHistoryPath={(path) => openPath(path).catch((err) => setError(String(err)))}
             onOpenFirstResult={openFirstResultFile}
+            onSearchJsonl={searchJsonlResults}
           />
         )}
       </section>
@@ -783,7 +1026,9 @@ export default function App() {
           backup={selectedBackup}
           config={config}
           diagnosticsSucceeded={diagnosticsSucceeded}
-          diagnosticsBlockers={sourceDiagnosticsBlockers(config, selectedBackup, environment)}
+          diagnosticsBlockers={sourceDiagnosticsBlockers(config, selectedBackup, environment, sourceInspection, checkingSource)}
+          choosingBackup={isPending("chooseBackup")}
+          startingDiagnostics={isPending("startDiagnostics")}
           onChooseBackup={chooseBackupPath}
           onRunDiagnostics={startDiagnostics}
           onClose={dismissOnboarding}
@@ -808,6 +1053,7 @@ export default function App() {
         <EnvironmentDialog
           environment={environment}
           settingsSaveState={settingsSaveState}
+          refreshingEnvironment={isPending("refreshEnvironment")}
           onRefresh={() => refreshEnvironment()}
           onClearSettings={clearSavedSettings}
           onOpenResource={(file) => openResourceFile(file).catch((err) => setError(String(err)))}
@@ -819,11 +1065,35 @@ export default function App() {
   );
 }
 
-function archiveLabelForConversation(conversationFilter?: string, conversations: ConversationCandidate[] = []): string | undefined {
+function archiveLabelForConversation(conversationFilter?: string, conversations: ConversationCandidate[] = [], conversationId?: number, conversationIds?: number[]): string | undefined {
+  const selected = selectedConversationForExport({ conversationFilter, conversationId, conversationIds }, conversations);
+  if (selected) return selected.title;
   const filter = conversationFilter?.trim();
+  return filter || undefined;
+}
+
+function selectedConversationForExport(
+  selection: Pick<ExportConfig, "conversationFilter" | "conversationId" | "conversationIds">,
+  conversations: ConversationCandidate[] = [],
+): ConversationCandidate | undefined {
+  if (selection.conversationIds?.length) {
+    const selected = conversations.find((conversation) => sameConversationIds(conversation.chatIds, selection.conversationIds));
+    if (selected) return selected;
+  }
+  if (selection.conversationId !== undefined) {
+    const selected = conversations.find((conversation) => Number(conversation.id) === selection.conversationId);
+    if (selected) return selected;
+  }
+  const filter = selection.conversationFilter?.trim();
   if (!filter) return undefined;
-  const selected = conversations.find((conversation) => conversation.filterValue === filter);
-  return selected?.title || filter;
+  return conversations.find((conversation) => conversation.filterValue === filter);
+}
+
+function sameConversationIds(left: number[] = [], right: number[] = []): boolean {
+  const leftSorted = [...left].sort((a, b) => a - b);
+  const rightSorted = [...right].sort((a, b) => a - b);
+  if (leftSorted.length !== rightSorted.length) return false;
+  return leftSorted.every((value, index) => value === rightSorted[index]);
 }
 
 async function nextAvailableArchivePath(stem: string, startSuffix: number, generatedPaths: Set<string>): Promise<string> {

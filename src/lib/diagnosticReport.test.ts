@@ -4,7 +4,7 @@ import { summarizeDiagnostics } from "./diagnostics";
 import { buildDiagnosticReport, redactSensitiveText } from "./diagnosticReport";
 
 describe("diagnostic reports", () => {
-  it("includes environment, backup state, diagnostics, command, and redacted logs", () => {
+  it("includes environment, backup state, diagnostics, engine state, and redacted logs", () => {
     const report = buildDiagnosticReport({
       generatedAt: new Date("2026-06-12T01:30:00.000Z"),
       environment: {
@@ -33,11 +33,6 @@ describe("diagnostic reports", () => {
         cleartextPassword: "super-secret",
       },
       diagnostics: summarizeDiagnostics("Message diagnostic data: Total messages: 12\nConverter diagnostic data: ffmpeg missing"),
-      preview: {
-        executable: "imessage-exporter",
-        args: [],
-        redacted: "imessage-exporter --cleartext-password [redacted]",
-      },
       logs: [{ id: "1", kind: "stderr", text: "failed with super-secret", timestamp: 1 }],
     });
 

@@ -58,8 +58,83 @@ pub struct BackupCandidate {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SourceInspection {
+    pub ready: bool,
+    pub database_readable: bool,
+    pub encrypted: Option<bool>,
+    pub device_name: Option<String>,
+    pub product_version: Option<String>,
+    pub message_count: Option<usize>,
+    pub chat_count: Option<usize>,
+    pub attachment_count: Option<usize>,
+    pub attachment_bytes: Option<u64>,
+    pub warnings: Vec<String>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiagnosticDetails {
+    pub handles: HandleDiagnosticDetails,
+    pub messages: MessageDiagnosticDetails,
+    pub attachments: AttachmentDiagnosticDetails,
+    pub chats: ChatDiagnosticDetails,
+    pub contacts: ContactDiagnosticDetails,
+    pub database_bytes: Option<u64>,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HandleDiagnosticDetails {
+    pub total_handles: usize,
+    pub handles_with_multiple_ids: Option<usize>,
+    pub total_duplicated: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MessageDiagnosticDetails {
+    pub total_messages: usize,
+    pub messages_without_chat: usize,
+    pub messages_in_multiple_chats: usize,
+    pub recoverable_messages: Option<usize>,
+    pub first_message_date: Option<i64>,
+    pub last_message_date: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AttachmentDiagnosticDetails {
+    pub total_attachments: usize,
+    pub total_bytes_referenced: u64,
+    pub total_bytes_on_disk: u64,
+    pub missing_files: usize,
+    pub no_path_provided: usize,
+    pub no_file_located: usize,
+    pub missing_percent: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatDiagnosticDetails {
+    pub total_chats: usize,
+    pub total_duplicated: usize,
+    pub chats_with_no_handles: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContactDiagnosticDetails {
+    pub resolved_names: usize,
+    pub total_participants: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ConversationCandidate {
     pub id: String,
+    pub chat_ids: Vec<i32>,
     pub title: String,
     pub subtitle: Option<String>,
     pub filter_value: String,
@@ -83,6 +158,7 @@ pub struct ExportPathStatus {
     pub contains_html: bool,
     pub contains_txt: bool,
     pub contains_attachments: bool,
+    pub interrupted_exports: Vec<String>,
     pub warnings: Vec<String>,
     pub error: Option<String>,
 }
@@ -93,6 +169,8 @@ pub struct SourceConfig {
     pub kind: SourceKind,
     pub backup_path: String,
     pub exporter_path: Option<String>,
+    pub attachment_root: Option<String>,
+    pub contacts_path: Option<String>,
     pub encrypted: bool,
     pub cleartext_password: Option<String>,
 }
@@ -101,6 +179,7 @@ pub struct SourceConfig {
 #[serde(rename_all = "camelCase")]
 pub enum SourceKind {
     IosBackup,
+    MacosChatDb,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -109,6 +188,8 @@ pub struct ExportConfig {
     pub kind: SourceKind,
     pub backup_path: String,
     pub exporter_path: Option<String>,
+    pub attachment_root: Option<String>,
+    pub contacts_path: Option<String>,
     pub encrypted: bool,
     pub cleartext_password: Option<String>,
     pub export_path: String,
@@ -117,9 +198,12 @@ pub struct ExportConfig {
     pub start_date: Option<String>,
     pub end_date: Option<String>,
     pub conversation_filter: Option<String>,
+    pub conversation_id: Option<i32>,
+    pub conversation_ids: Option<Vec<i32>>,
     pub no_lazy: Option<bool>,
     pub custom_name: Option<String>,
     pub use_caller_id: Option<bool>,
+    pub filename_mode: Option<ExportFilenameMode>,
     pub ignore_disk_warning: Option<bool>,
 }
 
@@ -142,6 +226,14 @@ impl ExportFormat {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ExportFilenameMode {
+    ContactName,
+    ContactNameWithCallerId,
+    ChatIdentifier,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum CopyMethod {
     Disabled,
@@ -150,30 +242,17 @@ pub enum CopyMethod {
     Full,
 }
 
-impl CopyMethod {
-    pub fn as_arg(&self) -> &'static str {
-        match self {
-            CopyMethod::Disabled => "disabled",
-            CopyMethod::Clone => "clone",
-            CopyMethod::Basic => "basic",
-            CopyMethod::Full => "full",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CommandPreview {
-    pub executable: String,
-    pub args: Vec<String>,
-    pub redacted: String,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JobStarted {
     pub job_id: String,
-    pub preview: CommandPreview,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JsonlSearchMatch {
+    pub line_number: usize,
+    pub preview: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -183,6 +262,8 @@ pub struct JobEvent {
     pub kind: JobEventKind,
     pub text: Option<String>,
     pub code: Option<i32>,
+    pub current: Option<u64>,
+    pub total: Option<u64>,
     pub timestamp: u128,
 }
 
@@ -191,6 +272,7 @@ pub struct JobEvent {
 pub enum JobEventKind {
     Stdout,
     Stderr,
+    Progress,
     Exit,
     Error,
 }

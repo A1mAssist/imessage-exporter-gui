@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LogLine } from "../types";
-import { summarizeExportResult } from "./exportSummary";
+import { exportProgress, exportProgressTiming, summarizeExportResult } from "./exportSummary";
 
 function line(text: string, kind: LogLine["kind"] = "stdout", timestamp = 1): LogLine {
   return { id: text, kind, text, timestamp };
@@ -83,5 +83,44 @@ describe("summarizeExportResult", () => {
         exportPath: "D:\\Out",
       }).statusLabel,
     ).toBe("导出失败，代码 13");
+  });
+
+  it("derives coarse export progress from engine log phases", () => {
+    expect(exportProgress([line("Building cache..."), line("  [3/5] Caching participants...")], true, "running")).toMatchObject({
+      value: 42,
+      label: "读取消息索引",
+    });
+
+    expect(exportProgress([line("Exporting to D:\\Out as html..."), line("Done!")], true, "running")).toMatchObject({
+      value: 96,
+      label: "发布结果",
+    });
+
+    expect(exportProgress([line("Export complete: D:\\Out")], false, "succeeded")).toMatchObject({
+      value: 100,
+      label: "导出完成",
+    });
+  });
+
+  it("prefers exact message progress when the engine reports counts", () => {
+    expect(exportProgress([line("Building cache...")], true, "running", { current: 250, total: 1000 })).toMatchObject({
+      value: 25,
+      label: "写入导出文件",
+      detail: "250 / 1,000 条消息",
+    });
+
+    expect(exportProgress([], false, "succeeded", { current: 1000, total: 1000 })).toMatchObject({
+      value: 100,
+      label: "导出完成",
+    });
+  });
+
+  it("adds elapsed and remaining time to exact progress", () => {
+    const progress = exportProgress([line("Starting built-in engine...", "stderr", 1_000)], true, "running", { current: 250, total: 1000 });
+
+    expect(progress && exportProgressTiming(progress, [line("Starting built-in engine...", "stderr", 1_000)], 11_000)).toMatchObject({
+      elapsedLabel: "10 秒",
+      remainingLabel: "30 秒",
+    });
   });
 });

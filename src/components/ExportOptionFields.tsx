@@ -3,6 +3,9 @@ import { AlertCircle, Info, X } from "lucide-react";
 
 import type { ConversationCandidate, ExportConfig } from "../types";
 
+const defaultConversationLimit = 250;
+const searchedConversationLimit = 500;
+
 export function DateRangeField({ config, onChange }: { config: ExportConfig; onChange: (patch: Partial<ExportConfig>) => void }) {
   const hasDateRange = Boolean(config.startDate || config.endDate);
 
@@ -37,31 +40,38 @@ export function DateRangeField({ config, onChange }: { config: ExportConfig; onC
 
 export function ConversationPicker({
   value,
+  selectedId,
   conversations,
   loading,
   error,
   onChange,
 }: {
   value: string;
+  selectedId?: number;
   conversations: ConversationCandidate[];
   loading: boolean;
   error?: string;
-  onChange: (value: string) => void;
+  onChange: (value: string, selectedId?: number, selectedIds?: number[]) => void;
 }) {
   const [manualOpen, setManualOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [sortMode, setSortMode] = useState<"messages" | "recent">("messages");
-  const selected = conversations.find((conversation) => conversation.filterValue === value);
+  const selected = conversations.find((conversation) => Number(conversation.id) === selectedId) ?? conversations.find((conversation) => conversation.filterValue === value);
   const manualVisible = manualOpen || (!selected && Boolean(value)) || Boolean(error);
-  const selectedValue = manualVisible ? "__manual__" : selected ? selected.filterValue : "";
+  const selectedValue = manualVisible ? "__manual__" : selected ? selected.id : "";
   const hasScannedConversations = conversations.length > 0;
-  const visibleConversations = filterAndSortConversations(conversations, query, sortMode);
+  const filteredConversations = filterAndSortConversations(conversations, query, sortMode);
+  const visibleConversations = includeSelectedConversation(
+    filteredConversations.slice(0, query.trim() ? searchedConversationLimit : defaultConversationLimit),
+    selected,
+  );
   const helperText = conversationPickerHelperText({
     loading,
     error,
     selected,
     hasScannedConversations,
-    visibleCount: visibleConversations.length,
+    visibleCount: filteredConversations.length,
+    totalCount: conversations.length,
     manualVisible,
     query,
     value,
@@ -78,14 +88,15 @@ export function ConversationPicker({
               setManualOpen(true);
             } else {
               setManualOpen(false);
-              onChange(event.target.value);
+              const conversation = conversations.find((item) => item.id === event.target.value);
+              onChange(conversation?.filterValue ?? "", conversation ? Number(conversation.id) : undefined, conversation?.chatIds);
             }
           }}
           disabled={loading}
         >
           <option value="">{loading ? "正在读取会话..." : "全部会话"}</option>
           {visibleConversations.map((conversation) => (
-            <option value={conversation.filterValue} key={conversation.id}>
+            <option value={conversation.id} key={conversation.id}>
               {conversationOptionLabel(conversation)}
             </option>
           ))}
@@ -109,7 +120,7 @@ export function ConversationPicker({
       ) : null}
       <div className="conversation-picker-actions">
         <small>{helperText}</small>
-        <button className="ghost-button compact-field-action" type="button" onClick={() => onChange("")} disabled={!value}>
+        <button className="ghost-button compact-field-action" type="button" onClick={() => onChange("", undefined, undefined)} disabled={!value && !selectedId}>
           <X size={14} />
           清除会话
         </button>
@@ -117,19 +128,19 @@ export function ConversationPicker({
       {error ? (
         <p className="mini-warning conversation-picker-warning" role="status">
           <AlertCircle size={15} />
-          <span>无法读取会话列表：{error}。仍可手动输入联系人、手机号或聊天标识继续导出。</span>
+          <span>无法读取会话列表：{error}。这只影响下拉选择；仍可手动输入联系人、手机号或聊天标识来筛选导出。</span>
         </p>
       ) : null}
       {!loading && !error && !hasScannedConversations ? (
         <p className="mini-warning conversation-picker-warning" role="status">
           <Info size={15} />
-          <span>这个备份暂时没有可选择的会话列表；需要筛选时可以手动输入。</span>
+          <span>这个备份暂时没有可选择的会话；需要筛选单个会话时，可以手动输入。</span>
         </p>
       ) : null}
       {manualVisible ? (
         <label className="manual-conversation-filter">
           <span>手动筛选值</span>
-          <input value={value} onChange={(event) => onChange(event.target.value)} placeholder="联系人、手机号或聊天标识" />
+          <input value={value} onChange={(event) => onChange(event.target.value, undefined, undefined)} placeholder="联系人、手机号或聊天标识" />
         </label>
       ) : null}
       {!manualVisible ? (
@@ -138,7 +149,7 @@ export function ConversationPicker({
           type="button"
           onClick={() => {
             setManualOpen(true);
-            if (selected) onChange("");
+            if (selected) onChange("", undefined, undefined);
           }}
         >
           手动输入筛选值
@@ -154,6 +165,7 @@ function conversationPickerHelperText({
   selected,
   hasScannedConversations,
   visibleCount,
+  totalCount,
   manualVisible,
   query,
   value,
@@ -163,17 +175,26 @@ function conversationPickerHelperText({
   selected?: ConversationCandidate;
   hasScannedConversations: boolean;
   visibleCount: number;
+  totalCount: number;
   manualVisible: boolean;
   query: string;
   value: string;
 }): string {
+  if (!loading && !error && !selected && !manualVisible && hasScannedConversations && !query.trim() && totalCount > defaultConversationLimit) {
+    return `已读取 ${totalCount} 个会话；默认显示前 ${defaultConversationLimit} 个，搜索会查全部。`;
+  }
   if (selected) return conversationSummary(selected);
   if (loading) return "正在从备份读取会话列表。";
-  if (error) return "会话列表不可用；手动输入后仍会把筛选值传给导出引擎。";
+  if (error) return "会话列表不可用；仍可手动输入筛选值来导出指定会话。";
   if (manualVisible) return value.trim() ? "将使用手动筛选值导出指定会话。" : "输入联系人、手机号或聊天标识来筛选单个会话。";
   if (!hasScannedConversations) return "没有读取到可选择的会话；默认导出全部会话。";
   if (query.trim()) return visibleCount ? `已筛出 ${visibleCount} 个会话。` : "没有匹配的会话；可以换个关键词或手动输入。";
   return "选择一个会话，导出时会自动传入对应筛选值。";
+}
+
+function includeSelectedConversation(conversations: ConversationCandidate[], selected?: ConversationCandidate): ConversationCandidate[] {
+  if (!selected || conversations.some((conversation) => conversation.id === selected.id)) return conversations;
+  return [selected, ...conversations];
 }
 
 function filterAndSortConversations(conversations: ConversationCandidate[], query: string, sortMode: "messages" | "recent"): ConversationCandidate[] {

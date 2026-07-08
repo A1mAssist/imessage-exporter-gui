@@ -4,13 +4,14 @@
 
 use std::{
     ffi::OsStr,
+    fs::{remove_file, rename},
     path::{Path, PathBuf},
 };
 
 use imessage_database::tables::attachment::MediaType;
 
 use crate::app::compatibility::{
-    converters::common::{copy_raw, ensure_output_dir, run_command},
+    converters::common::{copy_raw, ensure_output_dir, partial_path, run_command},
     models::{Converter, ImageConverter, ImageType},
 };
 
@@ -61,6 +62,8 @@ fn convert_heic(
     output_image_type: &ImageType,
 ) -> Option<()> {
     ensure_output_dir(to)?;
+    let temp_path = partial_path(to);
+    let _ = remove_file(&temp_path);
 
     let args: Vec<&OsStr> = match converter {
         ImageConverter::Sips => vec![
@@ -69,10 +72,10 @@ fn convert_heic(
             OsStr::new(output_image_type.to_str()),
             from.as_os_str(),
             OsStr::new("-o"),
-            to.as_os_str(),
+            temp_path.as_os_str(),
         ],
-        ImageConverter::Imagemagick => vec![from.as_os_str(), to.as_os_str()],
+        ImageConverter::Imagemagick => vec![from.as_os_str(), temp_path.as_os_str()],
     };
 
-    run_command(converter.name(), args)
+    run_command(converter.name(), args).and_then(|_| rename(temp_path, to).ok())
 }

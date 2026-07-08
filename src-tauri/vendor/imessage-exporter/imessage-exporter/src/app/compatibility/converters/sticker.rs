@@ -5,7 +5,7 @@
 use std::{
     env::temp_dir,
     ffi::OsStr,
-    fs::{create_dir_all, remove_dir_all},
+    fs::{create_dir_all, remove_dir_all, remove_file, rename},
     path::{Path, PathBuf},
     process,
     time::{SystemTime, UNIX_EPOCH},
@@ -14,7 +14,7 @@ use std::{
 use imessage_database::tables::attachment::MediaType;
 
 use crate::app::compatibility::{
-    converters::common::{copy_raw, ensure_output_dir, run_command},
+    converters::common::{copy_raw, ensure_output_dir, partial_path, run_command},
     models::{Converter, ImageConverter, ImageType, VideoConverter},
 };
 
@@ -87,8 +87,10 @@ fn convert_heic(
     output_image_type: &ImageType,
 ) -> Option<()> {
     ensure_output_dir(to)?;
+    let temp_path = partial_path(to);
+    let _ = remove_file(&temp_path);
 
-    match converter {
+    let result = match converter {
         ImageConverter::Sips => {
             let args: Vec<&OsStr> = vec![
                 OsStr::new("-s"),
@@ -96,7 +98,7 @@ fn convert_heic(
                 OsStr::new(output_image_type.to_str()),
                 from.as_os_str(),
                 OsStr::new("-o"),
-                to.as_os_str(),
+                temp_path.as_os_str(),
             ];
             run_command(converter.name(), args)
         }
@@ -106,10 +108,11 @@ fn convert_heic(
             // don't need the source path to round-trip through UTF-8.
             let mut formatted_from = from.as_os_str().to_owned();
             formatted_from.push("[0]");
-            let args: Vec<&OsStr> = vec![&formatted_from, to.as_os_str()];
+            let args: Vec<&OsStr> = vec![&formatted_from, temp_path.as_os_str()];
             run_command(converter.name(), args)
         }
-    }
+    };
+    result.and_then(|_| rename(temp_path, to).ok())
 }
 
 fn convert_heics(from: &Path, to: &Path, video_converter: &VideoConverter) -> Option<()> {
@@ -127,6 +130,8 @@ fn convert_heics_with_tmp(
     tmp_path: &Path,
 ) -> Option<()> {
     ensure_output_dir(to)?;
+    let temp_path = partial_path(to);
+    let _ = remove_file(&temp_path);
 
     // Frames per second in the original sticker.
     let fps = 10;
@@ -223,11 +228,11 @@ fn convert_heics_with_tmp(
                 OsStr::new(&paletteuse),
                 OsStr::new("-gifflags"),
                 OsStr::new("-offsetting"),
-                to.as_os_str(),
+                temp_path.as_os_str(),
             ];
             run_command(video_converter.name(), gif_args)?;
 
-            Some(())
+            rename(temp_path, to).ok()
         }
     }
 }

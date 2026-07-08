@@ -4,13 +4,14 @@
 
 use std::{
     ffi::OsStr,
+    fs::{remove_file, rename},
     path::{Path, PathBuf},
 };
 
 use imessage_database::tables::attachment::MediaType;
 
 use crate::app::compatibility::{
-    converters::common::{copy_raw, ensure_output_dir, run_command},
+    converters::common::{copy_raw, ensure_output_dir, partial_path, run_command},
     models::{AudioConverter, AudioType, Converter},
 };
 
@@ -50,6 +51,8 @@ pub(crate) fn audio_copy_convert(
 
 fn convert_caf(from: &Path, to: &Path, converter: &AudioConverter) -> Option<()> {
     ensure_output_dir(to)?;
+    let temp_path = partial_path(to);
+    let _ = remove_file(&temp_path);
 
     let args: Vec<&OsStr> = match converter {
         AudioConverter::AfConvert => vec![
@@ -59,10 +62,10 @@ fn convert_caf(from: &Path, to: &Path, converter: &AudioConverter) -> Option<()>
             OsStr::new("aac"),
             OsStr::new("-v"),
             from.as_os_str(),
-            to.as_os_str(),
+            temp_path.as_os_str(),
         ],
-        AudioConverter::Ffmpeg => vec![OsStr::new("-i"), from.as_os_str(), to.as_os_str()],
+        AudioConverter::Ffmpeg => vec![OsStr::new("-i"), from.as_os_str(), temp_path.as_os_str()],
     };
 
-    run_command(converter.name(), args)
+    run_command(converter.name(), args).and_then(|_| rename(temp_path, to).ok())
 }

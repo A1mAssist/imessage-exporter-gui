@@ -4,7 +4,7 @@
 
 use std::{
     fmt::{Display, Formatter, Result},
-    process::Command,
+    process::{Command, Output},
 };
 
 pub trait Converter {
@@ -175,10 +175,7 @@ pub enum HardwareEncoder {
 impl HardwareEncoder {
     /// Detect the best available hardware encoder in priority order.
     pub fn detect() -> Option<Self> {
-        if let Ok(output) = Command::new("ffmpeg")
-            .args(["-hide_banner", "-encoders"])
-            .output()
-        {
+        if let Ok(output) = command_output("ffmpeg", &["-hide_banner", "-encoders"]) {
             let out = String::from_utf8_lossy(&output.stdout);
             if out.contains("h264_nvenc") {
                 return Some(Self::Nvenc);
@@ -206,9 +203,7 @@ impl HardwareEncoder {
 /// `true` when a shell program exists on the system.
 #[cfg(not(target_family = "windows"))]
 fn exists(name: &str) -> bool {
-    Command::new("which")
-        .arg(name)
-        .output()
+    command_output("which", &[name])
         .map(|output| output.status.success())
         .unwrap_or(false)
 }
@@ -216,12 +211,28 @@ fn exists(name: &str) -> bool {
 /// `true` when a shell program exists on the system.
 #[cfg(target_family = "windows")]
 fn exists(name: &str) -> bool {
-    Command::new("where")
-        .arg(name)
-        .output()
+    command_output("where", &[name])
         .map(|output| output.status.success())
         .unwrap_or(false)
 }
+
+fn command_output(command: &str, args: &[&str]) -> std::io::Result<Output> {
+    let mut command = Command::new(command);
+    command.args(args);
+    hide_console_window(&mut command);
+    command.output()
+}
+
+#[cfg(windows)]
+fn hide_console_window(command: &mut Command) {
+    use std::os::windows::process::CommandExt;
+
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    command.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(windows))]
+fn hide_console_window(_: &mut Command) {}
 
 #[cfg(test)]
 mod test {

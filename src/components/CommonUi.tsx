@@ -1,21 +1,20 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   AlertCircle,
-  ArrowDownToLine,
   CheckCircle2,
   Clipboard,
   Database,
   Download,
   FolderOpen,
+  Loader2,
   RefreshCcw,
-  Search,
   Settings2,
 } from "lucide-react";
 
 import type { DiagnosticFinding } from "../lib/diagnostics";
 import { recoveryHintForFailure } from "../lib/recoveryHints";
-import type { CommandPreview, JobEvent, LogLine } from "../types";
+import type { JobEvent, LogLine } from "../types";
 
 export type JobOutcome = { kind: "idle" | "running" | "succeeded" | "failed" | "cancelled"; code?: number; message?: string };
 
@@ -143,8 +142,8 @@ export function JobOutcomeNotice({
   const title = hint?.title ?? label;
   const detail =
     outcome.kind === "cancelled"
-      ? "任务已停止。可以调整选项后重新运行，已有日志会保留在本页。"
-      : `${hint?.detail ?? outcome.message ?? "请查看 stderr/stdout 日志。"} ${hint?.action ?? "修正备份路径、密码、输出目录或转换器环境后重试。"}`;
+      ? "任务已停止。可以调整选项后重新运行。"
+      : `${hint?.detail ?? outcome.message ?? "任务失败。"} ${hint?.action ?? "修正备份路径、密码、输出目录或转换器环境后重试。"}`;
   return (
     <div className={`notice ${outcome.kind === "cancelled" ? "warn" : "error"} job-outcome-notice`}>
       <AlertCircle size={17} />
@@ -240,14 +239,14 @@ export function Header({ eyebrow, title, description }: { eyebrow: string; title
   );
 }
 
-export function PathField({ label, value, onBrowse }: { label: string; value: string; onBrowse: () => void }) {
+export function PathField({ label, value, onBrowse, loading }: { label: string; value: string; onBrowse: () => void; loading?: boolean }) {
   return (
     <label className="path-field">
       <span>{label}</span>
       <div>
         <input value={value} readOnly placeholder="请选择目录" title={value} />
-        <button type="button" onClick={onBrowse} title={`选择${label}`}>
-          <FolderOpen size={18} />
+        <button type="button" onClick={onBrowse} title={`选择${label}`} disabled={loading} aria-busy={loading || undefined}>
+          {loading ? <Loader2 className="spin" size={18} /> : <FolderOpen size={18} />}
         </button>
         <CopyButton label="复制路径" value={value} disabled={!value.trim()} title={value ? `复制完整${label}: ${value}` : `复制${label}`} />
       </div>
@@ -306,21 +305,6 @@ export function DiagnosticTile({ label, status }: { label: string; status: Diagn
   );
 }
 
-export function CommandBox({ preview }: { preview: CommandPreview }) {
-  return (
-    <section className="command-box">
-      <div className="section-heading">
-        <div>
-          <h2>命令预览</h2>
-          <p>密码和敏感值已脱敏。</p>
-        </div>
-        <CopyButton label="复制命令" value={preview.redacted} />
-      </div>
-      <code>{preview.redacted}</code>
-    </section>
-  );
-}
-
 export function DiagnosticReportActions({ report, disabled }: { report: string; disabled?: boolean }) {
   function downloadReport() {
     if (disabled) return;
@@ -352,95 +336,6 @@ export function DiagnosticReportActions({ report, disabled }: { report: string; 
       <textarea className="report-buffer" value={report} readOnly aria-hidden="true" tabIndex={-1} />
     </section>
   );
-}
-
-export function LogPanel({ logs, running, exitCode, outcome }: { logs: LogLine[]; running: boolean; exitCode?: number; outcome: JobOutcome }) {
-  const logText = logs.map((line) => `[${line.kind}] ${line.text}`).join("\n");
-  const logScrollerRef = useRef<HTMLDivElement>(null);
-  const [followTail, setFollowTail] = useState(true);
-  const [query, setQuery] = useState("");
-  const [enabledKinds, setEnabledKinds] = useState<Record<"stdout" | "stderr" | "error", boolean>>({
-    stdout: true,
-    stderr: true,
-    error: true,
-  });
-  const visibleLogs = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    return logs.filter((line) => {
-      const kindVisible = line.kind === "exit" || enabledKinds[line.kind as "stdout" | "stderr" | "error"] !== false;
-      const queryVisible = !needle || line.text.toLowerCase().includes(needle) || line.kind.toLowerCase().includes(needle);
-      return kindVisible && queryVisible;
-    });
-  }, [enabledKinds, logs, query]);
-
-  useEffect(() => {
-    if (!followTail) return;
-    const scroller = logScrollerRef.current;
-    if (!scroller) return;
-    scroller.scrollTop = scroller.scrollHeight;
-  }, [logs, followTail]);
-
-  function handleLogScroll() {
-    const scroller = logScrollerRef.current;
-    if (!scroller) return;
-    const distanceToBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
-    setFollowTail(distanceToBottom < 36);
-  }
-
-  function toggleKind(kind: "stdout" | "stderr" | "error") {
-    setEnabledKinds((current) => ({ ...current, [kind]: !current[kind] }));
-  }
-
-  return (
-    <section className="log-panel">
-      <div className="panel-title">
-        <span>日志</span>
-        <span className="panel-actions">
-          <button className="ghost-button" type="button" onClick={() => setFollowTail(true)} disabled={!logs.length || followTail} title="滚动到最新日志">
-            <ArrowDownToLine size={15} />
-            最新
-          </button>
-          <CopyButton label="复制日志" value={logText} disabled={!logs.length} />
-          <span className="log-state">{logStateLabel(running, exitCode, outcome)}</span>
-        </span>
-      </div>
-      <div className="log-tools">
-        <label className="log-search">
-          <Search size={15} />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} aria-label="搜索日志" placeholder="搜索日志" />
-        </label>
-        <div className="log-filters" aria-label="日志类型过滤">
-          {(["stdout", "stderr", "error"] as const).map((kind) => (
-            <button className={enabledKinds[kind] ? "selected" : ""} key={kind} type="button" aria-pressed={enabledKinds[kind]} onClick={() => toggleKind(kind)}>
-              {kind}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="log-lines" ref={logScrollerRef} onScroll={handleLogScroll}>
-        {visibleLogs.length ? (
-          visibleLogs.map((line) => (
-            <div className={`log-line ${line.kind}`} key={line.id}>
-              <span>{line.kind}</span>
-              <pre>{line.text}</pre>
-            </div>
-          ))
-        ) : logs.length ? (
-          <div className="empty-state">没有匹配的日志。</div>
-        ) : (
-          <div className="empty-state">任务日志会显示在这里。</div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function logStateLabel(running: boolean, exitCode: number | undefined, outcome: JobOutcome) {
-  if (running) return "运行中";
-  if (outcome.kind === "cancelled") return "已取消";
-  if (outcome.kind === "failed") return exitCode === undefined ? "失败" : `退出 ${exitCode}`;
-  if (outcome.kind === "succeeded") return "退出 0";
-  return "待运行";
 }
 
 export function CopyButton({ label, value, disabled, title }: { label: string; value: string; disabled?: boolean; title?: string }) {
@@ -480,28 +375,32 @@ export function FooterActions({
   secondaryIcon,
   onSecondary,
   secondaryDisabled,
+  primaryLoading,
+  secondaryLoading,
 }: {
   primaryLabel: string;
   primaryIcon: ReactNode;
   onPrimary: () => void;
   primaryDisabled?: boolean;
+  primaryLoading?: boolean;
   secondaryLabel?: string;
   secondaryIcon?: ReactNode;
   onSecondary?: () => void;
   secondaryDisabled?: boolean;
+  secondaryLoading?: boolean;
 }) {
   return (
     <footer className="footer-actions">
       {secondaryLabel && onSecondary ? (
-        <button className="secondary-button" type="button" onClick={onSecondary} disabled={secondaryDisabled}>
-          {secondaryIcon}
+        <button className="secondary-button" type="button" onClick={onSecondary} disabled={secondaryDisabled || secondaryLoading} aria-busy={secondaryLoading || undefined}>
+          {secondaryLoading ? <Loader2 className="spin" size={17} /> : secondaryIcon}
           {secondaryLabel}
         </button>
       ) : (
         <span />
       )}
-      <button className="primary-button" type="button" onClick={onPrimary} disabled={primaryDisabled}>
-        {primaryIcon}
+      <button className="primary-button" type="button" onClick={onPrimary} disabled={primaryDisabled || primaryLoading} aria-busy={primaryLoading || undefined}>
+        {primaryLoading ? <Loader2 className="spin" size={17} /> : primaryIcon}
         {primaryLabel}
       </button>
     </footer>

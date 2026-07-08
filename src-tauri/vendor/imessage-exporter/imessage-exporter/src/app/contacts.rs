@@ -29,6 +29,9 @@ pub struct Name {
     pub details: String,
     /// Original handle IDs that map to this name.
     pub handle_ids: HashSet<i32>,
+    /// Stable key for a single Contacts row, used to merge that contact's
+    /// phone numbers and emails without merging unrelated people with the same name.
+    pub contact_key: Option<String>,
 }
 
 impl Name {
@@ -39,17 +42,7 @@ impl Name {
             return None;
         }
 
-        // Build full name
-        let full = format!(
-            "{}{}{}",
-            first.as_deref().unwrap_or(""),
-            if first.is_some() && last.is_some() {
-                " "
-            } else {
-                ""
-            },
-            last.as_deref().unwrap_or(""),
-        );
+        let full = full_name(first.as_deref(), last.as_deref());
 
         Some(Name {
             first: first.unwrap_or_default(),
@@ -57,6 +50,7 @@ impl Name {
             full,
             details: String::new(),
             handle_ids: HashSet::new(),
+            contact_key: None,
         })
     }
 
@@ -90,8 +84,35 @@ impl Name {
             full: String::new(),
             details: details.into(),
             handle_ids: HashSet::new(),
+            contact_key: None,
         }
     }
+}
+
+fn full_name(first: Option<&str>, last: Option<&str>) -> String {
+    let first = first.unwrap_or_default();
+    let last = last.unwrap_or_default();
+    match (first.is_empty(), last.is_empty()) {
+        (true, _) => last.to_string(),
+        (_, true) => first.to_string(),
+        _ if contains_han(first) || contains_han(last) => format!("{last}{first}"),
+        _ => format!("{first} {last}"),
+    }
+}
+
+fn contains_han(value: &str) -> bool {
+    value.chars().any(|char| {
+        matches!(
+            char,
+            '\u{3400}'..='\u{4DBF}'
+                | '\u{4E00}'..='\u{9FFF}'
+                | '\u{F900}'..='\u{FAFF}'
+                | '\u{20000}'..='\u{2A6DF}'
+                | '\u{2A700}'..='\u{2B73F}'
+                | '\u{2B740}'..='\u{2B81F}'
+                | '\u{2B820}'..='\u{2CEAF}'
+        )
+    })
 }
 
 #[cfg(test)]
@@ -104,6 +125,7 @@ impl Name {
             full: String::new(),
             details: name.to_string(),
             handle_ids: HashSet::new(),
+            contact_key: None,
         }
     }
 }
@@ -154,7 +176,7 @@ impl ContactsIndex {
         let mut index = HashMap::new();
 
         let mut stmt = conn.prepare(
-            "SELECT r.ZFIRSTNAME, r.ZLASTNAME, p.ZFULLNUMBER, e.ZADDRESSNORMALIZED
+            "SELECT r.Z_PK, r.ZFIRSTNAME, r.ZLASTNAME, p.ZFULLNUMBER, e.ZADDRESSNORMALIZED
              FROM ZABCDRECORD AS r
              LEFT JOIN ZABCDPHONENUMBER AS p ON r.Z_PK = p.ZOWNER
              LEFT JOIN ZABCDEMAILADDRESS AS e ON r.Z_PK = e.ZOWNER",
@@ -162,20 +184,25 @@ impl ContactsIndex {
 
         let mut rows = stmt.query([])?;
         while let Some(row) = rows.next()? {
-            let name = Name::from_opt(
-                row.get::<_, Option<String>>(0)?,
+            let record_id: i64 = row.get(0)?;
+            let mut name = Name::from_opt(
                 row.get::<_, Option<String>>(1)?,
+                row.get::<_, Option<String>>(2)?,
             );
 
+            if let Some(name) = name.as_mut() {
+                name.contact_key = Some(format!("macos:{record_id}"));
+            }
+
             if let Some(name) = name {
-                if let Some(email_raw) = row.get::<_, Option<String>>(3)? {
+                if let Some(email_raw) = row.get::<_, Option<String>>(4)? {
                     // Some macOS rows are like "<addr@dom>"
                     for email in parse_email_list(&email_raw) {
                         upsert_best(&mut index, email, &name);
                     }
                 }
 
-                if let Some(phone_raw) = row.get::<_, Option<String>>(2)? {
+                if let Some(phone_raw) = row.get::<_, Option<String>>(3)? {
                     for key in phone_keys(&phone_raw) {
                         upsert_best(&mut index, key, &name);
                     }
@@ -194,18 +221,23 @@ impl ContactsIndex {
         let mut index = HashMap::new();
 
         let mut stmt = conn.prepare(
-            "SELECT c0First, c1Last, c16Phone, c17Email
+            "SELECT rowid, c0First, c1Last, c16Phone, c17Email
              FROM ABPersonFullTextSearch_content",
         )?;
         let mut rows = stmt.query([])?;
         while let Some(row) = rows.next()? {
-            let name = Name::from_opt(
-                row.get::<_, Option<String>>(0)?,
+            let record_id: i64 = row.get(0)?;
+            let mut name = Name::from_opt(
                 row.get::<_, Option<String>>(1)?,
+                row.get::<_, Option<String>>(2)?,
             );
 
+            if let Some(name) = name.as_mut() {
+                name.contact_key = Some(format!("ios:{record_id}"));
+            }
+
             if let Some(name) = name {
-                if let Some(phones_blob) = row.get::<_, Option<String>>(2)? {
+                if let Some(phones_blob) = row.get::<_, Option<String>>(3)? {
                     for token in phones_blob.split_whitespace() {
                         for key in phone_keys(token) {
                             upsert_best(&mut index, key, &name);
@@ -213,7 +245,7 @@ impl ContactsIndex {
                     }
                 }
 
-                if let Some(emails_blob) = row.get::<_, Option<String>>(3)? {
+                if let Some(emails_blob) = row.get::<_, Option<String>>(4)? {
                     for email in emails_blob.split_whitespace() {
                         if let Some(norm) = normalize_email(email) {
                             upsert_best(&mut index, norm, &name);
@@ -246,6 +278,34 @@ impl ContactsIndex {
             }
         }
         None
+    }
+
+    /// Merge handle dedupe IDs when the Contacts database says the handles
+    /// belong to the same person.
+    pub fn canonicalize_deduped_handles(
+        &self,
+        participants: &HashMap<i32, String>,
+        deduped_handles: &HashMap<i32, i32>,
+    ) -> HashMap<i32, i32> {
+        let mut result = deduped_handles.clone();
+        let mut contact_to_participant: HashMap<String, i32> = HashMap::new();
+        let mut sorted_participants = participants.iter().collect::<Vec<_>>();
+        sorted_participants.sort_by_key(|(handle_id, _)| **handle_id);
+
+        for (handle_id, details) in sorted_participants {
+            let Some(&deduped_id) = deduped_handles.get(handle_id) else {
+                continue;
+            };
+            let Some(contact_key) = self.lookup(details).and_then(|name| name.contact_key) else {
+                continue;
+            };
+            let canonical_id = *contact_to_participant
+                .entry(contact_key)
+                .or_insert(deduped_id);
+            result.insert(*handle_id, canonical_id);
+        }
+
+        result
     }
 
     /// Build names keyed by deduplicated participant ID.
@@ -416,6 +476,41 @@ fn macos_sources_dir() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn chinese_contact_names_use_last_first_order() {
+        let name = Name::from_opt(Some("三".to_string()), Some("张".to_string())).unwrap();
+
+        assert_eq!(name.full, "张三");
+    }
+
+    #[test]
+    fn non_chinese_contact_names_use_first_last_order() {
+        let name = Name::from_opt(Some("Alex".to_string()), Some("Chen".to_string())).unwrap();
+
+        assert_eq!(name.full, "Alex Chen");
+    }
+
+    #[test]
+    fn contact_keys_canonicalize_handle_dedupe_ids() {
+        let mut index = ContactsIndex::default();
+        let mut name = Name::from_opt(Some("Alex".to_string()), Some("Chen".to_string())).unwrap();
+        name.contact_key = Some("ios:1".to_string());
+        index.index.insert("+15551230001".to_string(), name.clone());
+        index
+            .index
+            .insert("alex@example.com".to_string(), name.clone());
+
+        let participants = HashMap::from([
+            (1, "+15551230001".to_string()),
+            (2, "alex@example.com".to_string()),
+        ]);
+        let deduped = HashMap::from([(1, 1), (2, 2)]);
+
+        let canonical = index.canonicalize_deduped_handles(&participants, &deduped);
+
+        assert_eq!(canonical.get(&1), canonical.get(&2));
+    }
 
     #[test]
     fn test_phone_lookup_us_with_country_code_with_plus() {

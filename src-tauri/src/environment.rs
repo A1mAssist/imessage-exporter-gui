@@ -95,7 +95,10 @@ fn backup_candidate(path: &Path) -> Option<BackupCandidate> {
     let has_manifest_db = path.join("Manifest.db").is_file();
     let has_info_plist = path.join("Info.plist").is_file();
     let valid = path.is_dir() && has_manifest_db && has_info_plist;
-    let device_name = plist_string_value(&path.join("Info.plist"), "Device Name");
+    let info_plist = path.join("Info.plist");
+    let device_name = plist_string_value(&info_plist, "Device Name");
+    let product_name = plist_string_value(&info_plist, "Product Name")
+        .or_else(|| plist_string_value(&info_plist, "Product Type"));
     let encrypted = plist_bool_value(&path.join("Manifest.plist"), "IsEncrypted");
     let last_modified = fs::metadata(path)
         .and_then(|metadata| metadata.modified())
@@ -105,7 +108,7 @@ fn backup_candidate(path: &Path) -> Option<BackupCandidate> {
 
     Some(BackupCandidate {
         path: path.display().to_string(),
-        display_name: device_name.clone().unwrap_or_else(|| display_name(path)),
+        display_name: backup_display_name(path, device_name.as_deref(), product_name.as_deref()),
         device_name,
         last_modified,
         has_manifest_db,
@@ -113,6 +116,26 @@ fn backup_candidate(path: &Path) -> Option<BackupCandidate> {
         encrypted,
         valid,
     })
+}
+
+fn backup_display_name(
+    path: &Path,
+    device_name: Option<&str>,
+    product_name: Option<&str>,
+) -> String {
+    device_name
+        .and_then(clean_name)
+        .or_else(|| product_name.and_then(clean_name))
+        .unwrap_or_else(|| display_name(path))
+}
+
+fn clean_name(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_string())
+    }
 }
 
 fn display_name(path: &Path) -> String {
@@ -124,8 +147,10 @@ fn display_name(path: &Path) -> String {
 }
 
 fn command_available(name: &str) -> bool {
-    Command::new(name)
-        .arg("--version")
+    let mut command = Command::new(name);
+    command.arg("--version");
+    hide_console_window(&mut command);
+    command
         .output()
         .map(|output| {
             output.status.success() || !output.stdout.is_empty() || !output.stderr.is_empty()
@@ -133,9 +158,21 @@ fn command_available(name: &str) -> bool {
         .unwrap_or(false)
 }
 
+#[cfg(windows)]
+fn hide_console_window(command: &mut Command) {
+    use std::os::windows::process::CommandExt;
+
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    command.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(windows))]
+fn hide_console_window(_: &mut Command) {}
+
 #[cfg(test)]
 mod tests {
-    use super::get_environment;
+    use super::{backup_display_name, get_environment};
+    use std::path::Path;
 
     #[test]
     fn built_in_exporter_is_always_available() {
@@ -143,5 +180,33 @@ mod tests {
         assert!(environment.exporter_available);
         assert_eq!(environment.exporter_version_status, "verified");
         assert_eq!(environment.exporter_path, None);
+    }
+
+    #[test]
+    fn backup_display_name_keeps_default_ios_device_names() {
+        let path = Path::new("00008110-demo");
+        let username = std::env::var("USERNAME")
+            .or_else(|_| std::env::var("USER"))
+            .unwrap_or_else(|_| "owner".to_string());
+
+        for device_name in [
+            format!("{username}'s iPhone"),
+            format!("{username}’s iPhone"),
+            format!("{username} 的 iPhone"),
+            format!("{username}的 iPhone"),
+        ] {
+            assert_eq!(
+                backup_display_name(path, Some(&device_name), Some("iPhone 15 Pro")),
+                device_name
+            );
+        }
+    }
+
+    #[test]
+    fn backup_display_name_keeps_real_custom_device_names() {
+        assert_eq!(
+            backup_display_name(Path::new("backup"), Some("Travel Phone"), Some("iPhone")),
+            "Travel Phone"
+        );
     }
 }

@@ -1,6 +1,6 @@
 use std::{
     fs::{self, File},
-    io::Write,
+    io::{BufRead, BufReader, Write},
     path::{Path, PathBuf},
     process::Command,
     time::{SystemTime, UNIX_EPOCH},
@@ -9,11 +9,12 @@ use std::{
 use tauri::{AppHandle, Manager, State};
 
 use crate::{
-    cli, engine, environment,
+    engine, environment,
     jobs::JobRegistry,
     models::{
-        AppDiagnostics, BackupCandidate, CommandPreview, ConversationCandidate, EnvironmentStatus,
-        ExportConfig, ExportFormat, ExportPathStatus, JobStarted, ResourceFile, SourceConfig,
+        AppDiagnostics, BackupCandidate, ConversationCandidate, DiagnosticDetails,
+        EnvironmentStatus, ExportConfig, ExportFormat, ExportPathStatus, JobStarted,
+        JsonlSearchMatch, ResourceFile, SourceConfig, SourceInspection,
     },
 };
 
@@ -48,8 +49,18 @@ pub fn validate_backup_path(path: String) -> BackupCandidate {
 }
 
 #[tauri::command]
-pub fn scan_conversations(backup_path: String) -> Result<Vec<ConversationCandidate>, String> {
-    crate::conversations::scan_conversations(Path::new(&backup_path))
+pub fn scan_conversations(source: SourceConfig) -> Result<Vec<ConversationCandidate>, String> {
+    crate::conversations::scan_source_conversations(&source)
+}
+
+#[tauri::command]
+pub fn inspect_source(source: SourceConfig) -> SourceInspection {
+    crate::source::inspect_source(&source)
+}
+
+#[tauri::command]
+pub fn inspect_diagnostics(source: SourceConfig) -> Result<DiagnosticDetails, String> {
+    crate::diagnostics::inspect_diagnostics(&source)
 }
 
 #[tauri::command]
@@ -58,15 +69,25 @@ pub fn inspect_export_path(path: String) -> ExportPathStatus {
 }
 
 #[tauri::command]
+pub fn delete_interrupted_export(path: String) -> Result<(), String> {
+    let path = PathBuf::from(path);
+    if !is_interrupted_export_path(&path) {
+        return Err("Only unfinished .partial export directories can be deleted.".to_string());
+    }
+    if !path.is_dir() {
+        return Err("Interrupted export path is not a directory.".to_string());
+    }
+    fs::remove_dir_all(&path).map_err(|err| format!("Failed to delete interrupted export: {err}"))
+}
+
+#[tauri::command]
 pub fn run_diagnostics(
     app: AppHandle,
     registry: State<'_, JobRegistry>,
     source: SourceConfig,
 ) -> Result<JobStarted, String> {
-    let args = cli::diagnostics_args(&source)?;
-    let preview = cli::preview(engine::ENGINE_LABEL, &args);
     let options = engine::diagnostics_options(&source)?;
-    registry.spawn_engine(app, preview, options)
+    registry.spawn_engine(app, options)
 }
 
 #[tauri::command]
@@ -75,10 +96,8 @@ pub fn start_export(
     registry: State<'_, JobRegistry>,
     config: ExportConfig,
 ) -> Result<JobStarted, String> {
-    let args = cli::export_args(&config)?;
-    let preview = cli::preview(engine::ENGINE_LABEL, &args);
     let options = engine::export_options(&config)?;
-    registry.spawn_engine(app, preview, options)
+    registry.spawn_export(app, options)
 }
 
 #[tauri::command]
@@ -118,6 +137,18 @@ pub fn open_first_result(export_path: String, format: ExportFormat) -> Result<()
 }
 
 #[tauri::command]
+pub fn search_jsonl_result(
+    export_path: String,
+    query: String,
+    limit: Option<usize>,
+) -> Result<Vec<JsonlSearchMatch>, String> {
+    let result = find_first_result_file(Path::new(&export_path), &ExportFormat::Jsonl)
+        .ok_or_else(|| "No JSONL file was found in the export directory".to_string())?;
+    search_jsonl_file(&result, &query, limit.unwrap_or(20).clamp(1, 100))
+        .map_err(|err| format!("Failed to read JSONL result: {err}"))
+}
+
+#[tauri::command]
 pub fn open_resource_file(app: AppHandle, file: ResourceFile) -> Result<(), String> {
     let file_name = file.file_name();
     let path = resolve_resource_file(&app, file_name)?;
@@ -146,12 +177,6 @@ fn resolve_resource_file(app: &AppHandle, file_name: &str) -> Result<PathBuf, St
     }
 
     Err(format!("Bundled resource {file_name} was not found."))
-}
-
-#[tauri::command]
-pub fn preview_export_command(config: ExportConfig) -> Result<CommandPreview, String> {
-    let args = cli::export_args(&config)?;
-    Ok(cli::preview(engine::ENGINE_LABEL, &args))
 }
 
 fn open_path_native(path: PathBuf) -> std::io::Result<()> {
@@ -234,6 +259,39 @@ fn find_first_file_with_extensions(root: &Path, extensions: &[&str]) -> Option<P
     matches.into_iter().next()
 }
 
+fn search_jsonl_file(
+    path: &Path,
+    query: &str,
+    limit: usize,
+) -> std::io::Result<Vec<JsonlSearchMatch>> {
+    let query = query.trim().to_ascii_lowercase();
+    let file = File::open(path)?;
+    let mut matches = Vec::new();
+
+    for (index, line) in BufReader::new(file).lines().enumerate() {
+        let line = line?;
+        if query.is_empty() || line.to_ascii_lowercase().contains(&query) {
+            matches.push(JsonlSearchMatch {
+                line_number: index + 1,
+                preview: preview_text(&line, 280),
+            });
+        }
+        if matches.len() >= limit {
+            break;
+        }
+    }
+
+    Ok(matches)
+}
+
+fn preview_text(value: &str, max_chars: usize) -> String {
+    let mut preview = value.trim().chars().take(max_chars).collect::<String>();
+    if value.trim().chars().count() > max_chars {
+        preview.push_str("...");
+    }
+    preview
+}
+
 fn inspect_export_path_impl(path: &Path) -> ExportPathStatus {
     let path_text = path.display().to_string();
     let parent_exists = path.parent().map(Path::exists).unwrap_or(true);
@@ -249,9 +307,11 @@ fn inspect_export_path_impl(path: &Path) -> ExportPathStatus {
         contains_html: false,
         contains_txt: false,
         contains_attachments: false,
+        interrupted_exports: Vec::new(),
         warnings: Vec::new(),
         error: None,
     };
+    add_interrupted_export_warnings(path, &mut status);
 
     if !status.exists {
         if !status.parent_exists {
@@ -349,6 +409,66 @@ fn inspect_export_path_impl(path: &Path) -> ExportPathStatus {
     }
 
     status
+}
+
+fn add_interrupted_export_warnings(path: &Path, status: &mut ExportPathStatus) {
+    for partial in interrupted_export_paths(path) {
+        status
+            .interrupted_exports
+            .push(partial.display().to_string());
+        let resume_hint = if partial
+            .join(".imessage-exporter-gui-checkpoint.json")
+            .is_file()
+        {
+            "包含断点记录；下次使用相同导出设置时会自动续写。"
+        } else {
+            "没有断点记录；这是旧版或异常半成品，只会保留供手动取回或删除。"
+        };
+        status.warnings.push(format!(
+            "检测到上次未完成的临时导出目录：{}。{}",
+            partial.display(),
+            resume_hint
+        ));
+    }
+}
+
+fn interrupted_export_paths(path: &Path) -> Vec<PathBuf> {
+    let Some(parent) = path.parent() else {
+        return Vec::new();
+    };
+    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+        return Vec::new();
+    };
+    let stable_name = format!(".imessage-exporter-gui-{name}.partial");
+    let prefix = format!(".imessage-exporter-gui-{name}-");
+    let Ok(entries) = fs::read_dir(parent) else {
+        return Vec::new();
+    };
+
+    let mut matches = entries
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|entry_path| entry_path.is_dir())
+        .filter(|entry_path| {
+            entry_path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|entry_name| {
+                    entry_name == stable_name
+                        || (entry_name.starts_with(&prefix) && entry_name.ends_with(".partial"))
+                })
+        })
+        .collect::<Vec<_>>();
+    matches.sort();
+    matches
+}
+
+fn is_interrupted_export_path(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| {
+            name.starts_with(".imessage-exporter-gui-") && name.ends_with(".partial")
+        })
 }
 
 fn probe_directory_writable(path: &Path) -> std::io::Result<()> {
@@ -451,6 +571,26 @@ mod tests {
     }
 
     #[test]
+    fn searches_jsonl_result_lines() {
+        let dir = unique_temp_dir("jsonl-search");
+        fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("chat.jsonl");
+        fs::write(
+            &file,
+            "{\"text\":\"hello alex\"}\n{\"text\":\"other\"}\n{\"text\":\"alex again\"}\n",
+        )
+        .unwrap();
+
+        let matches = search_jsonl_file(&file, "alex", 10).unwrap();
+
+        assert_eq!(matches.len(), 2);
+        assert_eq!(matches[0].line_number, 1);
+        assert!(matches[1].preview.contains("alex again"));
+
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn inspect_export_path_warns_for_long_new_path() {
         let base = unique_temp_dir("long-path");
         fs::create_dir_all(&base).unwrap();
@@ -467,5 +607,65 @@ mod tests {
             .any(|warning| warning.contains("路径较长")));
 
         fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn inspect_export_path_warns_about_interrupted_partial_exports() {
+        let dir = unique_temp_dir("partial-export");
+        fs::create_dir_all(&dir).unwrap();
+        let target = dir.join("Messages Export");
+        fs::create_dir_all(dir.join(".imessage-exporter-gui-Messages Export-demo.partial"))
+            .unwrap();
+
+        let status = inspect_export_path_impl(&target);
+
+        assert!(status
+            .warnings
+            .iter()
+            .any(|warning| warning.contains(".partial")));
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn inspect_export_path_detects_resumable_partial_exports() {
+        let dir = unique_temp_dir("resumable-partial-export");
+        fs::create_dir_all(&dir).unwrap();
+        let target = dir.join("Messages Export");
+        let partial = dir.join(".imessage-exporter-gui-Messages Export.partial");
+        fs::create_dir_all(&partial).unwrap();
+        fs::write(partial.join(".imessage-exporter-gui-checkpoint.json"), "{}").unwrap();
+
+        let status = inspect_export_path_impl(&target);
+
+        assert_eq!(status.interrupted_exports.len(), 1);
+        assert!(status
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("断点记录")));
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn delete_interrupted_export_removes_only_partial_export_directories() {
+        let dir = unique_temp_dir("delete-partial");
+        let partial = dir.join(".imessage-exporter-gui-Messages Export-demo.partial");
+        fs::create_dir_all(partial.join("nested")).unwrap();
+        fs::write(partial.join("nested").join("chat.html"), "ok").unwrap();
+
+        delete_interrupted_export(partial.display().to_string()).unwrap();
+
+        assert!(!partial.exists());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn delete_interrupted_export_rejects_unrelated_directories() {
+        let dir = unique_temp_dir("delete-unrelated");
+        fs::create_dir_all(&dir).unwrap();
+
+        let err = delete_interrupted_export(dir.display().to_string()).unwrap_err();
+
+        assert!(err.contains(".partial"));
+        fs::remove_dir_all(dir).unwrap();
     }
 }
